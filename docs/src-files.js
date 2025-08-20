@@ -1,0 +1,2 @@
+createSrcSidebar('[["accounting_core",["",[["ledger",[],["account.rs","core.rs","mod.rs","transaction.rs"]],["reconciliation",[],["mod.rs"]],["tax",[],["gst.rs","mod.rs"]],["utils",[],["memory_storage.rs","mod.rs","validation.rs"]]],["lib.rs","traits.rs","types.rs"]]]]');
+//{"start":19,"fragment_lengths":[249]}

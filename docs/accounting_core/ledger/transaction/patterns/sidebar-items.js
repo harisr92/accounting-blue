@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_asset_purchase","create_bill_payment_with_gst","create_expense_payment","create_invoice_with_gst","create_loan_received","create_owner_investment","create_sales_transaction"]};

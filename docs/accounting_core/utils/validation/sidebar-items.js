@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["validate_account_id","validate_account_name","validate_positive_amount","validate_transaction_description"],"struct":["EnhancedAccountValidator","EnhancedTransactionValidator"]};

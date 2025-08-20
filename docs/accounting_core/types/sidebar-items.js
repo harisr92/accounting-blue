@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AccountType","EntryType","LedgerError"],"struct":["Account","AccountBalance","Entry","Transaction","TrialBalance"],"type":["LedgerResult"]};

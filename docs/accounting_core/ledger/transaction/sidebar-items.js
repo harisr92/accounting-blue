@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["patterns"],"struct":["BillPaymentWithGstParams","InvoiceWithGstParams","TransactionBuilder","TransactionManager"]};

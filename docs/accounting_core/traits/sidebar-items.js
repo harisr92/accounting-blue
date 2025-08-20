@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["BalanceSheet","CashFlowItem","CashFlowStatement","DefaultAccountValidator","DefaultTransactionValidator","IncomeStatement"],"trait":["AccountValidator","ChartOfAccounts","LedgerStorage","ReportGenerator","TransactionValidator"]};
