@@ -1,0 +1,32 @@
+[package]
+name = "accounting-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Harin <harikrishnansr92@gmail.com>"]
+description = "Core accounting functionality with double-entry bookkeeping, GST calculations, and financial reporting"
+license = "MIT OR Apache-2.0"
+keywords = ["accounting", "bookkeeping", "finance", "gst", "ledger"]
+categories = ["finance"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+bigdecimal = { version = "0.4", features = ["serde"] }
+thiserror = "1.0"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+async-trait = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+serde_json = "1.0"
+
+[features]
+default = []
+
+[[example]]
+name = "basic_ledger"
+path = "examples/basic_ledger.rs"
+
+[[example]]
+name = "gst_calculations"
+path = "examples/gst_calculations.rs"
