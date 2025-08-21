@@ -2,7 +2,7 @@
 name = "accounting-core"
 version = "0.1.0"
 edition = "2021"
-authors = ["Harin <harikrishnansr92@gmail.com>"]
+authors = ["Harin <harikri@protonmail.com>"]
 description = "Core accounting functionality with double-entry bookkeeping, GST calculations, and financial reporting"
 license = "MIT OR Apache-2.0"
 keywords = ["accounting", "bookkeeping", "finance", "gst", "ledger"]
