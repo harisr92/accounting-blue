@@ -7,6 +7,9 @@ description = "Core accounting functionality with double-entry bookkeeping, GST 
 license = "MIT OR Apache-2.0"
 keywords = ["accounting", "bookkeeping", "finance", "gst", "ledger"]
 categories = ["finance"]
+rust-version = "1.82"
+readme = "README.md"
+repository = "https://github.com/harisr92/accounting-blue"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
