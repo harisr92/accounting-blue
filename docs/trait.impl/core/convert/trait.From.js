@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["accounting_core",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.89.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"accounting_core/types/struct.PaginationParams.html\" title=\"struct accounting_core::types::PaginationParams\">PaginationParams</a>&gt; for <a class=\"enum\" href=\"accounting_core/types/enum.PaginationOption.html\" title=\"enum accounting_core::types::PaginationOption\">PaginationOption</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[488]}
