@@ -253,7 +253,7 @@ impl<S: LedgerStorage + Clone> Ledger<S> {
         let net_income = &total_income - &total_expenses;
 
         // Add net income to equity as retained earnings (if non-zero)
-        if net_income != BigDecimal::from(0) {
+        if net_income != *crate::ZERO {
             let retained_earnings = AccountBalance {
                 account: Account::new(
                     "net_income".to_string(),
@@ -261,12 +261,12 @@ impl<S: LedgerStorage + Clone> Ledger<S> {
                     AccountType::Equity,
                     None,
                 ),
-                debit_balance: if net_income < BigDecimal::from(0) {
+                debit_balance: if net_income < *crate::ZERO {
                     Some(net_income.abs())
                 } else {
                     None
                 },
-                credit_balance: if net_income > BigDecimal::from(0) {
+                credit_balance: if net_income > *crate::ZERO {
                     Some(net_income)
                 } else {
                     None

@@ -51,15 +51,15 @@ impl GstRate {
         }
 
         // For intra-state transactions, CGST and SGST should be equal
-        if self.igst_rate == BigDecimal::from(0) && self.cgst_rate != self.sgst_rate {
+        if self.igst_rate == *crate::ZERO && self.cgst_rate != self.sgst_rate {
             return Err(GstError::InvalidRate(
                 "CGST and SGST rates must be equal for intra-state transactions".to_string(),
             ));
         }
 
         // For inter-state transactions, only IGST should be non-zero
-        if self.igst_rate > BigDecimal::from(0)
-            && (self.cgst_rate > BigDecimal::from(0) || self.sgst_rate > BigDecimal::from(0))
+        if self.igst_rate > *crate::ZERO
+            && (self.cgst_rate > *crate::ZERO || self.sgst_rate > *crate::ZERO)
         {
             return Err(GstError::InvalidRate(
                 "Only IGST should be applicable for inter-state transactions".to_string(),

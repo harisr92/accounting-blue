@@ -337,7 +337,7 @@ impl LedgerStorage for MemoryStorage {
 
             let account_balance = match account.account_type.normal_balance() {
                 EntryType::Debit => {
-                    if balance >= BigDecimal::from(0) {
+                    if balance >= *crate::ZERO {
                         total_debits += &balance;
                         AccountBalance {
                             account: account.clone(),
@@ -354,7 +354,7 @@ impl LedgerStorage for MemoryStorage {
                     }
                 }
                 EntryType::Credit => {
-                    if balance >= BigDecimal::from(0) {
+                    if balance >= *crate::ZERO {
                         total_credits += &balance;
                         AccountBalance {
                             account: account.clone(),

@@ -235,7 +235,7 @@ impl Transaction {
 
         // Check for zero or negative amounts
         for entry in &self.entries {
-            if entry.amount <= BigDecimal::from(0) {
+            if entry.amount <= *crate::ZERO {
                 return Err(LedgerError::InvalidTransaction(
                     "Entry amounts must be positive".to_string(),
                 ));
