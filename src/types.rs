@@ -298,18 +298,13 @@ pub enum LedgerError {
 }
 
 /// Pagination options for listing operations
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub enum PaginationOption {
     /// Return all items without pagination
+    #[default]
     All,
     /// Return paginated results
     Paginated(PaginationParams),
-}
-
-impl Default for PaginationOption {
-    fn default() -> Self {
-        Self::All
-    }
 }
 
 impl From<PaginationParams> for PaginationOption {
