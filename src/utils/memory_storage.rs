@@ -98,11 +98,9 @@ impl LedgerStorage for MemoryStorage {
     }
 
     async fn update_account(&mut self, account: &Account) -> LedgerResult<()> {
-        if self.accounts.read().unwrap().contains_key(&account.id) {
-            self.accounts
-                .write()
-                .unwrap()
-                .insert(account.id.clone(), account.clone());
+        let mut accounts = self.accounts.write().unwrap();
+        if accounts.contains_key(&account.id) {
+            accounts.insert(account.id.clone(), account.clone());
             Ok(())
         } else {
             Err(LedgerError::AccountNotFound(account.id.clone()))
