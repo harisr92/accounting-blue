@@ -235,7 +235,7 @@ impl Transaction {
 
         // Check for zero or negative amounts
         for entry in &self.entries {
-            if entry.amount <= BigDecimal::from(0) {
+            if entry.amount <= *crate::ZERO {
                 return Err(LedgerError::InvalidTransaction(
                     "Entry amounts must be positive".to_string(),
                 ));
@@ -298,18 +298,13 @@ pub enum LedgerError {
 }
 
 /// Pagination options for listing operations
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub enum PaginationOption {
     /// Return all items without pagination
+    #[default]
     All,
     /// Return paginated results
     Paginated(PaginationParams),
-}
-
-impl Default for PaginationOption {
-    fn default() -> Self {
-        Self::All
-    }
 }
 
 impl From<PaginationParams> for PaginationOption {

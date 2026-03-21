@@ -6,7 +6,7 @@ use bigdecimal::BigDecimal;
 
 /// Validate that an amount is positive
 pub fn validate_positive_amount(amount: &BigDecimal) -> LedgerResult<()> {
-    if *amount <= BigDecimal::from(0) {
+    if *amount <= *crate::ZERO {
         Err(LedgerError::Validation(
             "Amount must be positive".to_string(),
         ))

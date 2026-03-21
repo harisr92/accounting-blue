@@ -157,12 +157,17 @@
 //! - `api_pagination_patterns.rs` - REST API and GraphQL integration patterns
 //! - `web_integration.rs` - Web framework integration examples
 
+use bigdecimal::BigDecimal;
+use std::sync::LazyLock;
+
 pub mod ledger;
 pub mod reconciliation;
 pub mod tax;
 pub mod traits;
 pub mod types;
 pub mod utils;
+
+pub static ZERO: LazyLock<BigDecimal> = LazyLock::new(|| BigDecimal::from(0));
 
 // Re-export commonly used types
 pub use ledger::*;
