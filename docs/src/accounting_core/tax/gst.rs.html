@@ -51,15 +51,15 @@
 <a href=#51 id=51 data-nosnippet>51</a>        }
 <a href=#52 id=52 data-nosnippet>52</a>
 <a href=#53 id=53 data-nosnippet>53</a>        <span class="comment">// For intra-state transactions, CGST and SGST should be equal
-<a href=#54 id=54 data-nosnippet>54</a>        </span><span class="kw">if </span><span class="self">self</span>.igst_rate == BigDecimal::from(<span class="number">0</span>) &amp;&amp; <span class="self">self</span>.<span class="macro">cgst_rate !</span>= <span class="self">self</span>.sgst_rate {
+<a href=#54 id=54 data-nosnippet>54</a>        </span><span class="kw">if </span><span class="self">self</span>.igst_rate == <span class="kw-2">*</span><span class="kw">crate</span>::ZERO &amp;&amp; <span class="self">self</span>.<span class="macro">cgst_rate !</span>= <span class="self">self</span>.sgst_rate {
 <a href=#55 id=55 data-nosnippet>55</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(GstError::InvalidRate(
 <a href=#56 id=56 data-nosnippet>56</a>                <span class="string">"CGST and SGST rates must be equal for intra-state transactions"</span>.to_string(),
 <a href=#57 id=57 data-nosnippet>57</a>            ));
 <a href=#58 id=58 data-nosnippet>58</a>        }
 <a href=#59 id=59 data-nosnippet>59</a>
 <a href=#60 id=60 data-nosnippet>60</a>        <span class="comment">// For inter-state transactions, only IGST should be non-zero
-<a href=#61 id=61 data-nosnippet>61</a>        </span><span class="kw">if </span><span class="self">self</span>.igst_rate &gt; BigDecimal::from(<span class="number">0</span>)
-<a href=#62 id=62 data-nosnippet>62</a>            &amp;&amp; (<span class="self">self</span>.cgst_rate &gt; BigDecimal::from(<span class="number">0</span>) || <span class="self">self</span>.sgst_rate &gt; BigDecimal::from(<span class="number">0</span>))
+<a href=#61 id=61 data-nosnippet>61</a>        </span><span class="kw">if </span><span class="self">self</span>.igst_rate &gt; <span class="kw-2">*</span><span class="kw">crate</span>::ZERO
+<a href=#62 id=62 data-nosnippet>62</a>            &amp;&amp; (<span class="self">self</span>.cgst_rate &gt; <span class="kw-2">*</span><span class="kw">crate</span>::ZERO || <span class="self">self</span>.sgst_rate &gt; <span class="kw-2">*</span><span class="kw">crate</span>::ZERO)
 <a href=#63 id=63 data-nosnippet>63</a>        {
 <a href=#64 id=64 data-nosnippet>64</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(GstError::InvalidRate(
 <a href=#65 id=65 data-nosnippet>65</a>                <span class="string">"Only IGST should be applicable for inter-state transactions"</span>.to_string(),
