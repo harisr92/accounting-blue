@@ -417,3 +417,195 @@ async fn test_memory_storage_operations() {
     assert!(retrieved_txn.is_some());
     assert_eq!(retrieved_txn.unwrap().description, "Test transaction");
 }
+
+#[tokio::test]
+async fn test_reconcile_a_ledger_account_against_a_statement() {
+    use accounting_core::reconciliation::{
+        ExternalSource, ExternalTransaction, LedgerTransaction, ReconciliationEngine,
+        ReconciliationStatus,
+    };
+    use accounting_core::EntryType;
+
+    let day = |day: u32| NaiveDate::from_ymd_opt(2024, 11, day).unwrap();
+    let source = ExternalSource::BankStatement {
+        bank_name: "SBI".to_string(),
+        account_number: "12345678901".to_string(),
+    };
+
+    let mut ledger = Ledger::new(MemoryStorage::new());
+    ledger
+        .create_account(
+            "bank".to_string(),
+            "Bank Account".to_string(),
+            AccountType::Asset,
+            None,
+        )
+        .await
+        .unwrap();
+    ledger
+        .create_account(
+            "sales".to_string(),
+            "Sales".to_string(),
+            AccountType::Income,
+            None,
+        )
+        .await
+        .unwrap();
+
+    // Two real double-entry transactions against the bank account
+    for (id, date, amount, description) in [
+        ("txn-1", 15u32, 1000, "Payment from Acme Ltd"),
+        ("txn-2", 18, 4300, "Payment from Globex Inc"),
+    ] {
+        let transaction =
+            TransactionBuilder::new(id.to_string(), day(date), description.to_string())
+                .debit("bank".to_string(), BigDecimal::from(amount), None)
+                .credit("sales".to_string(), BigDecimal::from(amount), None)
+                .build()
+                .unwrap();
+        ledger.record_transaction(transaction).await.unwrap();
+    }
+
+    // Project the bank account's leg out of each transaction
+    let ledger_transactions: Vec<LedgerTransaction> = ledger
+        .get_all_account_transactions("bank", Some(day(1)), Some(day(30)))
+        .await
+        .unwrap()
+        .iter()
+        .filter_map(|transaction| LedgerTransaction::from_transaction(transaction, "bank"))
+        .collect();
+    assert_eq!(ledger_transactions.len(), 2);
+
+    let external_transactions = vec![
+        ExternalTransaction::new(
+            "stmt-1".to_string(),
+            day(15),
+            BigDecimal::from(1000),
+            "NEFT/ACME LTD/0012".to_string(),
+            EntryType::Debit,
+            source.clone(),
+        ),
+        // A bank fee the ledger has never heard of
+        ExternalTransaction::new(
+            "stmt-2".to_string(),
+            day(21),
+            BigDecimal::from(120),
+            "Account maintenance fee".to_string(),
+            EntryType::Credit,
+            source.clone(),
+        ),
+    ];
+
+    let report = ReconciliationEngine::default().reconcile(
+        ledger_transactions,
+        external_transactions,
+        source,
+    );
+
+    assert_eq!(report.matched_count, 1);
+    assert_eq!(report.unmatched_ledger_count, 1);
+    assert_eq!(report.unmatched_external_count, 1);
+    assert_eq!(report.account_ids, vec!["bank".to_string()]);
+    assert!(!report.is_fully_reconciled());
+    assert_eq!(report.needs_review().count(), 2);
+
+    // ledger: -1000 - 4300; statement: -1000 + 120
+    assert_eq!(report.summary.difference, BigDecimal::from(-4420));
+
+    assert!(report.reconciliation_items.iter().any(|item| matches!(
+        item,
+        ReconciliationStatus::Matched { ledger_id, external_id, .. }
+            if ledger_id == "txn-1" && external_id == "stmt-1"
+    )));
+
+    // The whole report must survive a round trip through JSON
+    let encoded = serde_json::to_string(&report).unwrap();
+    let decoded: accounting_core::reconciliation::ReconciliationReport =
+        serde_json::from_str(&encoded).unwrap();
+    assert_eq!(decoded, report);
+}
+
+#[tokio::test]
+async fn test_reconciliation_storage_round_trip() {
+    use accounting_core::reconciliation::{
+        ExternalSource, ExternalTransaction, LedgerTransaction, ReconciliationEngine,
+        ReconciliationStorage,
+    };
+    use accounting_core::utils::MemoryReconciliationStorage;
+    use accounting_core::EntryType;
+
+    let day = |day: u32| NaiveDate::from_ymd_opt(2024, 11, day).unwrap();
+    let source = ExternalSource::PaymentGateway {
+        provider: "Razorpay".to_string(),
+        merchant_id: "acct_123".to_string(),
+    };
+
+    let mut storage = MemoryReconciliationStorage::new();
+    storage.add_ledger_transaction(LedgerTransaction::new(
+        "txn-1".to_string(),
+        day(15),
+        BigDecimal::from(1000),
+        "Gateway settlement".to_string(),
+        EntryType::Debit,
+        "bank".to_string(),
+    ));
+    // Outside the window we will ask for
+    storage.add_ledger_transaction(LedgerTransaction::new(
+        "txn-2".to_string(),
+        NaiveDate::from_ymd_opt(2024, 12, 15).unwrap(),
+        BigDecimal::from(500),
+        "Later settlement".to_string(),
+        EntryType::Debit,
+        "bank".to_string(),
+    ));
+
+    let ledger_transactions = storage
+        .get_ledger_transactions("bank", day(1), day(30))
+        .await
+        .unwrap();
+    assert_eq!(ledger_transactions.len(), 1);
+
+    let external_transactions = vec![ExternalTransaction::new(
+        "pg-1".to_string(),
+        day(15),
+        BigDecimal::from(1000),
+        "Gateway settlement".to_string(),
+        EntryType::Debit,
+        source.clone(),
+    )];
+
+    let report = ReconciliationEngine::default().reconcile(
+        ledger_transactions,
+        external_transactions,
+        source,
+    );
+    assert!(report.is_fully_reconciled());
+
+    storage.save_reconciliation_report(&report).await.unwrap();
+    storage
+        .mark_transaction_as_reconciled("txn-1", "pg-1", report.id)
+        .await
+        .unwrap();
+
+    let fetched = storage.get_reconciliation_report(report.id).await.unwrap();
+    assert_eq!(fetched.as_ref(), Some(&report));
+    assert!(storage
+        .get_reconciliation_report(uuid::Uuid::new_v4())
+        .await
+        .unwrap()
+        .is_none());
+
+    let listed = storage
+        .list_reconciliation_reports("bank", PaginationOption::All)
+        .await
+        .unwrap();
+    assert_eq!(listed.into_items().len(), 1);
+    let other_account = storage
+        .list_reconciliation_reports("petty-cash", PaginationOption::All)
+        .await
+        .unwrap();
+    assert!(other_account.into_items().is_empty());
+
+    let marks = storage.reconciled_marks();
+    assert_eq!(marks["txn-1"], ("pg-1".to_string(), report.id));
+}

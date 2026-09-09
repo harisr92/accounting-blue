@@ -52,6 +52,7 @@ jobs:
         run: |
           cargo run --example basic_ledger
           cargo run --example gst_calculations
+          cargo run --example reconciliation
 
   coverage:
     name: Coverage

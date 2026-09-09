@@ -149,6 +149,49 @@
 //! # }
 //! ```
 //!
+//! ## Reconciliation
+//!
+//! [`reconciliation::ReconciliationEngine`] matches ledger records against bank statements and
+//! payment gateway settlements, classifying every record as matched, partially matched or
+//! unmatched and suggesting counterparts for the leftovers. It is pure and synchronous; see the
+//! [`reconciliation`] module docs for the matching passes and the direction conventions.
+//!
+//! ```rust
+//! use accounting_core::reconciliation::{
+//!     ExternalSource, ExternalTransaction, LedgerTransaction, ReconciliationEngine,
+//! };
+//! use accounting_core::EntryType;
+//! use bigdecimal::BigDecimal;
+//! use chrono::NaiveDate;
+//!
+//! let date = NaiveDate::from_ymd_opt(2024, 11, 15).unwrap();
+//! let source = ExternalSource::BankStatement {
+//!     bank_name: "SBI".to_string(),
+//!     account_number: "12345678901".to_string(),
+//! };
+//!
+//! let ledger = vec![LedgerTransaction::new(
+//!     "txn-1".to_string(),
+//!     date,
+//!     BigDecimal::from(1000),
+//!     "Payment from Acme Ltd".to_string(),
+//!     EntryType::Debit,
+//!     "bank".to_string(),
+//! )];
+//! let external = vec![ExternalTransaction::new(
+//!     "stmt-1".to_string(),
+//!     date,
+//!     BigDecimal::from(1000),
+//!     "NEFT/ACME LTD/0012".to_string(),
+//!     EntryType::Debit,
+//!     source.clone(),
+//! )];
+//!
+//! let report = ReconciliationEngine::default().reconcile(ledger, external, source);
+//! assert_eq!(report.matched_count, 1);
+//! println!("Balance difference: {}", report.summary.difference);
+//! ```
+//!
 //! ## Examples
 //!
 //! Check out the comprehensive examples in the `examples/` directory:
@@ -156,6 +199,7 @@
 //! - `pagination_demo.rs` - Complete pagination functionality walkthrough
 //! - `api_pagination_patterns.rs` - REST API and GraphQL integration patterns
 //! - `web_integration.rs` - Web framework integration examples
+//! - `reconciliation.rs` - Reconciling a ledger account against a bank statement
 
 use bigdecimal::BigDecimal;
 use std::sync::LazyLock;

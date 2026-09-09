@@ -6,6 +6,11 @@ use chrono::NaiveDate;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use uuid::Uuid;
+
+use crate::reconciliation::{
+    LedgerTransaction, ReconciliationReport, ReconciliationResult, ReconciliationStorage,
+};
 use crate::traits::*;
 use crate::types::*;
 
@@ -402,5 +407,144 @@ impl LedgerStorage for MemoryStorage {
         }
 
         Ok(result)
+    }
+}
+
+/// In-memory reconciliation storage for testing and development
+///
+/// A reference implementation of [`ReconciliationStorage`] that keeps everything in a lock behind
+/// an `Arc`, mirroring [`MemoryStorage`]. Ledger transactions are seeded with
+/// [`add_ledger_transaction`](Self::add_ledger_transaction) rather than derived from a ledger, so
+/// the reconciliation side can be exercised in isolation.
+#[derive(Debug, Clone, Default)]
+pub struct MemoryReconciliationStorage {
+    ledger_transactions: Arc<RwLock<Vec<LedgerTransaction>>>,
+    reports: Arc<RwLock<HashMap<Uuid, ReconciliationReport>>>,
+    reconciled: Arc<RwLock<HashMap<String, (String, Uuid)>>>,
+}
+
+impl MemoryReconciliationStorage {
+    /// Create an empty store
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Seed a ledger transaction leg
+    pub fn add_ledger_transaction(&self, transaction: LedgerTransaction) {
+        self.ledger_transactions.write().unwrap().push(transaction);
+    }
+
+    /// Every reconciliation mark recorded so far, keyed by ledger transaction id
+    pub fn reconciled_marks(&self) -> HashMap<String, (String, Uuid)> {
+        self.reconciled.read().unwrap().clone()
+    }
+
+    /// Clear all data (useful for testing)
+    pub fn clear(&self) {
+        self.ledger_transactions.write().unwrap().clear();
+        self.reports.write().unwrap().clear();
+        self.reconciled.write().unwrap().clear();
+    }
+}
+
+#[async_trait]
+impl ReconciliationStorage for MemoryReconciliationStorage {
+    async fn get_ledger_transactions(
+        &self,
+        account_id: &str,
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+    ) -> ReconciliationResult<Vec<LedgerTransaction>> {
+        let mut matching: Vec<LedgerTransaction> = self
+            .ledger_transactions
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|transaction| {
+                transaction.account_id == account_id
+                    && transaction.date >= start_date
+                    && transaction.date <= end_date
+            })
+            .cloned()
+            .collect();
+
+        matching.sort_by(|a, b| a.date.cmp(&b.date).then_with(|| a.id.cmp(&b.id)));
+        Ok(matching)
+    }
+
+    async fn save_reconciliation_report(
+        &mut self,
+        report: &ReconciliationReport,
+    ) -> ReconciliationResult<()> {
+        self.reports
+            .write()
+            .unwrap()
+            .insert(report.id, report.clone());
+        Ok(())
+    }
+
+    async fn get_reconciliation_report(
+        &self,
+        report_id: Uuid,
+    ) -> ReconciliationResult<Option<ReconciliationReport>> {
+        Ok(self.reports.read().unwrap().get(&report_id).cloned())
+    }
+
+    async fn list_reconciliation_reports(
+        &self,
+        account_id: &str,
+        pagination: PaginationOption,
+    ) -> ReconciliationResult<ListResponse<ReconciliationReport>> {
+        let reports = self.reports.read().unwrap();
+        let mut filtered: Vec<ReconciliationReport> = reports
+            .values()
+            .filter(|report| report.account_ids.iter().any(|id| id == account_id))
+            .cloned()
+            .collect();
+
+        // Newest first, with the id as a stable tie-breaker
+        filtered.sort_by(|a, b| {
+            b.created_at
+                .cmp(&a.created_at)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+
+        match pagination {
+            PaginationOption::All => Ok(ListResponse::All(filtered)),
+            PaginationOption::Paginated(pagination_params) => {
+                let total_count = filtered.len() as u32;
+                let start_index = pagination_params.offset() as usize;
+                let end_index = std::cmp::min(
+                    start_index + pagination_params.limit() as usize,
+                    filtered.len(),
+                );
+
+                let items = if start_index < filtered.len() {
+                    filtered[start_index..end_index].to_vec()
+                } else {
+                    Vec::new()
+                };
+
+                Ok(ListResponse::Paginated(PaginatedResponse::new(
+                    items,
+                    pagination_params.page,
+                    pagination_params.page_size,
+                    total_count,
+                )))
+            }
+        }
+    }
+
+    async fn mark_transaction_as_reconciled(
+        &mut self,
+        ledger_id: &str,
+        external_id: &str,
+        reconciliation_id: Uuid,
+    ) -> ReconciliationResult<()> {
+        self.reconciled.write().unwrap().insert(
+            ledger_id.to_string(),
+            (external_id.to_string(), reconciliation_id),
+        );
+        Ok(())
     }
 }
