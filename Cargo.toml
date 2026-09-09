@@ -33,3 +33,7 @@ path = "examples/basic_ledger.rs"
 [[example]]
 name = "gst_calculations"
 path = "examples/gst_calculations.rs"
+
+[[example]]
+name = "reconciliation"
+path = "examples/reconciliation.rs"

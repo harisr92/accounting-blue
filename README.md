@@ -8,6 +8,7 @@ A comprehensive Rust library for double-entry bookkeeping, GST calculations, and
 - **📊 Account Management**: Support for Assets, Liabilities, Equity, Income, and Expense accounts
 - **🧾 GST Calculations**: Indian GST compliance with CGST/SGST/IGST support
 - **📈 Financial Reporting**: Balance sheets, income statements, and trial balance generation
+- **🔗 Reconciliation**: Match ledger records against bank statements and payment gateways
 - **🔍 Storage Abstraction**: Database-agnostic design with trait-based storage
 - **✅ Validation**: Comprehensive validation for transactions and accounts
 - **🧪 Testing**: Full test coverage with examples and documentation
@@ -97,6 +98,58 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### Reconciliation
+
+Reconciliation matches internal ledger records against an external statement and tells you what
+agrees, what does not, and what is probably the same transaction recorded slightly differently.
+
+```rust
+use accounting_core::reconciliation::{
+    ExternalSource, ExternalTransaction, LedgerTransaction, ReconciliationEngine,
+};
+use accounting_core::EntryType;
+use bigdecimal::BigDecimal;
+use chrono::NaiveDate;
+
+let source = ExternalSource::BankStatement {
+    bank_name: "SBI".to_string(),
+    account_number: "12345678901".to_string(),
+};
+
+// Project the bank account's leg out of each double-entry transaction
+let ledger_transactions: Vec<LedgerTransaction> = ledger
+    .get_all_account_transactions("bank", Some(start), Some(end))
+    .await?
+    .iter()
+    .filter_map(|txn| LedgerTransaction::from_transaction(txn, "bank"))
+    .collect();
+
+let report = ReconciliationEngine::default()
+    .reconcile(ledger_transactions, external_transactions, source);
+
+println!("Matched: {}", report.matched_count);
+println!("Match rate: {:.1}%", report.summary.match_rate * 100.0);
+println!("Balance difference: {}", report.summary.difference);
+
+for item in report.needs_review() {
+    println!("{item:?}");
+}
+```
+
+Matching runs in four passes: shared reference numbers (UTR, RRN, cheque number), then exact
+agreement on date, amount and direction, then a scored sweep of what remains assigned best-first,
+and finally suggestions for whatever is still unmatched. Thresholds live in `ReconciliationConfig`.
+The result never depends on the order of either input.
+
+Two rules are deliberately strict, because they are accounting findings rather than noise: a pair
+that disagrees on the **amount** or on the **direction** is always surfaced for review, however
+well it scores.
+
+`ReconciliationEngine` is pure and synchronous. Loading transactions and storing reports go
+through the separate `ReconciliationStorage` trait, and statement parsing through
+`ExternalDataParser` — this crate ships no parsers, since statement layouts differ per bank and
+per gateway.
+
 ## Architecture
 
 ### Core Components
@@ -105,6 +158,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 - **`traits`**: Storage and validation abstractions
 - **`ledger`**: Account management and transaction processing
 - **`tax`**: GST calculation engine
+- **`reconciliation`**: Matching engine for bank statements and payment gateways
 - **`utils`**: Utilities including in-memory storage for testing
 
 ### Storage Abstraction
@@ -141,6 +195,9 @@ cargo run --example basic_ledger
 
 # GST calculation examples
 cargo run --example gst_calculations
+
+# Bank reconciliation
+cargo run --example reconciliation
 ```
 
 ## Testing
@@ -212,7 +269,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Roadmap
 
-- [ ] Bank reconciliation engine
+- [x] Bank reconciliation engine
 - [ ] Multi-currency support
 - [ ] Advanced reporting features
 - [ ] Plugin architecture
