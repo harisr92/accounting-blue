@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ExternalSource","MatchDifference","ReconciliationError","ReconciliationStatus"],"struct":["ExternalTransaction","LedgerTransaction","PartialMatch","ReconciliationReport","ReconciliationSummary"],"type":["ReconciliationResult"]};

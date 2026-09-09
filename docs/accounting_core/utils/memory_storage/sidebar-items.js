@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["MemoryStorage"]};
+window.SIDEBAR_ITEMS = {"struct":["MemoryReconciliationStorage","MemoryStorage"]};

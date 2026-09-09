@@ -1,5 +1,5 @@
 (function() {
-    const implementors = Object.fromEntries([["accounting_core",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.94.0/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"accounting_core/types/struct.PaginationParams.html\" title=\"struct accounting_core::types::PaginationParams\">PaginationParams</a>&gt; for <a class=\"enum\" href=\"accounting_core/types/enum.PaginationOption.html\" title=\"enum accounting_core::types::PaginationOption\">PaginationOption</a>",0]]]]);
+    const implementors = Object.fromEntries([["accounting_core",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.98.1/core/convert/trait.From.html\" title=\"trait core::convert::From\">From</a>&lt;<a class=\"struct\" href=\"accounting_core/types/struct.PaginationParams.html\" title=\"struct accounting_core::types::PaginationParams\">PaginationParams</a>&gt; for <a class=\"enum\" href=\"accounting_core/types/enum.PaginationOption.html\" title=\"enum accounting_core::types::PaginationOption\">PaginationOption</a>",0]]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {

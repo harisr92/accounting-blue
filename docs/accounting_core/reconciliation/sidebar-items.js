@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["ReconciliationEngine"]};
+window.SIDEBAR_ITEMS = {"mod":["config","engine","similarity","storage","types"]};
