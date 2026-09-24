@@ -267,6 +267,8 @@ at your option.
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+[Documentation](https://harisr92.github.io/accounting-blue/accounting_core/#reconciliation)
+
 ## Roadmap
 
 - [x] Bank reconciliation engine
