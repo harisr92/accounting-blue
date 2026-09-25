@@ -1,9 +1,10 @@
 //! GST calculation examples
 
 use accounting_core::{
-    GstCalculation, GstCalculator, GstCategory, GstInvoice, GstLineItem, GstRate,
+    GstCalculation, GstCalculator, GstCategory, GstInvoice, GstLineItem, GstRate, Gstin,
 };
 use bigdecimal::BigDecimal;
+use chrono::NaiveDate;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🧾 Accounting Core - GST Calculation Examples\n");
@@ -75,67 +76,78 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4. Complex invoice with multiple line items
     println!("🧾 Multi-item Invoice with Different GST Rates:");
 
-    let mut line_items = Vec::new();
+    let line_items = vec![
+        // Essential goods (0% GST)
+        GstLineItem::new(
+            "1006".to_string(),
+            "Rice - 10kg".to_string(),
+            BigDecimal::from(2),
+            BigDecimal::from(150),
+            GstCategory::Essential.rate(),
+        )?,
+        // Reduced rate (5% GST)
+        GstLineItem::new(
+            "0901".to_string(),
+            "Coffee powder - 500g".to_string(),
+            BigDecimal::from(1),
+            BigDecimal::from(400),
+            GstCategory::Reduced.rate(),
+        )?,
+        // Standard rate (12% GST)
+        GstLineItem::new(
+            "1507".to_string(),
+            "Cooking oil - 1L".to_string(),
+            BigDecimal::from(3),
+            BigDecimal::from(120),
+            GstCategory::Standard.rate(),
+        )?,
+        // Higher rate (18% GST)
+        GstLineItem::new(
+            "998311".to_string(),
+            "Consultation service".to_string(),
+            BigDecimal::from(1),
+            BigDecimal::from(2000),
+            GstCategory::Higher.rate(),
+        )?,
+    ];
 
-    // Item 1: Essential goods (0% GST)
-    let item1 = GstLineItem::new(
-        "Rice - 10kg".to_string(),
-        BigDecimal::from(2),
-        BigDecimal::from(150),
-        GstCategory::Essential.intra_state_rate(),
+    // Seller and buyer both in Maharashtra (27), so tax is split as CGST + SGST
+    let invoice = GstInvoice::new(
+        "INV/2024-25/042".to_string(),
+        NaiveDate::from_ymd_opt(2024, 11, 15).unwrap(),
+        Gstin::parse("27AAPFU0939F1ZV")?,
+        Gstin::parse("27AAPFU0939F2ZU")?,
+        line_items,
     )?;
-    line_items.push(item1);
-
-    // Item 2: Reduced rate (5% GST)
-    let item2 = GstLineItem::new(
-        "Coffee powder - 500g".to_string(),
-        BigDecimal::from(1),
-        BigDecimal::from(400),
-        GstCategory::Reduced.intra_state_rate(),
-    )?;
-    line_items.push(item2);
-
-    // Item 3: Standard rate (12% GST)
-    let item3 = GstLineItem::new(
-        "Cooking oil - 1L".to_string(),
-        BigDecimal::from(3),
-        BigDecimal::from(120),
-        GstCategory::Standard.intra_state_rate(),
-    )?;
-    line_items.push(item3);
-
-    // Item 4: Higher rate (18% GST)
-    let item4 = GstLineItem::new(
-        "Consultation service".to_string(),
-        BigDecimal::from(1),
-        BigDecimal::from(2000),
-        GstCategory::Higher.intra_state_rate(),
-    )?;
-    line_items.push(item4);
-
-    let invoice = GstInvoice::new(line_items);
 
     println!("  Line Items:");
-    for (i, item) in invoice.line_items.iter().enumerate() {
+    for (i, (item, line)) in invoice
+        .line_items
+        .iter()
+        .zip(invoice.line_breakdowns()?)
+        .enumerate()
+    {
         println!(
-            "    {}. {} × {} @ ₹{} = ₹{} (GST: ₹{})",
+            "    {}. [{}] {} × {} @ ₹{} = ₹{} (GST: ₹{})",
             i + 1,
+            item.hsn_sac,
             item.description,
             item.quantity,
             item.unit_price,
-            item.line_total_before_gst,
-            item.gst_calculation.total_gst_amount
+            line.taxable_value,
+            line.total_tax
         );
     }
     println!();
 
+    let summary = invoice.breakdown()?;
     println!("  Invoice Summary:");
-    println!("    Subtotal (before GST): ₹{}", invoice.total_before_gst);
-    println!("    Total CGST:            ₹{}", invoice.total_cgst);
-    println!("    Total SGST:            ₹{}", invoice.total_sgst);
-    println!("    Total IGST:            ₹{}", invoice.total_igst);
-    println!("    Total GST:             ₹{}", invoice.total_gst);
-    println!("    Grand Total:           ₹{}", invoice.grand_total);
+    println!("    Subtotal (before GST): ₹{}", summary.taxable_value);
+    println!("    Total CGST:            ₹{}", summary.cgst);
+    println!("    Total SGST:            ₹{}", summary.sgst);
+    println!("    Total IGST:            ₹{}", summary.igst);
+    println!("    Total GST:             ₹{}", summary.total_tax);
+    println!("    Grand Total:           ₹{}", summary.total);
     println!();
 
     // 5. Custom GST rates
