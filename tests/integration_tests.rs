@@ -3,7 +3,7 @@
 use accounting_core::{
     patterns,
     utils::{EnhancedAccountValidator, EnhancedTransactionValidator, MemoryStorage},
-    AccountType, GstCalculator, GstCategory, GstInvoice, GstLineItem, Ledger, LedgerStorage,
+    AccountType, GstCalculator, GstCategory, GstInvoice, GstLineItem, Gstin, Ledger, LedgerStorage,
     PaginationOption, TransactionBuilder,
 };
 use bigdecimal::BigDecimal;
@@ -123,14 +123,23 @@ async fn test_gst_invoice_with_ledger_integration() {
 
     // Create GST invoice
     let line_item = GstLineItem::new(
+        "998311".to_string(),
         "Consulting Service".to_string(),
         BigDecimal::from(1),
         BigDecimal::from(10000),
-        GstCategory::Higher.intra_state_rate(),
+        GstCategory::Higher.rate(),
     )
     .unwrap();
 
-    let invoice = GstInvoice::new(vec![line_item]);
+    let invoice = GstInvoice::new(
+        "INV-001".to_string(),
+        NaiveDate::from_ymd_opt(2024, 2, 1).unwrap(),
+        Gstin::parse("27AAPFU0939F1ZV").unwrap(),
+        Gstin::parse("27AAPFU0939F2ZU").unwrap(),
+        vec![line_item],
+    )
+    .unwrap();
+    let breakdown = invoice.breakdown().unwrap();
 
     // Record the invoice transaction
     let invoice_transaction = TransactionBuilder::new(
@@ -138,15 +147,15 @@ async fn test_gst_invoice_with_ledger_integration() {
         NaiveDate::from_ymd_opt(2024, 2, 1).unwrap(),
         "Invoice with GST".to_string(),
     )
-    .debit(cash_account.id.clone(), invoice.grand_total.clone(), None)
+    .debit(cash_account.id.clone(), breakdown.total.clone(), None)
     .credit(
         revenue_account.id.clone(),
-        invoice.total_before_gst.clone(),
+        breakdown.taxable_value.clone(),
         None,
     )
     .credit(
         gst_payable_account.id.clone(),
-        invoice.total_gst.clone(),
+        breakdown.total_tax.clone(),
         None,
     )
     .build()
