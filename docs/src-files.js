@@ -1,2 +1,2 @@
-createSrcSidebar('[["accounting_core",["",[["invoice",[],["mod.rs","types.rs"]],["ledger",[],["account.rs","core.rs","mod.rs","transaction.rs"]],["reconciliation",[],["config.rs","engine.rs","mod.rs","similarity.rs","storage.rs","types.rs"]],["tax",[],["gst.rs","mod.rs"]],["utils",[],["memory_storage.rs","mod.rs","validation.rs"]]],["lib.rs","traits.rs","types.rs"]]]]');
-//{"start":19,"fragment_lengths":[350]}
+createSrcSidebar('[["accounting_core",["",[["invoice",[],["hsn_lookup.rs","mod.rs","types.rs"]],["ledger",[],["account.rs","core.rs","mod.rs","transaction.rs"]],["reconciliation",[],["config.rs","engine.rs","mod.rs","similarity.rs","storage.rs","types.rs"]],["tax",[],["gst.rs","mod.rs"]],["utils",[],["memory_storage.rs","mod.rs","validation.rs"]]],["lib.rs","traits.rs","types.rs"]]]]');
+//{"start":19,"fragment_lengths":[366]}

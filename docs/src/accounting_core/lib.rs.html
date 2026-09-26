@@ -199,7 +199,7 @@
 <a href=#199 id=199 data-nosnippet>199</a>//! - `pagination_demo.rs` - Complete pagination functionality walkthrough
 <a href=#200 id=200 data-nosnippet>200</a>//! - `api_pagination_patterns.rs` - REST API and GraphQL integration patterns
 <a href=#201 id=201 data-nosnippet>201</a>//! - `web_integration.rs` - Web framework integration examples
-<a href=#202 id=202 data-nosnippet>202</a>//! - `gst_invoice.rs` - GSTIN validation and B2B GST invoices
+<a href=#202 id=202 data-nosnippet>202</a>//! - `gst_invoice.rs` - GSTIN validation, HSN/SAC rate lookup and B2B GST invoices
 <a href=#203 id=203 data-nosnippet>203</a>//! - `reconciliation.rs` - Reconciling a ledger account against a bank statement
 <a href=#204 id=204 data-nosnippet>204</a>
 <a href=#205 id=205 data-nosnippet>205</a></span><span class="kw">use </span>bigdecimal::BigDecimal;
@@ -216,12 +216,14 @@
 <a href=#216 id=216 data-nosnippet>216</a><span class="kw">pub static </span>ZERO: LazyLock&lt;BigDecimal&gt; = LazyLock::new(|| BigDecimal::from(<span class="number">0</span>));
 <a href=#217 id=217 data-nosnippet>217</a>
 <a href=#218 id=218 data-nosnippet>218</a><span class="comment">// Re-export commonly used types
-<a href=#219 id=219 data-nosnippet>219</a></span><span class="kw">pub use </span>invoice::{GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError};
-<a href=#220 id=220 data-nosnippet>220</a><span class="kw">pub use </span>ledger::<span class="kw-2">*</span>;
-<a href=#221 id=221 data-nosnippet>221</a><span class="kw">pub use </span>tax::gst::<span class="kw-2">*</span>;
-<a href=#222 id=222 data-nosnippet>222</a><span class="kw">pub use </span>traits::<span class="kw-2">*</span>;
-<a href=#223 id=223 data-nosnippet>223</a><span class="kw">pub use </span>types::<span class="kw-2">*</span>;
-<a href=#224 id=224 data-nosnippet>224</a>
-<a href=#225 id=225 data-nosnippet>225</a><span class="comment">// Re-export transaction patterns for convenience
-<a href=#226 id=226 data-nosnippet>226</a></span><span class="kw">pub use </span>ledger::transaction::patterns;
+<a href=#219 id=219 data-nosnippet>219</a></span><span class="kw">pub use </span>invoice::{
+<a href=#220 id=220 data-nosnippet>220</a>    GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster, HsnSacEntry, HsnSacKind, InvoiceError,
+<a href=#221 id=221 data-nosnippet>221</a>};
+<a href=#222 id=222 data-nosnippet>222</a><span class="kw">pub use </span>ledger::<span class="kw-2">*</span>;
+<a href=#223 id=223 data-nosnippet>223</a><span class="kw">pub use </span>tax::gst::<span class="kw-2">*</span>;
+<a href=#224 id=224 data-nosnippet>224</a><span class="kw">pub use </span>traits::<span class="kw-2">*</span>;
+<a href=#225 id=225 data-nosnippet>225</a><span class="kw">pub use </span>types::<span class="kw-2">*</span>;
+<a href=#226 id=226 data-nosnippet>226</a>
+<a href=#227 id=227 data-nosnippet>227</a><span class="comment">// Re-export transaction patterns for convenience
+<a href=#228 id=228 data-nosnippet>228</a></span><span class="kw">pub use </span>ledger::transaction::patterns;
 </code></pre></div></section></main></body></html>
