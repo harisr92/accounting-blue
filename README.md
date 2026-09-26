@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### GST Calculations
 
 ```rust
-use accounting_core::{GstCalculator, GstCategory, GstLineItem, GstInvoice};
+use accounting_core::{GstCalculator, GstCategory};
 use bigdecimal::BigDecimal;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

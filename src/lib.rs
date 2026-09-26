@@ -199,11 +199,13 @@
 //! - `pagination_demo.rs` - Complete pagination functionality walkthrough
 //! - `api_pagination_patterns.rs` - REST API and GraphQL integration patterns
 //! - `web_integration.rs` - Web framework integration examples
+//! - `gst_invoice.rs` - GSTIN validation and B2B GST invoices
 //! - `reconciliation.rs` - Reconciling a ledger account against a bank statement
 
 use bigdecimal::BigDecimal;
 use std::sync::LazyLock;
 
+pub mod invoice;
 pub mod ledger;
 pub mod reconciliation;
 pub mod tax;
@@ -214,6 +216,7 @@ pub mod utils;
 pub static ZERO: LazyLock<BigDecimal> = LazyLock::new(|| BigDecimal::from(0));
 
 // Re-export commonly used types
+pub use invoice::{GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError};
 pub use ledger::*;
 pub use tax::gst::*;
 pub use traits::*;
