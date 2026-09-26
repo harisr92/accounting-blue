@@ -1,6 +1,6 @@
-//! GST invoice examples: GSTIN validation, intra-state and inter-state invoices
+//! GST invoice examples: GSTIN validation, HSN/SAC rate lookup, intra-state and inter-state invoices
 
-use accounting_core::invoice::{GstBreakdown, GstInvoice, GstLineItem, Gstin};
+use accounting_core::invoice::{GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 
@@ -27,16 +27,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!();
 
+    // 2. HSN/SAC master: default GST rates, with fallback from tariff items to their headings
+    let master = HsnMaster::global();
+    println!(
+        "📚 HSN/SAC Lookup ({} codes, {} schedule from {}):",
+        master.entries().len(),
+        master.schedule(),
+        master.effective_from()
+    );
+    for code in ["1001", "7010", "84713010", "998314", "0000"] {
+        match master.lookup(code) {
+            Some(entry) => println!(
+                "  ✅ {code} → {} {:?} \"{}\" at {}%",
+                entry.code, entry.kind, entry.description, entry.gst_rate
+            ),
+            None => println!("  ❌ {code} → not in the master"),
+        }
+    }
+    println!();
+
     let seller = Gstin::parse("27AAPFU0939F1ZV")?;
     let date = NaiveDate::from_ymd_opt(2024, 11, 15).unwrap();
 
     let line_items = vec![
-        GstLineItem::new(
+        // Rate filled in from the HSN/SAC master (18%)
+        GstLineItem::with_default_rate(
             "847130".to_string(),
             "Laptop".to_string(),
             BigDecimal::from(2),
             BigDecimal::from(50000),
-            BigDecimal::from(18),
         )?,
         GstLineItem::new(
             "998314".to_string(),
@@ -54,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?,
     ];
 
-    // 2. Intra-state supply: seller and buyer both in Maharashtra (27) → CGST + SGST
+    // 3. Intra-state supply: seller and buyer both in Maharashtra (27) → CGST + SGST
     let intra_state = GstInvoice::new(
         "INV/2024-25/001".to_string(),
         date,
@@ -64,7 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     print_invoice("🏢 Intra-state Invoice (CGST + SGST)", &intra_state)?;
 
-    // 3. Inter-state supply: buyer in Karnataka (29) → IGST
+    // 4. Inter-state supply: buyer in Karnataka (29) → IGST
     let inter_state = GstInvoice::new(
         "INV/2024-25/002".to_string(),
         date,
@@ -74,7 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     print_invoice("🌍 Inter-state Invoice (IGST)", &inter_state)?;
 
-    // 4. Invalid invoices are rejected at construction
+    // 5. Invalid invoices are rejected at construction
     println!("🚫 Rejected Inputs:");
     let too_long = GstInvoice::new(
         "INV/2024-25/00001".to_string(),
@@ -94,6 +113,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         BigDecimal::from(18),
     );
     if let Err(e) = bad_hsn {
+        println!("  ❌ {e}");
+    }
+    let unknown_hsn = GstLineItem::with_default_rate(
+        "0000".to_string(),
+        "Mystery item".to_string(),
+        BigDecimal::from(1),
+        BigDecimal::from(100),
+    );
+    if let Err(e) = unknown_hsn {
         println!("  ❌ {e}");
     }
 

@@ -6,6 +6,9 @@
 //! follows from the seller and buyer state codes; [`GstInvoice::breakdown`] returns the totals as
 //! a [`GstBreakdown`].
 //!
+//! [`HsnMaster`] holds common HSN/SAC codes with their default GST rates;
+//! [`GstLineItem::with_default_rate`] builds a line at the rate for its code.
+//!
 //! The tax arithmetic comes from [`crate::tax::gst`]. The invoice types are also re-exported at the
 //! crate root.
 //!
@@ -41,6 +44,8 @@
 //! # }
 //! ```
 
+pub mod hsn_lookup;
 pub mod types;
 
+pub use hsn_lookup::{HsnMaster, HsnSacEntry, HsnSacKind};
 pub use types::*;

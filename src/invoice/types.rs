@@ -1,5 +1,6 @@
 //! GST invoice domain types
 
+use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use crate::tax::gst::{GstCalculation, GstError, GstRate};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -231,7 +232,7 @@ impl GstLineItem {
         unit_price: BigDecimal,
         gst_rate: BigDecimal,
     ) -> Result<Self, InvoiceError> {
-        if !matches!(hsn_sac.len(), 4 | 6 | 8) || !hsn_sac.bytes().all(|b| b.is_ascii_digit()) {
+        if !is_valid_hsn_sac(&hsn_sac) {
             return Err(InvoiceError::InvalidHsnSac(hsn_sac));
         }
 
@@ -266,6 +267,27 @@ impl GstLineItem {
             unit_price,
             gst_rate,
         })
+    }
+
+    /// Create a validated line item at the default GST rate for its HSN/SAC code
+    ///
+    /// The rate comes from [`HsnMaster::global`], falling back from the exact code to its 6- and
+    /// 4-digit headings. Use [`GstLineItem::new`] to charge a different rate.
+    pub fn with_default_rate(
+        hsn_sac: String,
+        description: String,
+        quantity: BigDecimal,
+        unit_price: BigDecimal,
+    ) -> Result<Self, InvoiceError> {
+        if !is_valid_hsn_sac(&hsn_sac) {
+            return Err(InvoiceError::InvalidHsnSac(hsn_sac));
+        }
+
+        let gst_rate = HsnMaster::global()
+            .default_rate(&hsn_sac)
+            .ok_or_else(|| InvoiceError::UnknownHsnSac(hsn_sac.clone()))?;
+
+        Self::new(hsn_sac, description, quantity, unit_price, gst_rate)
     }
 
     /// Taxable value of the line (quantity x unit price)
@@ -383,6 +405,8 @@ pub enum InvoiceError {
     InvalidInvoiceNumber(String),
     #[error("Invalid HSN/SAC code: {0}")]
     InvalidHsnSac(String),
+    #[error("HSN/SAC code not in the master data: {0}")]
+    UnknownHsnSac(String),
     #[error("Invalid line item: {0}")]
     InvalidLineItem(String),
     #[error(transparent)]
