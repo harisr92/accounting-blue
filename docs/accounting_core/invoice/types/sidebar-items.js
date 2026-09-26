@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["InvoiceError"],"struct":["GstBreakdown","GstInvoice","GstLineItem","Gstin"]};
