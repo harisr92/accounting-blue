@@ -3,8 +3,8 @@
 use accounting_core::{
     patterns,
     utils::{EnhancedAccountValidator, EnhancedTransactionValidator, MemoryStorage},
-    AccountType, GstCalculator, GstCategory, GstInvoice, GstLineItem, Gstin, Ledger, LedgerStorage,
-    PaginationOption, TransactionBuilder,
+    AccountStore, AccountType, GstCalculator, GstCategory, GstInvoice, GstLineItem, Gstin, Ledger,
+    PaginationOption, TransactionBuilder, TransactionStore,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -329,7 +329,7 @@ async fn test_date_range_filtering() {
 
     // Test date range filtering (using convenience method)
     let jan_transactions = ledger
-        .get_all_transactions(
+        .list_all_transactions(
             Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()),
             Some(NaiveDate::from_ymd_opt(2024, 1, 31).unwrap()),
         )
@@ -477,7 +477,7 @@ async fn test_reconcile_a_ledger_account_against_a_statement() {
 
     // Project the bank account's leg out of each transaction
     let ledger_transactions: Vec<LedgerTransaction> = ledger
-        .get_all_account_transactions("bank", Some(day(1)), Some(day(30)))
+        .list_all_account_transactions("bank", Some(day(1)), Some(day(30)))
         .await
         .unwrap()
         .iter()
@@ -506,8 +506,8 @@ async fn test_reconcile_a_ledger_account_against_a_statement() {
     ];
 
     let report = ReconciliationEngine::default().reconcile(
-        ledger_transactions,
-        external_transactions,
+        &ledger_transactions,
+        &external_transactions,
         source,
     );
 
@@ -584,8 +584,8 @@ async fn test_reconciliation_storage_round_trip() {
     )];
 
     let report = ReconciliationEngine::default().reconcile(
-        ledger_transactions,
-        external_transactions,
+        &ledger_transactions,
+        &external_transactions,
         source,
     );
     assert!(report.is_fully_reconciled());
