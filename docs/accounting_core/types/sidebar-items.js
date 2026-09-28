@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["AccountType","EntryType","LedgerError","ListResponse","PaginationOption"],"struct":["Account","AccountBalance","Entry","PaginatedResponse","PaginationParams","Transaction","TrialBalance"],"type":["LedgerResult"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_PAGE_SIZE"],"enum":["AccountType","EntryType","ListResponse","PaginationOption"],"struct":["Account","AccountBalance","Entry","PaginatedResponse","PaginationParams","Transaction","TransactionFilter","TrialBalance"]};

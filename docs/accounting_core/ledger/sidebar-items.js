@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["account","core","transaction"]};
+window.SIDEBAR_ITEMS = {"constant":["STANDARD_CHART"],"mod":["balances","patterns"],"struct":["Ledger","TransactionBuilder"]};

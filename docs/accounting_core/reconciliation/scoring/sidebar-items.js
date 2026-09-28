@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["EXACT_MATCH_SCORE"],"fn":["score_pair"]};

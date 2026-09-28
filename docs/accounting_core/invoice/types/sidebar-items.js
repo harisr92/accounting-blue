@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["InvoiceError"],"struct":["GstBreakdown","GstInvoice","GstLineItem","Gstin"]};
+window.SIDEBAR_ITEMS = {"enum":["GstinError","InvoiceError","InvoiceNumberError","LineItemError"],"struct":["GstBreakdown","GstInvoice","GstLineItem","Gstin"]};

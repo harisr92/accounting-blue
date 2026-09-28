@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["GstCategory","GstError"],"struct":["GstCalculation","GstCalculator","GstRate"]};
+window.SIDEBAR_ITEMS = {"enum":["GstCategory","GstError"],"fn":["percent_of"],"struct":["GstCalculation","GstCalculator","GstRate"]};

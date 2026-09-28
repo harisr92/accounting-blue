@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["config","engine","similarity","storage","types"]};
+window.SIDEBAR_ITEMS = {"mod":["config","engine","scoring","similarity","storage","types"]};

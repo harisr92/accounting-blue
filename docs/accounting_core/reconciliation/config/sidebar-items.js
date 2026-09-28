@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["ReconciliationConfig"]};
+window.SIDEBAR_ITEMS = {"struct":["ReconciliationConfig","ScoringWeights"]};

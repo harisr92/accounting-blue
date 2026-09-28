@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CashFlowActivity"],"fn":["balance_sheet","cash_flow","classify_cash_flow","income_statement","integrity_report","total"],"mod":["types"],"type":["BalancesByType"]};

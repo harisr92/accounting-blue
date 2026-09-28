@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Error","FieldError","LedgerError","PaginationError"],"type":["BoxError","LedgerResult","Result"]};
