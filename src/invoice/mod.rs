@@ -10,7 +10,8 @@
 //! [`GstLineItem::with_default_rate`] builds a line at the rate for its code.
 //!
 //! The tax arithmetic comes from [`crate::tax::gst`]. The invoice types are also re-exported at the
-//! crate root.
+//! crate root. Validation failures are typed: [`InvoiceError`] carries a [`GstinError`],
+//! [`InvoiceNumberError`] or [`LineItemError`] saying which rule was broken.
 //!
 //! # Example
 //!
@@ -48,4 +49,7 @@ pub mod hsn_lookup;
 pub mod types;
 
 pub use hsn_lookup::{HsnMaster, HsnSacEntry, HsnSacKind};
-pub use types::*;
+pub use types::{
+    GstBreakdown, GstInvoice, GstLineItem, Gstin, GstinError, InvoiceError, InvoiceNumberError,
+    LineItemError,
+};

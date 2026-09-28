@@ -12,6 +12,10 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 /// The embedded master, parsed once on first use
+///
+/// The JSON is compiled into the crate, so a parse failure is a build defect rather than a
+/// runtime condition; `test_embedded_master_parses` catches it in CI.
+#[allow(clippy::expect_used)]
 static MASTER: LazyLock<HsnMaster> = LazyLock::new(|| {
     serde_json::from_str(include_str!("../data/hsn_master.json"))
         .expect("embedded HSN/SAC master is valid JSON")
@@ -78,21 +82,25 @@ impl From<RawMaster> for HsnMaster {
 
 impl HsnMaster {
     /// The master embedded in the crate
+    #[must_use]
     pub fn global() -> &'static HsnMaster {
         &MASTER
     }
 
     /// Name of the GST rate schedule the default rates follow
+    #[must_use]
     pub fn schedule(&self) -> &str {
         &self.schedule
     }
 
     /// Date the rate schedule took effect
+    #[must_use]
     pub fn effective_from(&self) -> NaiveDate {
         self.effective_from
     }
 
     /// All entries, in file order
+    #[must_use]
     pub fn entries(&self) -> &[HsnSacEntry] {
         &self.entries
     }
@@ -101,6 +109,7 @@ impl HsnMaster {
     ///
     /// Tries the exact code first, then its 6- and 4-digit headings, so an 8-digit tariff item
     /// such as `84713010` resolves to `847130` or `8471`. Malformed codes return `None`.
+    #[must_use]
     pub fn lookup(&self, code: &str) -> Option<&HsnSacEntry> {
         if !is_valid_hsn_sac(code) {
             return None;
@@ -114,6 +123,7 @@ impl HsnMaster {
     }
 
     /// Default GST rate for a code, if the master knows it
+    #[must_use]
     pub fn default_rate(&self, code: &str) -> Option<BigDecimal> {
         self.lookup(code).map(|entry| entry.gst_rate.clone())
     }
@@ -122,4 +132,16 @@ impl HsnMaster {
 /// Whether a code has the shape of an HSN/SAC code: 4, 6 or 8 ASCII digits
 pub(crate) fn is_valid_hsn_sac(code: &str) -> bool {
     matches!(code.len(), 4 | 6 | 8) && code.bytes().all(|b| b.is_ascii_digit())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_embedded_master_parses() {
+        let master = HsnMaster::global();
+        assert!(!master.entries().is_empty());
+        assert!(master.entries().iter().all(|e| is_valid_hsn_sac(&e.code)));
+    }
 }
