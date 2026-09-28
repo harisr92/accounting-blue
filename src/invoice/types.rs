@@ -244,7 +244,10 @@ impl std::ops::AddAssign<&GstBreakdown> for GstBreakdown {
 }
 
 /// A line on a GST invoice
+///
+/// Deserialising goes through [`GstLineItem::new`], so the same rules apply.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "RawGstLineItem")]
 pub struct GstLineItem {
     /// HSN code (goods) or SAC code (services): 4, 6 or 8 digits
     pub hsn_sac: String,
@@ -256,6 +259,30 @@ pub struct GstLineItem {
     pub unit_price: BigDecimal,
     /// Total GST rate as a percentage (e.g. 18 for 18%)
     pub gst_rate: BigDecimal,
+}
+
+/// Unvalidated shape of a [`GstLineItem`], used when deserialising
+#[derive(Deserialize)]
+struct RawGstLineItem {
+    hsn_sac: String,
+    description: String,
+    quantity: BigDecimal,
+    unit_price: BigDecimal,
+    gst_rate: BigDecimal,
+}
+
+impl TryFrom<RawGstLineItem> for GstLineItem {
+    type Error = InvoiceError;
+
+    fn try_from(raw: RawGstLineItem) -> Result<Self, Self::Error> {
+        Self::new(
+            raw.hsn_sac,
+            raw.description,
+            raw.quantity,
+            raw.unit_price,
+            raw.gst_rate,
+        )
+    }
 }
 
 impl GstLineItem {
@@ -350,8 +377,10 @@ impl GstLineItem {
 /// A B2B tax invoice under Indian GST
 ///
 /// Whether the supply is inter-state (IGST) or intra-state (CGST + SGST) is derived from the
-/// state codes of the seller and buyer GSTINs.
+/// state codes of the seller and buyer GSTINs. Deserialising goes through [`GstInvoice::new`],
+/// so the same rules apply.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "RawGstInvoice")]
 pub struct GstInvoice {
     /// Invoice number: at most 16 characters of letters, digits, `-` and `/`
     pub invoice_number: String,
@@ -363,6 +392,30 @@ pub struct GstInvoice {
     pub buyer_gstin: Gstin,
     /// Invoice lines
     pub line_items: Vec<GstLineItem>,
+}
+
+/// Unvalidated shape of a [`GstInvoice`], used when deserialising
+#[derive(Deserialize)]
+struct RawGstInvoice {
+    invoice_number: String,
+    invoice_date: NaiveDate,
+    seller_gstin: Gstin,
+    buyer_gstin: Gstin,
+    line_items: Vec<GstLineItem>,
+}
+
+impl TryFrom<RawGstInvoice> for GstInvoice {
+    type Error = InvoiceError;
+
+    fn try_from(raw: RawGstInvoice) -> Result<Self, Self::Error> {
+        Self::new(
+            raw.invoice_number,
+            raw.invoice_date,
+            raw.seller_gstin,
+            raw.buyer_gstin,
+            raw.line_items,
+        )
+    }
 }
 
 impl GstInvoice {
@@ -607,6 +660,22 @@ mod tests {
         assert_eq!(json, format!("\"{SELLER}\""));
         assert!(serde_json::from_str::<Gstin>(&json).is_ok());
         assert!(serde_json::from_str::<Gstin>("\"27AAPFU0939F1ZA\"").is_err());
+    }
+
+    #[test]
+    fn test_invoice_serde_validates() {
+        let buyer = gstin_with_checksum("27AABCT1332L1Z");
+        let invoice = invoice(&buyer, vec![item(18)]);
+        let json = serde_json::to_string(&invoice).unwrap();
+        assert_eq!(serde_json::from_str::<GstInvoice>(&json).unwrap(), invoice);
+
+        let bad_number = json.replace("INV/2024-25/001", "");
+        assert!(serde_json::from_str::<GstInvoice>(&bad_number).is_err());
+
+        let line = serde_json::to_string(&item(18)).unwrap();
+        let bad_rate = line.replace("\"gst_rate\":\"18\"", "\"gst_rate\":\"150\"");
+        assert_ne!(bad_rate, line);
+        assert!(serde_json::from_str::<GstLineItem>(&bad_rate).is_err());
     }
 
     #[test]

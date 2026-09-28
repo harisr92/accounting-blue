@@ -296,7 +296,8 @@ impl<S: LedgerStorage> Ledger<S> {
     ///
     /// [`LedgerError::TransactionNotFound`](crate::LedgerError::TransactionNotFound), a
     /// validation error, [`LedgerError::AccountNotFound`](crate::LedgerError::AccountNotFound) for
-    /// an entry on either version, or a storage error.
+    /// an entry on the new version, or a storage error. Accounts on the old version that have
+    /// since been deleted are skipped when reversing.
     pub async fn update_transaction(&mut self, transaction: &Transaction) -> LedgerResult<()> {
         transactions::update_transaction(
             &mut self.storage,
@@ -306,12 +307,12 @@ impl<S: LedgerStorage> Ledger<S> {
         .await
     }
 
-    /// Delete a transaction and reverse its effect on account balances
+    /// Delete a transaction and reverse its effect on the accounts that still exist
     ///
     /// # Errors
     ///
-    /// [`LedgerError::TransactionNotFound`](crate::LedgerError::TransactionNotFound),
-    /// [`LedgerError::AccountNotFound`](crate::LedgerError::AccountNotFound) or a storage error.
+    /// [`LedgerError::TransactionNotFound`](crate::LedgerError::TransactionNotFound) or a storage
+    /// error.
     pub async fn delete_transaction(&mut self, transaction_id: &str) -> LedgerResult<()> {
         transactions::delete_transaction(&mut self.storage, transaction_id).await
     }
@@ -418,7 +419,8 @@ impl<S: LedgerStorage> Ledger<S> {
         as_of_date: NaiveDate,
     ) -> LedgerResult<LedgerIntegrityReport> {
         let trial_balance = self.get_trial_balance(as_of_date).await?;
-        let balance_sheet = self.generate_balance_sheet(as_of_date).await?;
+        let by_type = balances::group_by_type(trial_balance.balances.values().cloned());
+        let balance_sheet = reports::balance_sheet(as_of_date, by_type);
         Ok(reports::integrity_report(
             as_of_date,
             trial_balance,
