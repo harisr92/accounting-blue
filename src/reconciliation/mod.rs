@@ -25,10 +25,11 @@
 //! 1. **Reference numbers.** A shared UTR, RRN or cheque number backed by an equal amount and
 //!    direction is conclusive, whatever the dates say. Ambiguous references are skipped.
 //! 2. **Exact agreement** on date, amount and direction, resolved through a hash index.
-//! 3. **Scored pairing.** Everything left over is scored across amount, date, description,
-//!    direction and reference, then assigned best-first so a weak pairing cannot claim a
-//!    counterpart that a stronger one wanted.
-//! 4. **Suggestions.** Whatever is still unmatched is reported with its closest available
+//! 3. **Scoring.** Everything left over is scored across amount, date, description, direction
+//!    and reference (weighted by [`ScoringWeights`]).
+//! 4. **Best-first assignment.** Scored pairs are assigned highest first, so a weak pairing
+//!    cannot claim a counterpart that a stronger one wanted.
+//! 5. **Suggestions.** Whatever is still unmatched is reported with its closest available
 //!    counterparts, so a person can finish the job.
 //!
 //! Thresholds live in [`ReconciliationConfig`]. The result is independent of the order of either
@@ -74,7 +75,7 @@
 //! .with_reference("UTR12345")];
 //!
 //! let engine = ReconciliationEngine::new(ReconciliationConfig::default());
-//! let report = engine.reconcile(ledger, external, source);
+//! let report = engine.reconcile(&ledger, &external, source);
 //!
 //! assert_eq!(report.matched_count, 1);
 //! assert!(report.is_fully_reconciled());
@@ -82,11 +83,17 @@
 
 pub mod config;
 pub mod engine;
+mod report;
+pub mod scoring;
 pub mod similarity;
 pub mod storage;
 pub mod types;
 
-pub use config::ReconciliationConfig;
+pub use config::{ReconciliationConfig, ScoringWeights};
 pub use engine::ReconciliationEngine;
 pub use storage::{ExternalDataParser, ReconciliationStorage};
-pub use types::*;
+pub use types::{
+    ExternalSource, ExternalTransaction, LedgerTransaction, MatchDifference, PartialMatch,
+    ReconciliationError, ReconciliationReport, ReconciliationResult, ReconciliationStatus,
+    ReconciliationSummary,
+};

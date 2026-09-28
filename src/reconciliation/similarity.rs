@@ -22,6 +22,7 @@ const CONTAINMENT_SCORE: f64 = 0.8;
 /// use accounting_core::reconciliation::similarity::normalize;
 /// assert_eq!(normalize("NEFT/ACME LTD/HDFC0000123"), "neft acme ltd hdfc0000123");
 /// ```
+#[must_use]
 pub fn normalize(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut pending_space = false;
@@ -51,6 +52,7 @@ pub fn normalize(text: &str) -> String {
 /// assert!(similarity("NEFT/ACME LTD/0012", "Acme Ltd") >= 0.8);
 /// assert!(similarity("Acme Ltd", "Globex Inc") < 0.4);
 /// ```
+#[must_use]
 pub fn similarity(left: &str, right: &str) -> f64 {
     let left = normalize(left);
     let right = normalize(right);
@@ -76,6 +78,7 @@ pub fn similarity(left: &str, right: &str) -> f64 {
 }
 
 /// Jaccard index over whitespace-separated tokens
+#[allow(clippy::cast_precision_loss)] // counts are bounded by input length
 fn token_similarity(left: &str, right: &str) -> f64 {
     let left_tokens: HashSet<&str> = left.split(' ').collect();
     let right_tokens: HashSet<&str> = right.split(' ').collect();
@@ -89,6 +92,7 @@ fn token_similarity(left: &str, right: &str) -> f64 {
 }
 
 /// Edit distance rescaled against the longer input
+#[allow(clippy::cast_precision_loss)] // counts are bounded by input length
 fn edit_similarity(left: &str, right: &str) -> f64 {
     let left_chars: Vec<char> = left.chars().take(MAX_COMPARE_LEN).collect();
     let right_chars: Vec<char> = right.chars().take(MAX_COMPARE_LEN).collect();
@@ -102,6 +106,7 @@ fn edit_similarity(left: &str, right: &str) -> f64 {
 }
 
 /// Levenshtein edit distance between two strings, in characters
+#[must_use]
 pub fn levenshtein(left: &str, right: &str) -> usize {
     let left_chars: Vec<char> = left.chars().collect();
     let right_chars: Vec<char> = right.chars().collect();
