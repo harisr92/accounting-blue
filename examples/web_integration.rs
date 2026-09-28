@@ -86,7 +86,7 @@ async fn axum_style_handlers(
         }
         Err(e) => {
             println!("❌ Status: 400 Bad Request");
-            println!("📦 Error: {}", e);
+            println!("📦 Error: {e}");
         }
     }
 
@@ -105,7 +105,7 @@ async fn axum_style_handlers(
         Ok(_) => println!("❌ Should have failed!"),
         Err(e) => {
             println!("✅ Status: 400 Bad Request");
-            println!("📦 Error: {}", e);
+            println!("📦 Error: {e}");
         }
     }
 
@@ -236,11 +236,11 @@ async fn axum_list_accounts(
     let per_page = query.per_page.unwrap_or(20);
 
     let pagination = PaginationParams::new(page, per_page)
-        .map_err(|e| format!("Invalid pagination parameters: {}", e))?;
+        .map_err(|e| format!("Invalid pagination parameters: {e}"))?;
 
     let result = if let Some(type_str) = query.account_type {
         let account_type =
-            parse_account_type(&type_str).map_err(|e| format!("Invalid account type: {}", e))?;
+            parse_account_type(&type_str).map_err(|e| format!("Invalid account type: {e}"))?;
         ledger
             .list_accounts_by_type(account_type, PaginationOption::Paginated(pagination))
             .await
@@ -249,9 +249,9 @@ async fn axum_list_accounts(
             .list_accounts(PaginationOption::Paginated(pagination))
             .await
     }
-    .map_err(|e| format!("Database error: {}", e))?;
+    .map_err(|e| format!("Database error: {e}"))?;
 
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
     let data = result
         .items
         .into_iter()
@@ -318,7 +318,7 @@ async fn actix_get_accounts(
             .list_accounts(PaginationOption::Paginated(pagination))
             .await?
     };
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
 
     let accounts = result
         .items
@@ -392,7 +392,7 @@ async fn warp_accounts_handler(
             .list_accounts(PaginationOption::Paginated(pagination))
             .await?
     };
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
 
     let data = result
         .items
@@ -424,7 +424,7 @@ fn parse_account_type(type_str: &str) -> Result<AccountType, Box<dyn std::error:
         "equity" => Ok(AccountType::Equity),
         "income" => Ok(AccountType::Income),
         "expense" => Ok(AccountType::Expense),
-        _ => Err(format!("Unknown account type: {}", type_str).into()),
+        _ => Err(format!("Unknown account type: {type_str}").into()),
     }
 }
 

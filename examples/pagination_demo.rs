@@ -129,10 +129,10 @@ async fn setup_sample_data(
     // Create sample transactions
     for i in 1..=30 {
         let mut transaction = Transaction::new(
-            format!("txn_{:03}", i),
+            format!("txn_{i:03}"),
             NaiveDate::from_ymd_opt(2024, 1, (i % 28) + 1).unwrap(),
-            format!("Sample transaction {}", i),
-            Some(format!("REF{:03}", i)),
+            format!("Sample transaction {i}"),
+            Some(format!("REF{i:03}")),
         );
 
         // Create various transaction patterns
@@ -207,7 +207,7 @@ async fn basic_account_pagination(
     let result = ledger
         .list_accounts(PaginationOption::Paginated(pagination))
         .await?;
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
 
     println!("📊 First page (default settings):");
     println!("   Items: {}/{}", result.items.len(), result.total_count);
@@ -230,7 +230,7 @@ async fn basic_account_pagination(
     let result = ledger
         .list_accounts(PaginationOption::Paginated(pagination))
         .await?;
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
 
     println!("\n📊 First page (5 items per page):");
     println!("   Items: {}/{}", result.items.len(), result.total_count);
@@ -255,7 +255,7 @@ async fn paginated_accounts_by_type(
     let result = ledger
         .list_accounts_by_type(AccountType::Asset, PaginationOption::Paginated(pagination))
         .await?;
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
 
     println!("📊 Asset accounts (page 1):");
     println!("   Total assets: {}", result.total_count);
@@ -273,7 +273,7 @@ async fn paginated_accounts_by_type(
             PaginationOption::Paginated(pagination2),
         )
         .await?;
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
 
     println!("\n📊 Income accounts:");
     println!("   Total income accounts: {}", result.total_count);
@@ -292,9 +292,9 @@ async fn basic_transaction_pagination(
     // Get first page of transactions (10 per page)
     let pagination = PaginationParams::new(1, 10)?;
     let result = ledger
-        .get_transactions(None, None, PaginationOption::Paginated(pagination))
+        .list_transactions(None, None, PaginationOption::Paginated(pagination))
         .await?;
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
 
     println!("📊 Recent transactions (page 1 of {}):", result.total_pages);
     println!("   Total transactions: {}", result.total_count);
@@ -312,9 +312,9 @@ async fn basic_transaction_pagination(
         println!("\n📊 Getting second page...");
         let pagination = PaginationParams::new(2, 10)?;
         let result = ledger
-            .get_transactions(None, None, PaginationOption::Paginated(pagination))
+            .list_transactions(None, None, PaginationOption::Paginated(pagination))
             .await?;
-        let result = result.to_paginated_response();
+        let result = result.into_paginated_response();
 
         println!("   Page 2 - {} transactions:", result.items.len());
         for transaction in result.items.iter().take(3) {
@@ -335,9 +335,9 @@ async fn account_transaction_pagination(
     // Get transactions for the cash account
     let pagination = PaginationParams::new(1, 5)?;
     let result = ledger
-        .get_account_transactions("cash", None, None, PaginationOption::Paginated(pagination))
+        .list_account_transactions("cash", None, None, PaginationOption::Paginated(pagination))
         .await?;
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
 
     println!("📊 Cash account transactions:");
     println!("   Total: {} transactions", result.total_count);
@@ -375,13 +375,13 @@ async fn date_filtered_pagination(
     let pagination = PaginationParams::new(1, 20)?;
 
     let result = ledger
-        .get_transactions(
+        .list_transactions(
             start_date,
             end_date,
             PaginationOption::Paginated(pagination),
         )
         .await?;
-    let paginated_result = result.to_paginated_response();
+    let paginated_result = result.into_paginated_response();
 
     println!("📊 Transactions from Jan 1-7, 2024:");
     println!("   Found: {} transactions", paginated_result.total_count);
@@ -401,13 +401,13 @@ async fn date_filtered_pagination(
     let pagination2 = PaginationParams::new(1, 20)?;
 
     let result = ledger
-        .get_transactions(
+        .list_transactions(
             start_date,
             end_date,
             PaginationOption::Paginated(pagination2),
         )
         .await?;
-    let paginated_result = result.to_paginated_response();
+    let paginated_result = result.into_paginated_response();
 
     println!("\n📊 Transactions from Jan 15-20, 2024:");
     println!("   Found: {} transactions", paginated_result.total_count);
@@ -433,7 +433,7 @@ async fn pagination_navigation_helpers(
         let result = ledger
             .list_accounts(PaginationOption::Paginated(pagination))
             .await?;
-        let paginated_result = result.to_paginated_response();
+        let paginated_result = result.into_paginated_response();
 
         println!(
             "\n   📄 Page {} of {} ({} items):",
@@ -453,7 +453,7 @@ async fn pagination_navigation_helpers(
 
         // Navigation info
         let nav_info = build_navigation_info(&paginated_result);
-        println!("   🔗 Navigation: {}", nav_info);
+        println!("   🔗 Navigation: {nav_info}");
 
         // Break after showing 2 pages as example
         if current_page >= 2 {
@@ -478,19 +478,19 @@ async fn error_handling_examples() -> Result<(), Box<dyn std::error::Error>> {
     // Test invalid page number
     match PaginationParams::new(0, 10) {
         Ok(_) => println!("   ❌ Should have failed for page 0"),
-        Err(e) => println!("   ✅ Page 0 rejected: {}", e),
+        Err(e) => println!("   ✅ Page 0 rejected: {e}"),
     }
 
     // Test invalid page size (too small)
     match PaginationParams::new(1, 0) {
         Ok(_) => println!("   ❌ Should have failed for page_size 0"),
-        Err(e) => println!("   ✅ Page size 0 rejected: {}", e),
+        Err(e) => println!("   ✅ Page size 0 rejected: {e}"),
     }
 
     // Test invalid page size (too large)
     match PaginationParams::new(1, 1001) {
         Ok(_) => println!("   ❌ Should have failed for page_size 1001"),
-        Err(e) => println!("   ✅ Page size 1001 rejected: {}", e),
+        Err(e) => println!("   ✅ Page size 1001 rejected: {e}"),
     }
 
     // Test valid parameters
@@ -506,7 +506,7 @@ async fn error_handling_examples() -> Result<(), Box<dyn std::error::Error>> {
                 params.limit()
             );
         }
-        Err(e) => println!("   ❌ Unexpected error: {}", e),
+        Err(e) => println!("   ❌ Unexpected error: {e}"),
     }
 
     Ok(())
@@ -524,9 +524,9 @@ async fn pagination_ui_helper(
 
     let pagination = PaginationParams::new(page_request, page_size)?;
     let result = ledger
-        .get_transactions(None, None, PaginationOption::Paginated(pagination))
+        .list_transactions(None, None, PaginationOption::Paginated(pagination))
         .await?;
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
 
     // Build UI-friendly response
     let ui_response = PaginationUIResponse {
@@ -570,7 +570,7 @@ async fn pagination_ui_helper(
     // Generate pagination controls
     let controls = generate_pagination_controls(&ui_response.pagination_info);
     println!("\n   🎛️  Pagination Controls:");
-    println!("   {}", controls);
+    println!("   {controls}");
 
     Ok(())
 }
@@ -649,9 +649,9 @@ fn generate_pagination_controls(info: &PaginationInfo) -> String {
 
     for page in start_page..=end_page {
         if page == info.current_page {
-            controls.push(format!("[{}]", page));
+            controls.push(format!("[{page}]"));
         } else {
-            controls.push(format!("{}", page));
+            controls.push(format!("{page}"));
         }
     }
 

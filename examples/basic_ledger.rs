@@ -238,7 +238,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         println!("  ❌ Ledger integrity check failed:");
         for issue in &integrity_report.issues {
-            println!("    - {}", issue);
+            println!("    - {issue}");
         }
     }
 

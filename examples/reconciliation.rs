@@ -117,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 2. Project the bank account's leg out of each double-entry transaction
     let ledger_transactions: Vec<LedgerTransaction> = ledger
-        .get_all_account_transactions(BANK, Some(day(1)), Some(day(30)))
+        .list_all_account_transactions(BANK, Some(day(1)), Some(day(30)))
         .await?
         .iter()
         .filter_map(|transaction| LedgerTransaction::from_transaction(transaction, BANK))
@@ -171,7 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. Reconcile
     let engine = ReconciliationEngine::new(ReconciliationConfig::default());
-    let report = engine.reconcile(ledger_transactions, external_transactions, source);
+    let report = engine.reconcile(&ledger_transactions, &external_transactions, source);
 
     println!("📋 Reconciliation report {}", report.id);
     println!(
