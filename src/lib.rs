@@ -240,3 +240,6 @@ pub use types::{
     PaginationOption, PaginationParams, Transaction, TransactionFilter, TrialBalance,
 };
 pub use utils::validation::{DefaultAccountValidator, DefaultTransactionValidator};
+
+#[cfg(test)]
+mod tests;

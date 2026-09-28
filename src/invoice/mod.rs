@@ -53,3 +53,6 @@ pub use types::{
     GstBreakdown, GstInvoice, GstLineItem, Gstin, GstinError, InvoiceError, InvoiceNumberError,
     LineItemError,
 };
+
+#[cfg(test)]
+mod tests;

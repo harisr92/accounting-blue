@@ -8,3 +8,6 @@ pub use validation::{
     DefaultAccountValidator, DefaultTransactionValidator, EnhancedAccountValidator,
     EnhancedTransactionValidator,
 };
+
+#[cfg(test)]
+mod tests;

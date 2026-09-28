@@ -133,15 +133,3 @@ impl HsnMaster {
 pub(crate) fn is_valid_hsn_sac(code: &str) -> bool {
     matches!(code.len(), 4 | 6 | 8) && code.bytes().all(|b| b.is_ascii_digit())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_embedded_master_parses() {
-        let master = HsnMaster::global();
-        assert!(!master.entries().is_empty());
-        assert!(master.entries().iter().all(|e| is_valid_hsn_sac(&e.code)));
-    }
-}

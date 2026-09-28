@@ -97,3 +97,6 @@ pub use types::{
     ReconciliationError, ReconciliationReport, ReconciliationResult, ReconciliationStatus,
     ReconciliationSummary,
 };
+
+#[cfg(test)]
+mod tests;

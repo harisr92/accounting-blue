@@ -129,6 +129,3 @@ impl ReconciliationEngine {
         score_pair(&self.config, ledger, external)
     }
 }
-
-#[cfg(test)]
-mod tests;
