@@ -2,7 +2,7 @@
 
 ## 0.2.0
 
-This release refactors the crate to the coding standards in [CLAUDE.md](CLAUDE.md): a functional core behind an imperative shell, small traits, one home per accounting rule, typed errors, and no panics in library code. Balances, reports, GST amounts and reconciliation scores are unchanged, and every existing test assertion passes with the same expected values. The public API has breaking changes, listed below.
+This release refactors the crate to the coding standards in [CLAUDE.md](CLAUDE.md): a functional core behind an imperative shell, small traits, one home per accounting rule, typed errors, and no panics in library code. Balances, GST amounts and reconciliation scores are unchanged, and every existing test assertion passes with the same expected values. Report totals change only where the old ones were wrong: see the balance sheet fix under Fixes. The public API has breaking changes, listed below.
 
 ### Breaking changes
 
@@ -51,6 +51,7 @@ This release refactors the crate to the coding standards in [CLAUDE.md](CLAUDE.m
   | `ListResponse::to_paginated_response` | `into_paginated_response` |
 
 - `ListResponse::items` returns `&[T]`.
+- `reports::total` takes the section's `AccountType` and nets balances on the opposite side instead of adding them.
 - Report DTOs (`BalanceSheet`, `IncomeStatement`, `CashFlowStatement`, `CashFlowItem`, `LedgerIntegrityReport`) moved to `accounting_core::reports`. They are still re-exported at the crate root.
 
 #### GST and invoices
@@ -67,7 +68,8 @@ This release refactors the crate to the coding standards in [CLAUDE.md](CLAUDE.m
 - The crate root, `tax`, `invoice`, `reconciliation` and `utils` re-export items by name instead of by glob.
 
 ### Fixes
-- `update_transaction` checks that every account on the old and new versions exists before changing any balance. `delete_transaction` checks the same for the transaction's accounts. Previously a missing account was skipped silently, which left balances inconsistent.
+- `update_transaction` checks that every account on the new version exists before changing any balance. Previously a missing account was skipped silently, which applied only part of the transaction. Reversals (the old version on update, and `delete_transaction`) still skip accounts that have since been deleted, so such a transaction can always be removed.
+- Balance sheet and income statement totals now respect the debit/credit side. A net loss, or any balance on the opposite side of its account's normal balance (e.g. an overdrawn asset), used to be added to its section's total instead of subtracted, so a correct ledger with a loss was reported as unbalanced.
 - GSTIN parsing:
   - A state code with a sign or other non-digit (e.g. `+7`) is rejected; it used to parse as a number.
   - The checksum no longer maps unknown characters to zero.

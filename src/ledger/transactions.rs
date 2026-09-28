@@ -37,6 +37,20 @@ async fn post_entries<S: AccountStore>(
     Ok(())
 }
 
+/// Undo entries on the accounts that still exist
+///
+/// An account deleted after the transaction was recorded has no balance left to correct, so its
+/// entries are skipped rather than blocking the reversal.
+async fn reverse_entries<S: AccountStore>(store: &mut S, entries: &[Entry]) -> LedgerResult<()> {
+    for entry in entries {
+        if let Some(mut account) = store.get_account(&entry.account_id).await? {
+            account.apply_entry(entry.entry_type.opposite(), &entry.amount);
+            store.update_account(&account).await?;
+        }
+    }
+    Ok(())
+}
+
 /// Validate a transaction, save it and apply it to its accounts
 pub(crate) async fn record_transaction<S: LedgerStorage>(
     store: &mut S,
@@ -53,7 +67,8 @@ pub(crate) async fn record_transaction<S: LedgerStorage>(
 
 /// Replace a transaction, reversing the old entries and applying the new ones
 ///
-/// Every account on both versions must exist; nothing is changed otherwise.
+/// Every account on the new version must exist; nothing is changed otherwise. Accounts on the old
+/// version that have since been deleted are skipped when reversing.
 pub(crate) async fn update_transaction<S: LedgerStorage>(
     store: &mut S,
     validator: &dyn TransactionValidator,
@@ -61,22 +76,19 @@ pub(crate) async fn update_transaction<S: LedgerStorage>(
 ) -> LedgerResult<()> {
     let old = require_transaction(store, &transaction.id).await?;
     validator.validate_transaction(transaction)?;
-    ensure_accounts_exist(store, &old.entries).await?;
     ensure_accounts_exist(store, &transaction.entries).await?;
 
-    post_entries(store, old.entries.iter().map(Entry::reversed)).await?;
+    reverse_entries(store, &old.entries).await?;
     post_entries(store, transaction.entries.iter().cloned()).await?;
     store.update_transaction(transaction).await
 }
 
-/// Delete a transaction and reverse its effect on account balances
+/// Delete a transaction and reverse its effect on the accounts that still exist
 pub(crate) async fn delete_transaction<S: LedgerStorage>(
     store: &mut S,
     transaction_id: &str,
 ) -> LedgerResult<()> {
     let old = require_transaction(store, transaction_id).await?;
-    ensure_accounts_exist(store, &old.entries).await?;
-
-    post_entries(store, old.entries.iter().map(Entry::reversed)).await?;
+    reverse_entries(store, &old.entries).await?;
     store.delete_transaction(transaction_id).await
 }

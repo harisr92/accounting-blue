@@ -18,33 +18,45 @@ pub use types::{
 /// Account balances grouped by type, as produced by [`crate::ledger::balances::group_by_type`]
 pub type BalancesByType = HashMap<AccountType, Vec<AccountBalance>>;
 
-/// Sum of the balance amounts in a section
+/// Total of a section of one account type, measured on that type's normal side
+///
+/// A balance on the opposite side (an overdrawn asset, a debit equity line for a net loss)
+/// reduces the total rather than adding to it.
 #[must_use]
-pub fn total(balances: &[AccountBalance]) -> BigDecimal {
-    balances.iter().map(AccountBalance::balance_amount).sum()
+pub fn total(account_type: AccountType, balances: &[AccountBalance]) -> BigDecimal {
+    let side = account_type.normal_balance();
+    balances.iter().map(|balance| balance.net_on(side)).sum()
 }
 
 fn take(by_type: &mut BalancesByType, account_type: AccountType) -> Vec<AccountBalance> {
     by_type.remove(&account_type).unwrap_or_default()
 }
 
+/// Section of one account type together with its total
+fn section(
+    by_type: &mut BalancesByType,
+    account_type: AccountType,
+) -> (Vec<AccountBalance>, BigDecimal) {
+    let balances = take(by_type, account_type);
+    let sum = total(account_type, &balances);
+    (balances, sum)
+}
+
 /// Balance sheet, with net income from income and expense accounts shown as an equity line
 #[must_use]
 pub fn balance_sheet(as_of_date: NaiveDate, mut by_type: BalancesByType) -> BalanceSheet {
-    let assets = take(&mut by_type, AccountType::Asset);
-    let liabilities = take(&mut by_type, AccountType::Liability);
+    let (assets, total_assets) = section(&mut by_type, AccountType::Asset);
+    let (liabilities, total_liabilities) = section(&mut by_type, AccountType::Liability);
     let mut equity = take(&mut by_type, AccountType::Equity);
 
-    let net_income = total(&take(&mut by_type, AccountType::Income))
-        - total(&take(&mut by_type, AccountType::Expense));
+    let (_, income) = section(&mut by_type, AccountType::Income);
+    let (_, expenses) = section(&mut by_type, AccountType::Expense);
+    let net_income = income - expenses;
     if !net_income.is_zero() {
         let account = Account::new("net_income", "Net Income", AccountType::Equity, None);
         equity.push(AccountBalance::from_balance(account, &net_income));
     }
-
-    let total_assets = total(&assets);
-    let total_liabilities = total(&liabilities);
-    let total_equity = total(&equity);
+    let total_equity = total(AccountType::Equity, &equity);
 
     BalanceSheet {
         as_of_date,
@@ -67,10 +79,8 @@ pub fn income_statement(
     end_date: NaiveDate,
     mut by_type: BalancesByType,
 ) -> IncomeStatement {
-    let revenue = take(&mut by_type, AccountType::Income);
-    let expenses = take(&mut by_type, AccountType::Expense);
-    let total_revenue = total(&revenue);
-    let total_expenses = total(&expenses);
+    let (revenue, total_revenue) = section(&mut by_type, AccountType::Income);
+    let (expenses, total_expenses) = section(&mut by_type, AccountType::Expense);
 
     IncomeStatement {
         start_date,
@@ -227,6 +237,46 @@ mod tests {
         assert_eq!(
             classify_cash_flow(&txn("cash", "sales", "Sale")),
             CashFlowActivity::Operating
+        );
+    }
+
+    #[test]
+    fn test_net_loss_still_balances() {
+        // Owner invests 100 in cash, then 40 of rent is paid from it
+        let balance = |id: &str, account_type, amount: i32| {
+            AccountBalance::from_balance(
+                Account::new(id, id, account_type, None),
+                &BigDecimal::from(amount),
+            )
+        };
+        let by_type = crate::ledger::balances::group_by_type([
+            balance("cash", AccountType::Asset, 60),
+            balance("capital", AccountType::Equity, 100),
+            balance("rent", AccountType::Expense, 40),
+        ]);
+
+        let sheet = balance_sheet(day(), by_type.clone());
+        assert_eq!(sheet.total_assets, BigDecimal::from(60));
+        assert_eq!(sheet.total_equity, BigDecimal::from(60));
+        assert!(sheet.is_balanced);
+
+        let statement = income_statement(day(), day(), by_type);
+        assert_eq!(statement.net_income, BigDecimal::from(-40));
+    }
+
+    #[test]
+    fn test_overdrawn_asset_reduces_total_assets() {
+        let cash = AccountBalance::from_balance(
+            Account::new("cash", "Cash", AccountType::Asset, None),
+            &BigDecimal::from(-25),
+        );
+        let bank = AccountBalance::from_balance(
+            Account::new("bank", "Bank", AccountType::Asset, None),
+            &BigDecimal::from(100),
+        );
+        assert_eq!(
+            total(AccountType::Asset, &[cash, bank]),
+            BigDecimal::from(75)
         );
     }
 

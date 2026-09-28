@@ -388,6 +388,17 @@ impl AccountBalance {
         }
     }
 
+    /// Balance measured on `side`: the amount on that side, minus any amount on the other
+    #[must_use]
+    pub fn net_on(&self, side: EntryType) -> BigDecimal {
+        let debit = self.debit_balance.clone().unwrap_or_default();
+        let credit = self.credit_balance.clone().unwrap_or_default();
+        match side {
+            EntryType::Debit => debit - credit,
+            EntryType::Credit => credit - debit,
+        }
+    }
+
     /// Get the balance amount regardless of debit/credit
     #[must_use]
     pub fn balance_amount(&self) -> BigDecimal {

@@ -534,3 +534,29 @@ async fn test_standard_chart_of_accounts() {
         STANDARD_CHART.len()
     );
 }
+
+#[tokio::test]
+async fn test_transactions_on_a_deleted_account_can_still_be_removed() {
+    let mut ledger = cash_and_revenue().await;
+    let sale = patterns::create_sales_transaction(
+        "t1",
+        day(1),
+        "Sale",
+        "cash",
+        "revenue",
+        BigDecimal::from(100),
+    )
+    .unwrap();
+    ledger.record_transaction(sale.clone()).await.unwrap();
+    ledger.delete_account("revenue").await.unwrap();
+
+    // Updating to entries on an account that is gone still fails...
+    let result = ledger.update_transaction(&sale).await;
+    assert!(matches!(result, Err(LedgerError::AccountNotFound(id)) if id == "revenue"));
+
+    // ...but deleting reverses what can be reversed instead of getting stuck.
+    ledger.delete_transaction("t1").await.unwrap();
+    let cash = ledger.get_account_balance("cash", None).await.unwrap();
+    assert_eq!(cash, BigDecimal::from(0));
+    assert!(ledger.get_transaction("t1").await.unwrap().is_none());
+}
