@@ -5,11 +5,12 @@
 //! bank statement, payment gateway, UPI provider or card issuer). Both keep a **positive** amount
 //! and carry direction in [`EntryType`], exactly like [`Entry`](crate::types::Entry).
 
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, Signed};
 use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::error::BoxError;
 use crate::types::{EntryType, Transaction};
 
 /// Where a set of external transactions came from
@@ -65,18 +66,18 @@ pub struct ExternalTransaction {
 impl ExternalTransaction {
     /// Create a new external transaction
     pub fn new(
-        id: String,
+        id: impl Into<String>,
         date: NaiveDate,
         amount: BigDecimal,
-        description: String,
+        description: impl Into<String>,
         entry_type: EntryType,
         source: ExternalSource,
     ) -> Self {
         Self {
-            id,
+            id: id.into(),
             date,
             amount,
-            description,
+            description: description.into(),
             reference: None,
             entry_type,
             source,
@@ -84,6 +85,7 @@ impl ExternalTransaction {
     }
 
     /// Attach a reference number
+    #[must_use]
     pub fn with_reference(mut self, reference: impl Into<String>) -> Self {
         self.reference = Some(reference.into());
         self
@@ -112,25 +114,26 @@ pub struct LedgerTransaction {
 impl LedgerTransaction {
     /// Create a new ledger transaction leg
     pub fn new(
-        id: String,
+        id: impl Into<String>,
         date: NaiveDate,
         amount: BigDecimal,
-        description: String,
+        description: impl Into<String>,
         entry_type: EntryType,
-        account_id: String,
+        account_id: impl Into<String>,
     ) -> Self {
         Self {
-            id,
+            id: id.into(),
             date,
             amount,
-            description,
+            description: description.into(),
             reference: None,
             entry_type,
-            account_id,
+            account_id: account_id.into(),
         }
     }
 
     /// Attach a reference number
+    #[must_use]
     pub fn with_reference(mut self, reference: impl Into<String>) -> Self {
         self.reference = Some(reference.into());
         self
@@ -150,35 +153,25 @@ impl LedgerTransaction {
     /// use chrono::NaiveDate;
     ///
     /// let date = NaiveDate::from_ymd_opt(2024, 11, 15).unwrap();
-    /// let mut txn = Transaction::new("t1".into(), date, "Customer payment".into(), None);
-    /// txn.add_entry(Entry::debit("bank".into(), BigDecimal::from(1000), None));
-    /// txn.add_entry(Entry::credit("sales".into(), BigDecimal::from(1000), None));
+    /// let mut txn = Transaction::new("t1", date, "Customer payment", None);
+    /// txn.add_entry(Entry::debit("bank", BigDecimal::from(1000), None));
+    /// txn.add_entry(Entry::credit("sales", BigDecimal::from(1000), None));
     ///
     /// let leg = LedgerTransaction::from_transaction(&txn, "bank").unwrap();
     /// assert_eq!(leg.amount, BigDecimal::from(1000));
     /// assert_eq!(leg.entry_type, EntryType::Debit);
     /// assert!(LedgerTransaction::from_transaction(&txn, "petty-cash").is_none());
     /// ```
+    #[must_use]
     pub fn from_transaction(transaction: &Transaction, account_id: &str) -> Option<Self> {
-        let mut net = BigDecimal::from(0);
-        let mut seen = false;
+        let net = transaction
+            .entries
+            .iter()
+            .filter(|entry| entry.account_id == account_id)
+            .map(|entry| entry.entry_type.signed(&entry.amount))
+            .reduce(|total, amount| total + amount)?;
 
-        for entry in &transaction.entries {
-            if entry.account_id != account_id {
-                continue;
-            }
-            seen = true;
-            match entry.entry_type {
-                EntryType::Debit => net += &entry.amount,
-                EntryType::Credit => net -= &entry.amount,
-            }
-        }
-
-        if !seen {
-            return None;
-        }
-
-        let entry_type = if net < *crate::ZERO {
+        let entry_type = if net.is_negative() {
             EntryType::Credit
         } else {
             EntryType::Debit
@@ -399,6 +392,7 @@ impl ReconciliationReport {
     }
 
     /// Whether every transaction on both sides was fully matched
+    #[must_use]
     pub fn is_fully_reconciled(&self) -> bool {
         self.unmatched_ledger_count == 0
             && self.unmatched_external_count == 0
@@ -410,160 +404,15 @@ impl ReconciliationReport {
 #[derive(Debug, thiserror::Error)]
 pub enum ReconciliationError {
     /// The storage backend failed
-    #[error("Storage error: {0}")]
-    Storage(String),
+    #[error("storage error: {0}")]
+    Storage(#[source] BoxError),
     /// External data could not be understood
-    #[error("Invalid transaction data: {0}")]
+    #[error("invalid transaction data: {0}")]
     InvalidData(String),
     /// The requested reconciliation report does not exist
-    #[error("Reconciliation not found")]
+    #[error("reconciliation not found")]
     NotFound,
 }
 
 /// Result type for reconciliation operations
 pub type ReconciliationResult<T> = Result<T, ReconciliationError>;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::types::Entry;
-
-    fn date() -> NaiveDate {
-        NaiveDate::from_ymd_opt(2024, 11, 15).unwrap()
-    }
-
-    fn transaction() -> Transaction {
-        let mut transaction = Transaction::new(
-            "txn-1".to_string(),
-            date(),
-            "Customer payment".to_string(),
-            Some("INV-9".to_string()),
-        );
-        transaction.add_entry(Entry::debit("bank".into(), BigDecimal::from(1000), None));
-        transaction.add_entry(Entry::credit("sales".into(), BigDecimal::from(1000), None));
-        transaction
-    }
-
-    #[test]
-    fn test_from_transaction_projects_the_debit_leg() {
-        let leg = LedgerTransaction::from_transaction(&transaction(), "bank").unwrap();
-
-        assert_eq!(leg.id, "txn-1");
-        assert_eq!(leg.date, date());
-        assert_eq!(leg.amount, BigDecimal::from(1000));
-        assert_eq!(leg.entry_type, EntryType::Debit);
-        assert_eq!(leg.account_id, "bank");
-        assert_eq!(leg.reference.as_deref(), Some("INV-9"));
-    }
-
-    #[test]
-    fn test_from_transaction_projects_the_credit_leg() {
-        let leg = LedgerTransaction::from_transaction(&transaction(), "sales").unwrap();
-
-        assert_eq!(leg.amount, BigDecimal::from(1000));
-        assert_eq!(leg.entry_type, EntryType::Credit);
-    }
-
-    #[test]
-    fn test_from_transaction_nets_repeated_entries() {
-        let mut txn = Transaction::new(
-            "txn-2".to_string(),
-            date(),
-            "Split settlement".to_string(),
-            None,
-        );
-        txn.add_entry(Entry::debit("bank".into(), BigDecimal::from(1000), None));
-        txn.add_entry(Entry::credit("bank".into(), BigDecimal::from(150), None));
-        txn.add_entry(Entry::credit("sales".into(), BigDecimal::from(850), None));
-
-        let leg = LedgerTransaction::from_transaction(&txn, "bank").unwrap();
-        assert_eq!(leg.amount, BigDecimal::from(850));
-        assert_eq!(leg.entry_type, EntryType::Debit);
-    }
-
-    #[test]
-    fn test_from_transaction_without_the_account() {
-        assert!(LedgerTransaction::from_transaction(&transaction(), "petty-cash").is_none());
-    }
-
-    #[test]
-    fn test_from_transaction_with_a_leg_that_nets_to_zero() {
-        let mut txn = Transaction::new("txn-3".to_string(), date(), "Contra".to_string(), None);
-        txn.add_entry(Entry::debit("bank".into(), BigDecimal::from(500), None));
-        txn.add_entry(Entry::credit("bank".into(), BigDecimal::from(500), None));
-
-        let leg = LedgerTransaction::from_transaction(&txn, "bank").unwrap();
-        assert_eq!(leg.amount, BigDecimal::from(0));
-        assert_eq!(leg.entry_type, EntryType::Debit);
-    }
-
-    #[test]
-    fn test_needs_review_skips_full_matches() {
-        let items = vec![
-            ReconciliationStatus::Matched {
-                ledger_id: "txn-1".to_string(),
-                external_id: "ext-1".to_string(),
-                match_score: 1.0,
-            },
-            ReconciliationStatus::UnmatchedLedger {
-                ledger_id: "txn-2".to_string(),
-                possible_matches: Vec::new(),
-            },
-        ];
-
-        let report = ReconciliationReport {
-            id: Uuid::new_v4(),
-            created_at: chrono::Utc::now().naive_utc(),
-            period_start: date(),
-            period_end: date(),
-            external_source: ExternalSource::Upi {
-                provider: "Test".to_string(),
-            },
-            account_ids: vec!["bank".to_string()],
-            total_ledger_transactions: 2,
-            total_external_transactions: 1,
-            matched_count: 1,
-            unmatched_ledger_count: 1,
-            unmatched_external_count: 0,
-            partial_match_count: 0,
-            reconciliation_items: items,
-            summary: ReconciliationSummary {
-                ledger_balance: BigDecimal::from(0),
-                external_balance: BigDecimal::from(0),
-                difference: BigDecimal::from(0),
-                match_rate: 0.5,
-                confidence_score: 0.75,
-            },
-        };
-
-        assert_eq!(report.needs_review().count(), 1);
-        assert!(!report.is_fully_reconciled());
-    }
-}
-
-#[cfg(test)]
-mod display_tests {
-    use super::*;
-
-    #[test]
-    fn test_differences_render_for_humans() {
-        let difference = MatchDifference::AmountDifference {
-            ledger_amount: BigDecimal::from(4300),
-            external_amount: BigDecimal::from(4299),
-            difference: BigDecimal::from(1),
-        };
-        assert_eq!(
-            difference.to_string(),
-            "amount 4300 in the ledger but 4299 externally, off by 1"
-        );
-
-        let missing = MatchDifference::ReferenceMismatch {
-            ledger_reference: Some("UTR-1".to_string()),
-            external_reference: None,
-        };
-        assert_eq!(
-            missing.to_string(),
-            "reference UTR-1 in the ledger but (none) externally"
-        );
-    }
-}

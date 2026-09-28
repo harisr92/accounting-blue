@@ -118,14 +118,14 @@ let source = ExternalSource::BankStatement {
 
 // Project the bank account's leg out of each double-entry transaction
 let ledger_transactions: Vec<LedgerTransaction> = ledger
-    .get_all_account_transactions("bank", Some(start), Some(end))
+    .list_all_account_transactions("bank", Some(start), Some(end))
     .await?
     .iter()
     .filter_map(|txn| LedgerTransaction::from_transaction(txn, "bank"))
     .collect();
 
 let report = ReconciliationEngine::default()
-    .reconcile(ledger_transactions, external_transactions, source);
+    .reconcile(&ledger_transactions, &external_transactions, source);
 
 println!("Matched: {}", report.matched_count);
 println!("Match rate: {:.1}%", report.summary.match_rate * 100.0);
@@ -163,27 +163,38 @@ per gateway.
 
 ### Storage Abstraction
 
-The library uses trait-based storage abstraction, allowing you to implement your own storage backend:
+The library uses trait-based storage. A backend implements two small data-access traits, `AccountStore` and `TransactionStore`. Every type that implements both is automatically a `LedgerStorage` and can back a `Ledger`. Balances, trial balances and reports are computed by the library from the data you return, so a backend never has to implement accounting rules.
 
 ```rust
-use accounting_core::{LedgerStorage, Account, Transaction};
+use accounting_core::{
+    Account, AccountStore, AccountType, LedgerError, LedgerResult, ListResponse,
+    PaginationOption, Transaction, TransactionFilter, TransactionStore,
+};
 use async_trait::async_trait;
 
-#[derive(Debug)]
 pub struct MyPostgresStorage {
     pool: sqlx::PgPool,
 }
 
 #[async_trait]
-impl LedgerStorage for MyPostgresStorage {
+impl AccountStore for MyPostgresStorage {
     async fn save_account(&mut self, account: &Account) -> LedgerResult<()> {
-        // Your PostgreSQL implementation
+        // Wrap backend failures so callers keep the cause:
+        // sqlx::query(...).execute(&self.pool).await.map_err(LedgerError::storage)?;
         todo!()
     }
-    
-    // Implement other required methods...
+
+    // get_account, list_accounts, update_account, delete_account...
+}
+
+#[async_trait]
+impl TransactionStore for MyPostgresStorage {
+    // save_transaction, get_transaction, list_transactions(&TransactionFilter, PaginationOption),
+    // update_transaction, delete_transaction...
 }
 ```
+
+Every error converts into `accounting_core::Error`, so application code can use one `?`-friendly `accounting_core::Result<T>` across the ledger, GST, invoice and reconciliation APIs.
 
 ## Examples
 
@@ -196,6 +207,9 @@ cargo run --example basic_ledger
 # GST calculation examples
 cargo run --example gst_calculations
 
+# GSTIN validation, HSN/SAC rates and B2B invoices
+cargo run --example gst_invoice
+
 # Bank reconciliation
 cargo run --example reconciliation
 ```
@@ -207,6 +221,10 @@ Run the test suite:
 ```bash
 cargo test
 ```
+
+## Contributing
+
+Contributions are welcome. Coding standards (functional core, SOLID, DRY, typed errors, no panics in library code) and the full list of verification commands are in [CLAUDE.md](CLAUDE.md). Breaking changes go in [CHANGELOG.md](CHANGELOG.md).
 
 ## Double-Entry Bookkeeping Principles
 
@@ -263,9 +281,6 @@ Licensed under either of
 
 at your option.
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 
 [Documentation](https://harisr92.github.io/accounting-blue/accounting_core/#reconciliation)
 

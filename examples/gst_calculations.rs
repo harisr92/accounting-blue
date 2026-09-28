@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (GstCategory::Luxury, "Luxury/Sin goods"),
     ];
 
-    for (category, description) in categories.iter() {
+    for (category, description) in &categories {
         println!("  {:?}: {}% - {}", category, category.rate(), description);
     }
     println!();
@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         GstRate::intra_state(BigDecimal::from(18)),
     )?;
 
-    println!("  Given Total: ₹{}", total_amount);
+    println!("  Given Total: ₹{total_amount}");
     println!("  Base Amount: ₹{}", reverse_calc.base_amount);
     println!("  GST Amount:  ₹{}", reverse_calc.total_gst_amount);
     println!("  CGST:        ₹{}", reverse_calc.cgst_amount);
@@ -173,7 +173,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let valid_rate = GstRate::intra_state(BigDecimal::from(18));
     match valid_rate.validate() {
         Ok(()) => println!("  ✓ Valid intra-state rate: CGST 9% + SGST 9% = 18%"),
-        Err(e) => println!("  ❌ Invalid rate: {}", e),
+        Err(e) => println!("  ❌ Invalid rate: {e}"),
     }
 
     // Invalid rate (components don't add up)
@@ -185,7 +185,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     match invalid_rate.validate() {
         Ok(()) => println!("  ✓ Valid rate"),
-        Err(e) => println!("  ❌ Invalid rate: {}", e),
+        Err(e) => println!("  ❌ Invalid rate: {e}"),
     }
 
     println!("\n🎉 GST calculation examples completed successfully!");

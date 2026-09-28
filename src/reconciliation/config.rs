@@ -30,6 +30,8 @@ pub struct ReconciliationConfig {
     pub max_suggestions: usize,
     /// Pairs dated further apart than this are never scored, bounding the comparison sweep
     pub candidate_window_days: i64,
+    /// How much each dimension counts towards a pair's score
+    pub weights: ScoringWeights,
 }
 
 impl Default for ReconciliationConfig {
@@ -44,6 +46,38 @@ impl Default for ReconciliationConfig {
             suggestion_threshold: 0.30,
             max_suggestions: 5,
             candidate_window_days: 30,
+            weights: ScoringWeights::default(),
+        }
+    }
+}
+
+/// Relative weight of each dimension when scoring a pair
+///
+/// Weights need not sum to one: a score is the weight earned divided by the weight available.
+/// The reference weight only counts when both sides carry a reference, so a missing reference is
+/// neutral rather than a penalty.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScoringWeights {
+    /// Agreement on amount
+    pub amount: f64,
+    /// Agreement on date
+    pub date: f64,
+    /// Similarity of the descriptions
+    pub description: f64,
+    /// Agreement on direction (debit or credit)
+    pub entry_type: f64,
+    /// Agreement on reference number, when both sides have one
+    pub reference: f64,
+}
+
+impl Default for ScoringWeights {
+    fn default() -> Self {
+        Self {
+            amount: 0.35,
+            date: 0.30,
+            description: 0.15,
+            entry_type: 0.10,
+            reference: 0.10,
         }
     }
 }

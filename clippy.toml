@@ -1,0 +1,4 @@
+# Library functions stay short; see CLAUDE.md
+too-many-lines-threshold = 60
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true

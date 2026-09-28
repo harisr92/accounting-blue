@@ -8,12 +8,14 @@ use async_trait::async_trait;
 use chrono::NaiveDate;
 use uuid::Uuid;
 
-use crate::reconciliation::types::*;
+use crate::reconciliation::types::{
+    ExternalTransaction, LedgerTransaction, ReconciliationReport, ReconciliationResult,
+};
 use crate::types::{ListResponse, PaginationOption};
 
 /// Persistence for reconciliation runs
 ///
-/// Implement this over PostgreSQL, SQLite or anything else; see
+/// Implement this over `PostgreSQL`, `SQLite` or anything else; see
 /// [`MemoryReconciliationStorage`](crate::utils::memory_storage::MemoryReconciliationStorage) for a
 /// reference implementation.
 #[async_trait]

@@ -13,7 +13,7 @@ const MAX_COMPARE_LEN: usize = 256;
 const MIN_CONTAINMENT_LEN: usize = 4;
 
 /// Credit awarded when one description contains the other
-const CONTAINMENT_SCORE: f64 = 0.8;
+pub(super) const CONTAINMENT_SCORE: f64 = 0.8;
 
 /// Lowercase `text`, replace every run of non-alphanumeric characters with a single space, and
 /// trim.
@@ -22,6 +22,7 @@ const CONTAINMENT_SCORE: f64 = 0.8;
 /// use accounting_core::reconciliation::similarity::normalize;
 /// assert_eq!(normalize("NEFT/ACME LTD/HDFC0000123"), "neft acme ltd hdfc0000123");
 /// ```
+#[must_use]
 pub fn normalize(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut pending_space = false;
@@ -51,6 +52,7 @@ pub fn normalize(text: &str) -> String {
 /// assert!(similarity("NEFT/ACME LTD/0012", "Acme Ltd") >= 0.8);
 /// assert!(similarity("Acme Ltd", "Globex Inc") < 0.4);
 /// ```
+#[must_use]
 pub fn similarity(left: &str, right: &str) -> f64 {
     let left = normalize(left);
     let right = normalize(right);
@@ -76,6 +78,7 @@ pub fn similarity(left: &str, right: &str) -> f64 {
 }
 
 /// Jaccard index over whitespace-separated tokens
+#[allow(clippy::cast_precision_loss)] // counts are bounded by input length
 fn token_similarity(left: &str, right: &str) -> f64 {
     let left_tokens: HashSet<&str> = left.split(' ').collect();
     let right_tokens: HashSet<&str> = right.split(' ').collect();
@@ -89,6 +92,7 @@ fn token_similarity(left: &str, right: &str) -> f64 {
 }
 
 /// Edit distance rescaled against the longer input
+#[allow(clippy::cast_precision_loss)] // counts are bounded by input length
 fn edit_similarity(left: &str, right: &str) -> f64 {
     let left_chars: Vec<char> = left.chars().take(MAX_COMPARE_LEN).collect();
     let right_chars: Vec<char> = right.chars().take(MAX_COMPARE_LEN).collect();
@@ -102,6 +106,7 @@ fn edit_similarity(left: &str, right: &str) -> f64 {
 }
 
 /// Levenshtein edit distance between two strings, in characters
+#[must_use]
 pub fn levenshtein(left: &str, right: &str) -> usize {
     let left_chars: Vec<char> = left.chars().collect();
     let right_chars: Vec<char> = right.chars().collect();
@@ -130,67 +135,4 @@ fn levenshtein_chars(left: &[char], right: &[char]) -> usize {
     }
 
     previous[right.len()]
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_normalize_collapses_punctuation() {
-        assert_eq!(
-            normalize("NEFT/ACME LTD/HDFC0000123"),
-            "neft acme ltd hdfc0000123"
-        );
-        assert_eq!(normalize("  ...Acme,  Ltd.  "), "acme ltd");
-        assert_eq!(normalize("///"), "");
-    }
-
-    #[test]
-    fn test_identical_descriptions() {
-        assert_eq!(similarity("Acme Ltd", "ACME  LTD."), 1.0);
-        assert_eq!(similarity("", ""), 1.0);
-    }
-
-    #[test]
-    fn test_empty_against_non_empty() {
-        assert_eq!(similarity("", "Acme Ltd"), 0.0);
-        assert_eq!(similarity("Acme Ltd", ""), 0.0);
-    }
-
-    #[test]
-    fn test_containment_scores_well() {
-        assert!(similarity("NEFT/ACME LTD/0012", "Acme Ltd") >= CONTAINMENT_SCORE);
-    }
-
-    #[test]
-    fn test_short_containment_does_not_win_credit() {
-        // "ab" is contained in "abcdefghij" but is too short to be evidence of anything
-        assert!(similarity("abcdefghij", "ab") < CONTAINMENT_SCORE);
-    }
-
-    #[test]
-    fn test_disjoint_descriptions_score_low() {
-        assert!(similarity("Acme Ltd", "Globex Inc") < 0.4);
-    }
-
-    #[test]
-    fn test_typo_scores_high() {
-        assert!(similarity("Payment from customer", "Payment frm customer") > 0.9);
-    }
-
-    #[test]
-    fn test_non_ascii_does_not_panic() {
-        assert_eq!(similarity("देवनागरी", "देवनागरी"), 1.0);
-        assert!(similarity("café münchen", "cafe munchen") > 0.5);
-        assert_eq!(levenshtein("café", "cafe"), 1);
-    }
-
-    #[test]
-    fn test_levenshtein_basics() {
-        assert_eq!(levenshtein("", ""), 0);
-        assert_eq!(levenshtein("abc", ""), 3);
-        assert_eq!(levenshtein("", "abc"), 3);
-        assert_eq!(levenshtein("kitten", "sitting"), 3);
-    }
 }

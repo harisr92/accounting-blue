@@ -1,60 +1,70 @@
-//! In-memory storage implementation for testing
+//! In-memory storage implementations for tests, examples and prototyping
+//!
+//! Both stores are plain maps owned by their holder: writes take `&mut self`, so there are no
+//! locks to poison. Share one between tasks by wrapping the owner (for example the
+//! [`Ledger`](crate::Ledger)) in your own `Mutex`.
 
 use async_trait::async_trait;
-use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
+use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-
 use uuid::Uuid;
 
+use crate::error::{LedgerError, LedgerResult};
 use crate::reconciliation::{
     LedgerTransaction, ReconciliationReport, ReconciliationResult, ReconciliationStorage,
 };
-use crate::traits::*;
-use crate::types::*;
+use crate::traits::{AccountStore, TransactionStore};
+use crate::types::{
+    Account, AccountType, ListResponse, PaginationOption, Transaction, TransactionFilter,
+};
 
-/// In-memory storage implementation for testing and development
-#[derive(Debug, Clone)]
+/// In-memory ledger storage
+#[derive(Debug, Clone, Default)]
 pub struct MemoryStorage {
-    accounts: Arc<RwLock<HashMap<String, Account>>>,
-    transactions: Arc<RwLock<HashMap<String, Transaction>>>,
+    accounts: HashMap<String, Account>,
+    transactions: HashMap<String, Transaction>,
 }
 
 impl MemoryStorage {
-    /// Create a new memory storage instance
+    /// Create an empty store
+    #[must_use]
     pub fn new() -> Self {
-        Self {
-            accounts: Arc::new(RwLock::new(HashMap::new())),
-            transactions: Arc::new(RwLock::new(HashMap::new())),
-        }
+        Self::default()
     }
 
-    /// Clear all data (useful for testing)
-    pub fn clear(&self) {
-        self.accounts.write().unwrap().clear();
-        self.transactions.write().unwrap().clear();
+    /// Clear all data
+    pub fn clear(&mut self) {
+        self.accounts.clear();
+        self.transactions.clear();
     }
 }
 
-impl Default for MemoryStorage {
-    fn default() -> Self {
-        Self::new()
-    }
+/// Newest first, then by id so the order is stable
+fn newest_first(a: &Transaction, b: &Transaction) -> Ordering {
+    b.date.cmp(&a.date).then_with(|| a.id.cmp(&b.id))
+}
+
+/// Clone the values that pass `keep`, sorted by `order`
+fn select<'a, T: Clone + 'a>(
+    values: impl Iterator<Item = &'a T>,
+    keep: impl Fn(&T) -> bool,
+    order: impl Fn(&T, &T) -> Ordering,
+) -> Vec<T> {
+    let mut selected: Vec<T> = values.filter(|value| keep(value)).cloned().collect();
+    selected.sort_by(order);
+    selected
 }
 
 #[async_trait]
-impl LedgerStorage for MemoryStorage {
+impl AccountStore for MemoryStorage {
     async fn save_account(&mut self, account: &Account) -> LedgerResult<()> {
-        self.accounts
-            .write()
-            .unwrap()
-            .insert(account.id.clone(), account.clone());
+        self.accounts.insert(account.id.clone(), account.clone());
         Ok(())
     }
 
     async fn get_account(&self, account_id: &str) -> LedgerResult<Option<Account>> {
-        Ok(self.accounts.read().unwrap().get(account_id).cloned())
+        Ok(self.accounts.get(account_id).cloned())
     }
 
     async fn list_accounts(
@@ -62,388 +72,108 @@ impl LedgerStorage for MemoryStorage {
         account_type: Option<AccountType>,
         pagination: PaginationOption,
     ) -> LedgerResult<ListResponse<Account>> {
-        let accounts = self.accounts.read().unwrap();
-        let mut filtered: Vec<Account> = accounts
-            .values()
-            .filter(|account| {
-                account_type
-                    .as_ref()
-                    .is_none_or(|t| &account.account_type == t)
-            })
-            .cloned()
-            .collect();
-
-        // Sort by account ID for consistent results
-        filtered.sort_by(|a, b| a.id.cmp(&b.id));
-
-        match pagination {
-            PaginationOption::All => Ok(ListResponse::All(filtered)),
-            PaginationOption::Paginated(pagination_params) => {
-                let total_count = filtered.len() as u32;
-                let start_index = pagination_params.offset() as usize;
-                let end_index = std::cmp::min(
-                    start_index + pagination_params.limit() as usize,
-                    filtered.len(),
-                );
-
-                let items = if start_index < filtered.len() {
-                    filtered[start_index..end_index].to_vec()
-                } else {
-                    Vec::new()
-                };
-
-                Ok(ListResponse::Paginated(PaginatedResponse::new(
-                    items,
-                    pagination_params.page,
-                    pagination_params.page_size,
-                    total_count,
-                )))
-            }
-        }
+        let accounts = select(
+            self.accounts.values(),
+            |account| account_type.is_none_or(|t| account.account_type == t),
+            |a, b| a.id.cmp(&b.id),
+        );
+        Ok(pagination.paginate(accounts))
     }
 
     async fn update_account(&mut self, account: &Account) -> LedgerResult<()> {
-        let mut accounts = self.accounts.write().unwrap();
-        if accounts.contains_key(&account.id) {
-            accounts.insert(account.id.clone(), account.clone());
-            Ok(())
-        } else {
-            Err(LedgerError::AccountNotFound(account.id.clone()))
-        }
+        let stored = self
+            .accounts
+            .get_mut(&account.id)
+            .ok_or_else(|| LedgerError::AccountNotFound(account.id.clone()))?;
+        stored.clone_from(account);
+        Ok(())
     }
 
     async fn delete_account(&mut self, account_id: &str) -> LedgerResult<()> {
-        if self.accounts.write().unwrap().remove(account_id).is_some() {
-            Ok(())
-        } else {
-            Err(LedgerError::AccountNotFound(account_id.to_string()))
-        }
+        self.accounts
+            .remove(account_id)
+            .map(drop)
+            .ok_or_else(|| LedgerError::AccountNotFound(account_id.to_string()))
     }
+}
 
+#[async_trait]
+impl TransactionStore for MemoryStorage {
     async fn save_transaction(&mut self, transaction: &Transaction) -> LedgerResult<()> {
         self.transactions
-            .write()
-            .unwrap()
             .insert(transaction.id.clone(), transaction.clone());
         Ok(())
     }
 
     async fn get_transaction(&self, transaction_id: &str) -> LedgerResult<Option<Transaction>> {
-        Ok(self
-            .transactions
-            .read()
-            .unwrap()
-            .get(transaction_id)
-            .cloned())
+        Ok(self.transactions.get(transaction_id).cloned())
     }
 
-    async fn get_account_transactions(
+    async fn list_transactions(
         &self,
-        account_id: &str,
-        start_date: Option<NaiveDate>,
-        end_date: Option<NaiveDate>,
+        filter: &TransactionFilter,
         pagination: PaginationOption,
     ) -> LedgerResult<ListResponse<Transaction>> {
-        let transactions = self.transactions.read().unwrap();
-        let mut filtered: Vec<Transaction> = transactions
-            .values()
-            .filter(|txn| {
-                // Check if transaction affects the account
-                let affects_account = txn
-                    .entries
-                    .iter()
-                    .any(|entry| entry.account_id == account_id);
-                if !affects_account {
-                    return false;
-                }
-
-                // Check date range
-                if let Some(start) = start_date {
-                    if txn.date < start {
-                        return false;
-                    }
-                }
-                if let Some(end) = end_date {
-                    if txn.date > end {
-                        return false;
-                    }
-                }
-
-                true
-            })
-            .cloned()
-            .collect();
-
-        // Sort by date descending, then by ID for consistent results
-        filtered.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| a.id.cmp(&b.id)));
-
-        match pagination {
-            PaginationOption::All => Ok(ListResponse::All(filtered)),
-            PaginationOption::Paginated(pagination_params) => {
-                let total_count = filtered.len() as u32;
-                let start_index = pagination_params.offset() as usize;
-                let end_index = std::cmp::min(
-                    start_index + pagination_params.limit() as usize,
-                    filtered.len(),
-                );
-
-                let items = if start_index < filtered.len() {
-                    filtered[start_index..end_index].to_vec()
-                } else {
-                    Vec::new()
-                };
-
-                Ok(ListResponse::Paginated(PaginatedResponse::new(
-                    items,
-                    pagination_params.page,
-                    pagination_params.page_size,
-                    total_count,
-                )))
-            }
-        }
-    }
-
-    async fn get_transactions(
-        &self,
-        start_date: Option<NaiveDate>,
-        end_date: Option<NaiveDate>,
-        pagination: PaginationOption,
-    ) -> LedgerResult<ListResponse<Transaction>> {
-        let transactions = self.transactions.read().unwrap();
-        let mut filtered: Vec<Transaction> = transactions
-            .values()
-            .filter(|txn| {
-                if let Some(start) = start_date {
-                    if txn.date < start {
-                        return false;
-                    }
-                }
-                if let Some(end) = end_date {
-                    if txn.date > end {
-                        return false;
-                    }
-                }
-                true
-            })
-            .cloned()
-            .collect();
-
-        // Sort by date descending, then by ID for consistent results
-        filtered.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| a.id.cmp(&b.id)));
-
-        match pagination {
-            PaginationOption::All => Ok(ListResponse::All(filtered)),
-            PaginationOption::Paginated(pagination_params) => {
-                let total_count = filtered.len() as u32;
-                let start_index = pagination_params.offset() as usize;
-                let end_index = std::cmp::min(
-                    start_index + pagination_params.limit() as usize,
-                    filtered.len(),
-                );
-
-                let items = if start_index < filtered.len() {
-                    filtered[start_index..end_index].to_vec()
-                } else {
-                    Vec::new()
-                };
-
-                Ok(ListResponse::Paginated(PaginatedResponse::new(
-                    items,
-                    pagination_params.page,
-                    pagination_params.page_size,
-                    total_count,
-                )))
-            }
-        }
+        let transactions = select(
+            self.transactions.values(),
+            |transaction| filter.matches(transaction),
+            newest_first,
+        );
+        Ok(pagination.paginate(transactions))
     }
 
     async fn update_transaction(&mut self, transaction: &Transaction) -> LedgerResult<()> {
-        if self
+        let stored = self
             .transactions
-            .read()
-            .unwrap()
-            .contains_key(&transaction.id)
-        {
-            self.transactions
-                .write()
-                .unwrap()
-                .insert(transaction.id.clone(), transaction.clone());
-            Ok(())
-        } else {
-            Err(LedgerError::TransactionNotFound(transaction.id.clone()))
-        }
+            .get_mut(&transaction.id)
+            .ok_or_else(|| LedgerError::TransactionNotFound(transaction.id.clone()))?;
+        stored.clone_from(transaction);
+        Ok(())
     }
 
     async fn delete_transaction(&mut self, transaction_id: &str) -> LedgerResult<()> {
-        if self
-            .transactions
-            .write()
-            .unwrap()
+        self.transactions
             .remove(transaction_id)
-            .is_some()
-        {
-            Ok(())
-        } else {
-            Err(LedgerError::TransactionNotFound(transaction_id.to_string()))
-        }
-    }
-
-    async fn get_account_balance(
-        &self,
-        account_id: &str,
-        as_of_date: Option<NaiveDate>,
-    ) -> LedgerResult<BigDecimal> {
-        let account = self
-            .get_account(account_id)
-            .await?
-            .ok_or_else(|| LedgerError::AccountNotFound(account_id.to_string()))?;
-
-        // If no date specified, return current balance
-        if as_of_date.is_none() {
-            return Ok(account.balance);
-        }
-
-        // Calculate balance as of specific date
-        let mut balance = BigDecimal::from(0);
-        let transactions = self
-            .get_account_transactions(account_id, None, as_of_date, PaginationOption::All)
-            .await?;
-
-        for transaction in transactions.into_items() {
-            for entry in transaction.entries {
-                if entry.account_id == account_id {
-                    match (account.account_type.normal_balance(), entry.entry_type) {
-                        (EntryType::Debit, EntryType::Debit)
-                        | (EntryType::Credit, EntryType::Credit) => {
-                            balance += entry.amount;
-                        }
-                        (EntryType::Debit, EntryType::Credit)
-                        | (EntryType::Credit, EntryType::Debit) => {
-                            balance -= entry.amount;
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(balance)
-    }
-
-    async fn get_trial_balance(&self, as_of_date: NaiveDate) -> LedgerResult<TrialBalance> {
-        let accounts = self.list_accounts(None, PaginationOption::All).await?;
-        let mut balances = HashMap::new();
-        let mut total_debits = BigDecimal::from(0);
-        let mut total_credits = BigDecimal::from(0);
-
-        for account in accounts.into_items() {
-            let balance = self
-                .get_account_balance(&account.id, Some(as_of_date))
-                .await?;
-
-            let account_balance = match account.account_type.normal_balance() {
-                EntryType::Debit => {
-                    if balance >= *crate::ZERO {
-                        total_debits += &balance;
-                        AccountBalance {
-                            account: account.clone(),
-                            debit_balance: Some(balance),
-                            credit_balance: None,
-                        }
-                    } else {
-                        total_credits += balance.abs();
-                        AccountBalance {
-                            account: account.clone(),
-                            debit_balance: None,
-                            credit_balance: Some(balance.abs()),
-                        }
-                    }
-                }
-                EntryType::Credit => {
-                    if balance >= *crate::ZERO {
-                        total_credits += &balance;
-                        AccountBalance {
-                            account: account.clone(),
-                            debit_balance: None,
-                            credit_balance: Some(balance),
-                        }
-                    } else {
-                        total_debits += balance.abs();
-                        AccountBalance {
-                            account: account.clone(),
-                            debit_balance: Some(balance.abs()),
-                            credit_balance: None,
-                        }
-                    }
-                }
-            };
-
-            balances.insert(account.id.clone(), account_balance);
-        }
-
-        let is_balanced = total_debits == total_credits;
-
-        Ok(TrialBalance {
-            as_of_date,
-            balances,
-            total_debits,
-            total_credits,
-            is_balanced,
-        })
-    }
-
-    async fn get_account_balances_by_type(
-        &self,
-        as_of_date: NaiveDate,
-    ) -> LedgerResult<HashMap<AccountType, Vec<AccountBalance>>> {
-        let trial_balance = self.get_trial_balance(as_of_date).await?;
-        let mut result: HashMap<AccountType, Vec<AccountBalance>> = HashMap::new();
-
-        for account_balance in trial_balance.balances.into_values() {
-            let account_type = account_balance.account.account_type;
-            result
-                .entry(account_type)
-                .or_default()
-                .push(account_balance);
-        }
-
-        Ok(result)
+            .map(drop)
+            .ok_or_else(|| LedgerError::TransactionNotFound(transaction_id.to_string()))
     }
 }
 
-/// In-memory reconciliation storage for testing and development
+/// In-memory reconciliation storage
 ///
-/// A reference implementation of [`ReconciliationStorage`] that keeps everything in a lock behind
-/// an `Arc`, mirroring [`MemoryStorage`]. Ledger transactions are seeded with
+/// A reference implementation of [`ReconciliationStorage`]. Ledger transactions are seeded with
 /// [`add_ledger_transaction`](Self::add_ledger_transaction) rather than derived from a ledger, so
 /// the reconciliation side can be exercised in isolation.
 #[derive(Debug, Clone, Default)]
 pub struct MemoryReconciliationStorage {
-    ledger_transactions: Arc<RwLock<Vec<LedgerTransaction>>>,
-    reports: Arc<RwLock<HashMap<Uuid, ReconciliationReport>>>,
-    reconciled: Arc<RwLock<HashMap<String, (String, Uuid)>>>,
+    ledger_transactions: Vec<LedgerTransaction>,
+    reports: HashMap<Uuid, ReconciliationReport>,
+    reconciled: HashMap<String, (String, Uuid)>,
 }
 
 impl MemoryReconciliationStorage {
     /// Create an empty store
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Seed a ledger transaction leg
-    pub fn add_ledger_transaction(&self, transaction: LedgerTransaction) {
-        self.ledger_transactions.write().unwrap().push(transaction);
+    pub fn add_ledger_transaction(&mut self, transaction: LedgerTransaction) {
+        self.ledger_transactions.push(transaction);
     }
 
     /// Every reconciliation mark recorded so far, keyed by ledger transaction id
-    pub fn reconciled_marks(&self) -> HashMap<String, (String, Uuid)> {
-        self.reconciled.read().unwrap().clone()
+    #[must_use]
+    pub fn reconciled_marks(&self) -> &HashMap<String, (String, Uuid)> {
+        &self.reconciled
     }
 
-    /// Clear all data (useful for testing)
-    pub fn clear(&self) {
-        self.ledger_transactions.write().unwrap().clear();
-        self.reports.write().unwrap().clear();
-        self.reconciled.write().unwrap().clear();
+    /// Clear all data
+    pub fn clear(&mut self) {
+        self.ledger_transactions.clear();
+        self.reports.clear();
+        self.reconciled.clear();
     }
 }
 
@@ -455,31 +185,21 @@ impl ReconciliationStorage for MemoryReconciliationStorage {
         start_date: NaiveDate,
         end_date: NaiveDate,
     ) -> ReconciliationResult<Vec<LedgerTransaction>> {
-        let mut matching: Vec<LedgerTransaction> = self
-            .ledger_transactions
-            .read()
-            .unwrap()
-            .iter()
-            .filter(|transaction| {
+        Ok(select(
+            self.ledger_transactions.iter(),
+            |transaction| {
                 transaction.account_id == account_id
-                    && transaction.date >= start_date
-                    && transaction.date <= end_date
-            })
-            .cloned()
-            .collect();
-
-        matching.sort_by(|a, b| a.date.cmp(&b.date).then_with(|| a.id.cmp(&b.id)));
-        Ok(matching)
+                    && (start_date..=end_date).contains(&transaction.date)
+            },
+            |a, b| a.date.cmp(&b.date).then_with(|| a.id.cmp(&b.id)),
+        ))
     }
 
     async fn save_reconciliation_report(
         &mut self,
         report: &ReconciliationReport,
     ) -> ReconciliationResult<()> {
-        self.reports
-            .write()
-            .unwrap()
-            .insert(report.id, report.clone());
+        self.reports.insert(report.id, report.clone());
         Ok(())
     }
 
@@ -487,7 +207,7 @@ impl ReconciliationStorage for MemoryReconciliationStorage {
         &self,
         report_id: Uuid,
     ) -> ReconciliationResult<Option<ReconciliationReport>> {
-        Ok(self.reports.read().unwrap().get(&report_id).cloned())
+        Ok(self.reports.get(&report_id).cloned())
     }
 
     async fn list_reconciliation_reports(
@@ -495,44 +215,17 @@ impl ReconciliationStorage for MemoryReconciliationStorage {
         account_id: &str,
         pagination: PaginationOption,
     ) -> ReconciliationResult<ListResponse<ReconciliationReport>> {
-        let reports = self.reports.read().unwrap();
-        let mut filtered: Vec<ReconciliationReport> = reports
-            .values()
-            .filter(|report| report.account_ids.iter().any(|id| id == account_id))
-            .cloned()
-            .collect();
-
-        // Newest first, with the id as a stable tie-breaker
-        filtered.sort_by(|a, b| {
-            b.created_at
-                .cmp(&a.created_at)
-                .then_with(|| a.id.cmp(&b.id))
-        });
-
-        match pagination {
-            PaginationOption::All => Ok(ListResponse::All(filtered)),
-            PaginationOption::Paginated(pagination_params) => {
-                let total_count = filtered.len() as u32;
-                let start_index = pagination_params.offset() as usize;
-                let end_index = std::cmp::min(
-                    start_index + pagination_params.limit() as usize,
-                    filtered.len(),
-                );
-
-                let items = if start_index < filtered.len() {
-                    filtered[start_index..end_index].to_vec()
-                } else {
-                    Vec::new()
-                };
-
-                Ok(ListResponse::Paginated(PaginatedResponse::new(
-                    items,
-                    pagination_params.page,
-                    pagination_params.page_size,
-                    total_count,
-                )))
-            }
-        }
+        let reports = select(
+            self.reports.values(),
+            |report| report.account_ids.iter().any(|id| id == account_id),
+            // Newest first, with the id as a stable tie-breaker
+            |a, b| {
+                b.created_at
+                    .cmp(&a.created_at)
+                    .then_with(|| a.id.cmp(&b.id))
+            },
+        );
+        Ok(pagination.paginate(reports))
     }
 
     async fn mark_transaction_as_reconciled(
@@ -541,7 +234,7 @@ impl ReconciliationStorage for MemoryReconciliationStorage {
         external_id: &str,
         reconciliation_id: Uuid,
     ) -> ReconciliationResult<()> {
-        self.reconciled.write().unwrap().insert(
+        self.reconciled.insert(
             ledger_id.to_string(),
             (external_id.to_string(), reconciliation_id),
         );

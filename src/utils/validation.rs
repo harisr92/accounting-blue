@@ -1,136 +1,156 @@
-//! Validation utilities
+//! Validation rules and the validators built from them
+//!
+//! Each rule is a small function returning [`LedgerResult<()>`]. The validators are compositions
+//! of those rules: [`DefaultAccountValidator`] and [`DefaultTransactionValidator`] enforce only
+//! what bookkeeping requires, while the `Enhanced` validators add length and character limits
+//! suitable for ids stored in a database.
 
-use crate::traits::*;
-use crate::types::*;
-use bigdecimal::BigDecimal;
+use std::collections::HashSet;
 
-/// Validate that an amount is positive
-pub fn validate_positive_amount(amount: &BigDecimal) -> LedgerResult<()> {
-    if *amount <= *crate::ZERO {
-        Err(LedgerError::Validation(
-            "Amount must be positive".to_string(),
-        ))
+use crate::error::{FieldError, LedgerError, LedgerResult};
+use crate::traits::{AccountValidator, TransactionValidator};
+use crate::types::{Account, Transaction};
+
+/// Longest account id the enhanced rules accept
+pub const MAX_ACCOUNT_ID_LEN: usize = 50;
+/// Longest account name the enhanced rules accept
+pub const MAX_ACCOUNT_NAME_LEN: usize = 100;
+/// Longest transaction description the enhanced rules accept
+pub const MAX_DESCRIPTION_LEN: usize = 500;
+
+fn field_error(field: &'static str, error: FieldError) -> LedgerError {
+    LedgerError::InvalidField { field, error }
+}
+
+/// Reject empty or whitespace-only text
+///
+/// # Errors
+///
+/// [`FieldError::Empty`] for `field`.
+pub fn require_non_empty(field: &'static str, value: &str) -> LedgerResult<()> {
+    if value.trim().is_empty() {
+        Err(field_error(field, FieldError::Empty))
     } else {
         Ok(())
     }
 }
 
-/// Validate that an account ID is valid
+/// Reject text longer than `max` bytes
+///
+/// # Errors
+///
+/// [`FieldError::TooLong`] for `field`.
+pub fn require_max_len(field: &'static str, value: &str, max: usize) -> LedgerResult<()> {
+    if value.len() > max {
+        Err(field_error(field, FieldError::TooLong { max }))
+    } else {
+        Ok(())
+    }
+}
+
+/// Validate that an account ID is non-empty, short, and made of alphanumerics, `-` and `_`
+///
+/// # Errors
+///
+/// [`LedgerError::InvalidField`] naming the first rule broken.
 pub fn validate_account_id(account_id: &str) -> LedgerResult<()> {
-    if account_id.trim().is_empty() {
-        return Err(LedgerError::Validation(
-            "Account ID cannot be empty".to_string(),
-        ));
-    }
+    const FIELD: &str = "account ID";
+    require_non_empty(FIELD, account_id)?;
+    require_max_len(FIELD, account_id, MAX_ACCOUNT_ID_LEN)?;
 
-    if account_id.len() > 50 {
-        return Err(LedgerError::Validation(
-            "Account ID cannot exceed 50 characters".to_string(),
-        ));
-    }
-
-    // Check for valid characters (alphanumeric, dashes, underscores)
-    if !account_id
+    if account_id
         .chars()
         .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
     {
-        return Err(LedgerError::Validation(
-            "Account ID can only contain alphanumeric characters, dashes, and underscores"
-                .to_string(),
-        ));
+        Ok(())
+    } else {
+        Err(field_error(FIELD, FieldError::InvalidCharacters))
     }
-
-    Ok(())
 }
 
-/// Validate that an account name is valid
+/// Validate that an account name is non-empty and at most [`MAX_ACCOUNT_NAME_LEN`] bytes
+///
+/// # Errors
+///
+/// [`LedgerError::InvalidField`] naming the first rule broken.
 pub fn validate_account_name(name: &str) -> LedgerResult<()> {
-    if name.trim().is_empty() {
-        return Err(LedgerError::Validation(
-            "Account name cannot be empty".to_string(),
-        ));
-    }
-
-    if name.len() > 100 {
-        return Err(LedgerError::Validation(
-            "Account name cannot exceed 100 characters".to_string(),
-        ));
-    }
-
-    Ok(())
+    const FIELD: &str = "account name";
+    require_non_empty(FIELD, name)?;
+    require_max_len(FIELD, name, MAX_ACCOUNT_NAME_LEN)
 }
 
-/// Validate that a transaction description is valid
+/// Validate that a transaction description is non-empty and at most [`MAX_DESCRIPTION_LEN`]
+/// bytes
+///
+/// # Errors
+///
+/// [`LedgerError::InvalidField`] naming the first rule broken.
 pub fn validate_transaction_description(description: &str) -> LedgerResult<()> {
-    if description.trim().is_empty() {
-        return Err(LedgerError::Validation(
-            "Transaction description cannot be empty".to_string(),
-        ));
-    }
-
-    if description.len() > 500 {
-        return Err(LedgerError::Validation(
-            "Transaction description cannot exceed 500 characters".to_string(),
-        ));
-    }
-
-    Ok(())
+    const FIELD: &str = "transaction description";
+    require_non_empty(FIELD, description)?;
+    require_max_len(FIELD, description, MAX_DESCRIPTION_LEN)
 }
 
-/// Enhanced transaction validator with detailed checks
-pub struct EnhancedTransactionValidator;
+/// Reject a transaction that posts to the same account twice on the same side
+///
+/// # Errors
+///
+/// [`LedgerError::DuplicateEntry`] naming the repeated account.
+pub fn validate_unique_entries(transaction: &Transaction) -> LedgerResult<()> {
+    let mut seen = HashSet::new();
+    transaction
+        .entries
+        .iter()
+        .find(|entry| !seen.insert((&entry.account_id, entry.entry_type)))
+        .map_or(Ok(()), |entry| {
+            Err(LedgerError::DuplicateEntry(entry.account_id.clone()))
+        })
+}
 
-impl TransactionValidator for EnhancedTransactionValidator {
+/// Requires a non-empty account id and name
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DefaultAccountValidator;
+
+impl AccountValidator for DefaultAccountValidator {
+    fn validate_account(&self, account: &Account) -> LedgerResult<()> {
+        require_non_empty("account ID", &account.id)?;
+        require_non_empty("account name", &account.name)
+    }
+}
+
+/// Enforces the double-entry rules of [`Transaction::validate`]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DefaultTransactionValidator;
+
+impl TransactionValidator for DefaultTransactionValidator {
     fn validate_transaction(&self, transaction: &Transaction) -> LedgerResult<()> {
-        // Basic validation
-        transaction.validate()?;
-
-        // Enhanced validations
-        validate_transaction_description(&transaction.description)?;
-
-        // Validate each entry
-        for entry in &transaction.entries {
-            validate_account_id(&entry.account_id)?;
-            validate_positive_amount(&entry.amount)?;
-        }
-
-        // Check for duplicate accounts (same account cannot appear twice with same entry type)
-        let mut account_entry_combinations = std::collections::HashSet::new();
-        for entry in &transaction.entries {
-            let combination = (&entry.account_id, &entry.entry_type);
-            if !account_entry_combinations.insert(combination) {
-                return Err(LedgerError::Validation(format!(
-                    "Account '{}' appears multiple times with the same entry type in transaction",
-                    entry.account_id
-                )));
-            }
-        }
-
-        Ok(())
-    }
-
-    fn validate_account_references(&self, _transaction: &Transaction) -> LedgerResult<()> {
-        // This would typically check if accounts exist in storage
-        // For this basic implementation, we assume all accounts exist
-        Ok(())
+        transaction.validate()
     }
 }
 
-/// Enhanced account validator with detailed checks
+/// Adds id format and length limits to the default account rules
+#[derive(Debug, Clone, Copy, Default)]
 pub struct EnhancedAccountValidator;
 
 impl AccountValidator for EnhancedAccountValidator {
     fn validate_account(&self, account: &Account) -> LedgerResult<()> {
         validate_account_id(&account.id)?;
-        validate_account_name(&account.name)?;
-
-        // Additional validations can be added here
-        Ok(())
+        validate_account_name(&account.name)
     }
+}
 
-    fn validate_account_deletion(&self, _account_id: &str) -> LedgerResult<()> {
-        // This would typically check if account has any transactions
-        // For this basic implementation, we allow deletion
-        Ok(())
+/// Adds description, account id and duplicate-entry checks to the double-entry rules
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EnhancedTransactionValidator;
+
+impl TransactionValidator for EnhancedTransactionValidator {
+    fn validate_transaction(&self, transaction: &Transaction) -> LedgerResult<()> {
+        transaction.validate()?;
+        validate_transaction_description(&transaction.description)?;
+        transaction
+            .entries
+            .iter()
+            .try_for_each(|entry| validate_account_id(&entry.account_id))?;
+        validate_unique_entries(transaction)
     }
 }

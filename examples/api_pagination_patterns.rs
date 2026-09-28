@@ -172,13 +172,13 @@ async fn infinite_scroll_pattern(
 
     // Simulate loading 3 batches
     for batch in 1..=3 {
-        println!("📱 Loading batch {} (infinite scroll):", batch);
+        println!("📱 Loading batch {batch} (infinite scroll):");
 
         let pagination = PaginationParams::new(batch, batch_size)?;
         let result = ledger
             .list_accounts(PaginationOption::Paginated(pagination))
             .await?;
-        let result = result.to_paginated_response();
+        let result = result.into_paginated_response();
 
         loaded_items += result.items.len();
 
@@ -392,7 +392,7 @@ async fn api_get_accounts(
             .list_accounts(PaginationOption::Paginated(pagination))
             .await?
     };
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
 
     let data = result
         .items
@@ -450,7 +450,7 @@ async fn graphql_get_accounts(
             .list_accounts(PaginationOption::Paginated(pagination))
             .await?
     };
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
 
     let edges = result
         .items
@@ -501,7 +501,7 @@ async fn process_table_request(
             .list_accounts(PaginationOption::Paginated(pagination))
             .await?
     };
-    let result = result.to_paginated_response();
+    let result = result.into_paginated_response();
 
     // Note: In a real implementation, you'd handle sorting at the storage level
     // For this example, we'll just use the results as-is since they're already sorted by ID

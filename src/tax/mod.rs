@@ -2,4 +2,7 @@
 
 pub mod gst;
 
-pub use gst::*;
+pub use gst::{percent_of, GstCalculation, GstCalculator, GstCategory, GstError, GstRate};
+
+#[cfg(test)]
+mod tests;
