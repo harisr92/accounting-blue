@@ -38,7 +38,7 @@
 //! // List all accounts with pagination (default: page 1, 50 items per page)
 //! let pagination = PaginationParams::new(1, 50)?;
 //! let result = ledger.list_accounts(PaginationOption::Paginated(pagination)).await?;
-//! let accounts = result.to_paginated_response();
+//! let accounts = result.into_paginated_response();
 //! println!("Total accounts: {}, Current page: {} of {}",
 //!          accounts.total_count,
 //!          accounts.page,
@@ -65,7 +65,7 @@
 //! // Get first page with 10 accounts per page
 //! let pagination = PaginationParams::new(1, 10)?;
 //! let result = ledger.list_accounts(PaginationOption::Paginated(pagination)).await?;
-//! let result = result.to_paginated_response();
+//! let result = result.into_paginated_response();
 //!
 //! println!("Page {} of {} (showing {} of {} total accounts)",
 //!          result.page,
@@ -102,10 +102,10 @@
 //! // Get transactions for a specific date range with pagination
 //! let start_date = NaiveDate::from_ymd_opt(2024, 1, 1);
 //! let end_date = NaiveDate::from_ymd_opt(2024, 12, 31);
-//! let transactions = ledger.get_transactions(start_date, end_date, PaginationOption::Paginated(pagination)).await?;
+//! let transactions = ledger.list_transactions(start_date, end_date, PaginationOption::Paginated(pagination)).await?;
 //!
 //! // Get transactions for a specific account with pagination
-//! let account_txns = ledger.get_account_transactions(
+//! let account_txns = ledger.list_account_transactions(
 //!     "cash",
 //!     start_date,
 //!     end_date,
@@ -128,7 +128,7 @@
 //! # let ledger = Ledger::new(storage);
 //! let pagination = PaginationParams::new(2, 10)?;
 //! let response = ledger.list_accounts(PaginationOption::Paginated(pagination)).await?;
-//! let result = response.to_paginated_response();
+//! let result = response.into_paginated_response();
 //!
 //! // Access pagination metadata
 //! println!("Current page: {}", result.page);           // 2
@@ -187,7 +187,7 @@
 //!     source.clone(),
 //! )];
 //!
-//! let report = ReconciliationEngine::default().reconcile(ledger, external, source);
+//! let report = ReconciliationEngine::default().reconcile(&ledger, &external, source);
 //! assert_eq!(report.matched_count, 1);
 //! println!("Balance difference: {}", report.summary.difference);
 //! ```
@@ -202,27 +202,41 @@
 //! - `gst_invoice.rs` - GSTIN validation, HSN/SAC rate lookup and B2B GST invoices
 //! - `reconciliation.rs` - Reconciling a ledger account against a bank statement
 
-use bigdecimal::BigDecimal;
-use std::sync::LazyLock;
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
+#![cfg_attr(
+    not(test),
+    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+)]
+#![cfg_attr(not(test), warn(clippy::too_many_lines))]
 
+pub mod error;
 pub mod invoice;
 pub mod ledger;
 pub mod reconciliation;
+pub mod reports;
 pub mod tax;
 pub mod traits;
 pub mod types;
 pub mod utils;
 
-pub static ZERO: LazyLock<BigDecimal> = LazyLock::new(|| BigDecimal::from(0));
-
-// Re-export commonly used types
+pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};
 pub use invoice::{
     GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster, HsnSacEntry, HsnSacKind, InvoiceError,
 };
-pub use ledger::*;
-pub use tax::gst::*;
-pub use traits::*;
-pub use types::*;
-
-// Re-export transaction patterns for convenience
-pub use ledger::transaction::patterns;
+pub use ledger::{
+    patterns, BillPaymentWithGstParams, InvoiceWithGstParams, Ledger, TransactionBuilder,
+    STANDARD_CHART,
+};
+pub use reports::{
+    BalanceSheet, CashFlowItem, CashFlowStatement, IncomeStatement, LedgerIntegrityReport,
+};
+pub use tax::{GstCalculation, GstCalculator, GstCategory, GstError, GstRate};
+pub use traits::{
+    AccountStore, AccountValidator, LedgerStorage, TransactionStore, TransactionValidator,
+};
+pub use types::{
+    Account, AccountBalance, AccountType, Entry, EntryType, ListResponse, PaginatedResponse,
+    PaginationOption, PaginationParams, Transaction, TransactionFilter, TrialBalance,
+};
+pub use utils::validation::{DefaultAccountValidator, DefaultTransactionValidator};
