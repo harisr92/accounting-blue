@@ -1,6 +1,6 @@
 [package]
 name = "accounting-core"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 authors = ["Harin <harikri@protonmail.com>"]
 description = "Core accounting functionality with double-entry bookkeeping, GST calculations, and financial reporting"
@@ -25,6 +25,14 @@ tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = []
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+uninlined_format_args = "warn"
+redundant_closure_for_method_calls = "warn"
+explicit_iter_loop = "warn"
 
 [[example]]
 name = "basic_ledger"

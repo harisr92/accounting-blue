@@ -166,7 +166,7 @@ cargo test --doc
 
 ### Database Integration
 
-When implementing the `LedgerStorage` trait for database backends:
+When implementing the `AccountStore` and `TransactionStore` traits for database backends, push pagination down into the query. (The in-memory store uses `PaginationOption::paginate` instead.)
 
 ```rust
 // SQL example with LIMIT/OFFSET
