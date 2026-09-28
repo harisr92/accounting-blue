@@ -1,8 +1,14 @@
 //! GST (Goods and Services Tax) calculation engine for Indian tax compliance
 
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, Signed, Zero};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+/// `rate` percent of `amount`
+#[must_use]
+pub fn percent_of(amount: &BigDecimal, rate: &BigDecimal) -> BigDecimal {
+    (amount * rate) / BigDecimal::from(100)
+}
 
 /// GST rate structure for Indian taxation
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -19,51 +25,65 @@ pub struct GstRate {
 
 impl GstRate {
     /// Create a new GST rate with intra-state rates (CGST + SGST)
+    #[must_use]
     pub fn intra_state(total_rate: BigDecimal) -> Self {
         let half_rate = &total_rate / BigDecimal::from(2);
         Self {
             total_rate,
             cgst_rate: half_rate.clone(),
             sgst_rate: half_rate,
-            igst_rate: BigDecimal::from(0),
+            igst_rate: BigDecimal::zero(),
         }
     }
 
     /// Create a new GST rate with inter-state rates (IGST)
+    #[must_use]
     pub fn inter_state(total_rate: BigDecimal) -> Self {
         Self {
-            total_rate: total_rate.clone(),
-            cgst_rate: BigDecimal::from(0),
-            sgst_rate: BigDecimal::from(0),
-            igst_rate: total_rate,
+            igst_rate: total_rate.clone(),
+            total_rate,
+            cgst_rate: BigDecimal::zero(),
+            sgst_rate: BigDecimal::zero(),
+        }
+    }
+
+    /// IGST for an inter-state supply, CGST + SGST otherwise
+    #[must_use]
+    pub fn for_supply(total_rate: BigDecimal, is_inter_state: bool) -> Self {
+        if is_inter_state {
+            Self::inter_state(total_rate)
+        } else {
+            Self::intra_state(total_rate)
         }
     }
 
     /// Validate that the GST rate structure is correct
+    ///
+    /// # Errors
+    ///
+    /// [`GstError::ComponentsMismatch`] when the components don't add up to the total,
+    /// [`GstError::UnequalSplit`] when CGST and SGST differ on an intra-state rate, and
+    /// [`GstError::MixedIgstAndSplit`] when IGST is combined with CGST or SGST.
     pub fn validate(&self) -> Result<(), GstError> {
-        let calculated_total = &self.cgst_rate + &self.sgst_rate + &self.igst_rate;
-
-        if calculated_total != self.total_rate {
-            return Err(GstError::InvalidRate(format!(
-                "GST components don't add up to total rate: {} != {}",
-                calculated_total, self.total_rate
-            )));
+        let components = &self.cgst_rate + &self.sgst_rate + &self.igst_rate;
+        if components != self.total_rate {
+            return Err(GstError::ComponentsMismatch {
+                components,
+                total: self.total_rate.clone(),
+            });
         }
 
-        // For intra-state transactions, CGST and SGST should be equal
-        if self.igst_rate == *crate::ZERO && self.cgst_rate != self.sgst_rate {
-            return Err(GstError::InvalidRate(
-                "CGST and SGST rates must be equal for intra-state transactions".to_string(),
-            ));
+        if self.igst_rate.is_zero() && self.cgst_rate != self.sgst_rate {
+            return Err(GstError::UnequalSplit {
+                cgst: self.cgst_rate.clone(),
+                sgst: self.sgst_rate.clone(),
+            });
         }
 
-        // For inter-state transactions, only IGST should be non-zero
-        if self.igst_rate > *crate::ZERO
-            && (self.cgst_rate > *crate::ZERO || self.sgst_rate > *crate::ZERO)
+        if self.igst_rate.is_positive()
+            && (self.cgst_rate.is_positive() || self.sgst_rate.is_positive())
         {
-            return Err(GstError::InvalidRate(
-                "Only IGST should be applicable for inter-state transactions".to_string(),
-            ));
+            return Err(GstError::MixedIgstAndSplit);
         }
 
         Ok(())
@@ -91,12 +111,16 @@ pub struct GstCalculation {
 
 impl GstCalculation {
     /// Calculate GST amounts from base amount and GST rate
+    ///
+    /// # Errors
+    ///
+    /// Any error from [`GstRate::validate`].
     pub fn calculate(base_amount: BigDecimal, gst_rate: GstRate) -> Result<Self, GstError> {
         gst_rate.validate()?;
 
-        let cgst_amount = (&base_amount * &gst_rate.cgst_rate) / BigDecimal::from(100);
-        let sgst_amount = (&base_amount * &gst_rate.sgst_rate) / BigDecimal::from(100);
-        let igst_amount = (&base_amount * &gst_rate.igst_rate) / BigDecimal::from(100);
+        let cgst_amount = percent_of(&base_amount, &gst_rate.cgst_rate);
+        let sgst_amount = percent_of(&base_amount, &gst_rate.sgst_rate);
+        let igst_amount = percent_of(&base_amount, &gst_rate.igst_rate);
 
         let total_gst_amount = &cgst_amount + &sgst_amount + &igst_amount;
         let total_amount = &base_amount + &total_gst_amount;
@@ -113,6 +137,11 @@ impl GstCalculation {
     }
 
     /// Calculate base amount from total amount (reverse calculation)
+    ///
+    /// # Errors
+    ///
+    /// Any error from [`GstRate::validate`].
+    #[allow(clippy::needless_pass_by_value)] // takes ownership to mirror `calculate`
     pub fn reverse_calculate(
         total_amount: BigDecimal,
         gst_rate: GstRate,
@@ -142,99 +171,104 @@ pub enum GstCategory {
 }
 
 impl GstCategory {
+    /// Every category, lowest rate first
+    pub const ALL: [GstCategory; 5] = [
+        GstCategory::Essential,
+        GstCategory::Reduced,
+        GstCategory::Standard,
+        GstCategory::Higher,
+        GstCategory::Luxury,
+    ];
+
     /// Get the standard GST rate for this category
-    pub fn rate(&self) -> BigDecimal {
-        match self {
-            GstCategory::Essential => BigDecimal::from(0),
-            GstCategory::Reduced => BigDecimal::from(5),
-            GstCategory::Standard => BigDecimal::from(12),
-            GstCategory::Higher => BigDecimal::from(18),
-            GstCategory::Luxury => BigDecimal::from(28),
-        }
+    #[must_use]
+    pub fn rate(self) -> BigDecimal {
+        let percent = match self {
+            GstCategory::Essential => 0,
+            GstCategory::Reduced => 5,
+            GstCategory::Standard => 12,
+            GstCategory::Higher => 18,
+            GstCategory::Luxury => 28,
+        };
+        BigDecimal::from(percent)
     }
 
     /// Create intra-state GST rate for this category
-    pub fn intra_state_rate(&self) -> GstRate {
+    #[must_use]
+    pub fn intra_state_rate(self) -> GstRate {
         GstRate::intra_state(self.rate())
     }
 
     /// Create inter-state GST rate for this category
-    pub fn inter_state_rate(&self) -> GstRate {
+    #[must_use]
+    pub fn inter_state_rate(self) -> GstRate {
         GstRate::inter_state(self.rate())
+    }
+
+    /// GST rate for this category on an inter-state or intra-state supply
+    #[must_use]
+    pub fn rate_for_supply(self, is_inter_state: bool) -> GstRate {
+        GstRate::for_supply(self.rate(), is_inter_state)
     }
 }
 
-/// GST calculation engine
-#[derive(Debug)]
+/// GST calculator with a default supply type and optional per-product rates
+#[derive(Debug, Clone, Default)]
 pub struct GstCalculator {
-    /// Standard category rates
-    category_rates: HashMap<GstCategory, GstRate>,
     /// Custom product/service specific rates
     custom_rates: HashMap<String, GstRate>,
-    /// Default transaction type (intra-state or inter-state)
+    /// Supply type used when a call does not say (inter-state or intra-state)
     default_is_inter_state: bool,
 }
 
 impl GstCalculator {
     /// Create a new GST calculator
+    #[must_use]
     pub fn new(default_is_inter_state: bool) -> Self {
-        let mut calculator = Self {
-            category_rates: HashMap::new(),
+        Self {
             custom_rates: HashMap::new(),
             default_is_inter_state,
-        };
-
-        calculator.setup_standard_rates();
-        calculator
-    }
-
-    /// Setup standard GST rates for all categories
-    fn setup_standard_rates(&mut self) {
-        let categories = [
-            GstCategory::Essential,
-            GstCategory::Reduced,
-            GstCategory::Standard,
-            GstCategory::Higher,
-            GstCategory::Luxury,
-        ];
-
-        for category in categories.iter() {
-            let rate = if self.default_is_inter_state {
-                category.inter_state_rate()
-            } else {
-                category.intra_state_rate()
-            };
-            self.category_rates.insert(*category, rate);
         }
     }
 
+    fn category_rate(&self, category: GstCategory, is_inter_state: Option<bool>) -> GstRate {
+        category.rate_for_supply(is_inter_state.unwrap_or(self.default_is_inter_state))
+    }
+
     /// Set a custom GST rate for a specific product/service
+    ///
+    /// # Errors
+    ///
+    /// Any error from [`GstRate::validate`].
     pub fn set_custom_rate(
         &mut self,
-        product_code: String,
+        product_code: impl Into<String>,
         gst_rate: GstRate,
     ) -> Result<(), GstError> {
         gst_rate.validate()?;
-        self.custom_rates.insert(product_code, gst_rate);
+        self.custom_rates.insert(product_code.into(), gst_rate);
         Ok(())
     }
 
     /// Calculate GST for a product using category rates
+    ///
+    /// # Errors
+    ///
+    /// Any error from [`GstCalculation::calculate`].
     pub fn calculate_by_category(
         &self,
         base_amount: BigDecimal,
         category: GstCategory,
         is_inter_state: Option<bool>,
     ) -> Result<GstCalculation, GstError> {
-        let gst_rate = match is_inter_state.unwrap_or(self.default_is_inter_state) {
-            true => category.inter_state_rate(),
-            false => category.intra_state_rate(),
-        };
-
-        GstCalculation::calculate(base_amount, gst_rate)
+        GstCalculation::calculate(base_amount, self.category_rate(category, is_inter_state))
     }
 
     /// Calculate GST for a product using custom rates
+    ///
+    /// # Errors
+    ///
+    /// [`GstError::ProductNotFound`] when no custom rate is set for `product_code`.
     pub fn calculate_by_product(
         &self,
         base_amount: BigDecimal,
@@ -248,40 +282,49 @@ impl GstCalculator {
         GstCalculation::calculate(base_amount, gst_rate.clone())
     }
 
-    /// Calculate GST with explicit rate
-    pub fn calculate_with_rate(
-        &self,
-        base_amount: BigDecimal,
-        gst_rate: GstRate,
-    ) -> Result<GstCalculation, GstError> {
-        GstCalculation::calculate(base_amount, gst_rate)
-    }
-
     /// Reverse calculate base amount from total
+    ///
+    /// # Errors
+    ///
+    /// Any error from [`GstCalculation::reverse_calculate`].
     pub fn reverse_calculate_by_category(
         &self,
         total_amount: BigDecimal,
         category: GstCategory,
         is_inter_state: Option<bool>,
     ) -> Result<GstCalculation, GstError> {
-        let gst_rate = match is_inter_state.unwrap_or(self.default_is_inter_state) {
-            true => category.inter_state_rate(),
-            false => category.intra_state_rate(),
-        };
-
-        GstCalculation::reverse_calculate(total_amount, gst_rate)
+        GstCalculation::reverse_calculate(
+            total_amount,
+            self.category_rate(category, is_inter_state),
+        )
     }
 }
 
 /// GST-related errors
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum GstError {
-    #[error("Invalid GST rate: {0}")]
-    InvalidRate(String),
-    #[error("Product not found: {0}")]
+    /// CGST + SGST + IGST differs from the total rate
+    #[error("GST components add up to {components}, not the total rate {total}")]
+    ComponentsMismatch {
+        /// Sum of the components
+        components: BigDecimal,
+        /// Declared total rate
+        total: BigDecimal,
+    },
+    /// CGST and SGST differ on an intra-state rate
+    #[error("CGST ({cgst}) and SGST ({sgst}) must be equal for intra-state supply")]
+    UnequalSplit {
+        /// CGST rate
+        cgst: BigDecimal,
+        /// SGST rate
+        sgst: BigDecimal,
+    },
+    /// IGST is charged together with CGST or SGST
+    #[error("only IGST applies to inter-state supply")]
+    MixedIgstAndSplit,
+    /// No custom rate is set for this product code
+    #[error("product not found: {0}")]
     ProductNotFound(String),
-    #[error("Calculation error: {0}")]
-    Calculation(String),
 }
 
 #[cfg(test)]
@@ -345,5 +388,49 @@ mod tests {
         assert_eq!(calculation.total_gst_amount, BigDecimal::from(180));
         assert_eq!(calculation.cgst_amount, BigDecimal::from(90));
         assert_eq!(calculation.sgst_amount, BigDecimal::from(90));
+    }
+    #[test]
+    fn test_rate_validation_errors_are_typed() {
+        let mismatched = GstRate {
+            total_rate: BigDecimal::from(18),
+            cgst_rate: BigDecimal::from(9),
+            sgst_rate: BigDecimal::from(8),
+            igst_rate: BigDecimal::from(0),
+        };
+        assert!(matches!(
+            mismatched.validate(),
+            Err(GstError::ComponentsMismatch { .. })
+        ));
+
+        let unequal = GstRate {
+            total_rate: BigDecimal::from(18),
+            cgst_rate: BigDecimal::from(10),
+            sgst_rate: BigDecimal::from(8),
+            igst_rate: BigDecimal::from(0),
+        };
+        assert!(matches!(
+            unequal.validate(),
+            Err(GstError::UnequalSplit { .. })
+        ));
+
+        let mixed = GstRate {
+            total_rate: BigDecimal::from(18),
+            cgst_rate: BigDecimal::from(4),
+            sgst_rate: BigDecimal::from(4),
+            igst_rate: BigDecimal::from(10),
+        };
+        assert_eq!(mixed.validate(), Err(GstError::MixedIgstAndSplit));
+    }
+
+    #[test]
+    fn test_for_supply_picks_the_split() {
+        assert_eq!(
+            GstRate::for_supply(BigDecimal::from(12), true),
+            GstRate::inter_state(BigDecimal::from(12))
+        );
+        assert_eq!(
+            GstCategory::Standard.rate_for_supply(false),
+            GstCategory::Standard.intra_state_rate()
+        );
     }
 }
