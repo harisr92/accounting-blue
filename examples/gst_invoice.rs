@@ -1,6 +1,10 @@
-//! GST invoice examples: GSTIN validation, HSN/SAC rate lookup, intra-state and inter-state invoices
+//! GST invoice examples: GSTIN validation, HSN/SAC rate lookup, intra-state and inter-state
+//! invoices, compliance checks and the ledger posting
 
-use accounting_core::invoice::{GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster};
+use accounting_core::invoice::{
+    validate_invoice, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster, InvoiceAccounts,
+    InvoiceValidationReport, Severity,
+};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 
@@ -124,6 +128,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Err(e) = unknown_hsn {
         println!("  ❌ {e}");
     }
+    println!();
+
+    // 6. Compliance checks: every issue is reported, as an error or a warning
+    println!("🛡️  Compliance Checks:");
+    print_report(
+        &intra_state.invoice_number,
+        &validate_invoice(&intra_state, date, HsnMaster::global()),
+    );
+    let mut edited = inter_state.clone();
+    edited.invoice_date = NaiveDate::from_ymd_opt(2024, 12, 1).unwrap();
+    edited.line_items[0].unit_price = BigDecimal::from(-1);
+    print_report(
+        &format!("{} after editing", edited.invoice_number),
+        &validate_invoice(&edited, date, HsnMaster::global()),
+    );
+    println!();
+
+    // 7. Ledger posting: receivable = sales + CGST/SGST or IGST
+    println!("📒 Ledger Posting ({}):", inter_state.invoice_number);
+    let accounts = InvoiceAccounts::new(
+        "accounts_receivable",
+        "sales_revenue",
+        "cgst_output",
+        "sgst_output",
+        "igst_output",
+    );
+    for entry in inter_state.to_entries(&accounts)? {
+        println!(
+            "  {:?} {:<20} ₹{}",
+            entry.entry_type, entry.account_id, entry.amount
+        );
+    }
 
     Ok(())
 }
@@ -150,6 +186,17 @@ fn print_invoice(title: &str, invoice: &GstInvoice) -> Result<(), Box<dyn std::e
     print_breakdown(&invoice.breakdown()?);
     println!();
     Ok(())
+}
+
+fn print_report(label: &str, report: &InvoiceValidationReport) {
+    println!("  {label} (compliant: {})", report.is_compliant());
+    for issue in report.issues() {
+        let icon = match issue.severity() {
+            Severity::Error => "❌",
+            Severity::Warning => "⚠️ ",
+        };
+        println!("    {icon} {issue}");
+    }
 }
 
 fn print_breakdown(breakdown: &GstBreakdown) {

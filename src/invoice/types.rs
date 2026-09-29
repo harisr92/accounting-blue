@@ -316,7 +316,7 @@ impl GstLineItem {
     }
 
     /// The field rules other than the HSN/SAC shape
-    fn check(&self) -> Result<(), LineItemError> {
+    pub(super) fn check(&self) -> Result<(), LineItemError> {
         if self.description.trim().is_empty() {
             Err(LineItemError::EmptyDescription)
         } else if !self.quantity.is_positive() {
@@ -357,7 +357,10 @@ impl GstLineItem {
         Self::new(hsn_sac, description, quantity, unit_price, gst_rate)
     }
 
-    /// Taxable value of the line (quantity x unit price)
+    /// Taxable value of the line (quantity x unit price), exactly
+    ///
+    /// This is not rounded; [`GstLineItem::breakdown`] rounds it to paise, so its
+    /// `taxable_value` is the amount that is invoiced and posted.
     #[must_use]
     pub fn taxable_value(&self) -> BigDecimal {
         &self.quantity * &self.unit_price
@@ -479,7 +482,17 @@ impl GstInvoice {
 /// Check an invoice number against Rule 46: unique per financial year (not checked here), at
 /// most 16 characters, and only letters, digits, `-` and `/`
 pub(super) fn validate_invoice_number(invoice_number: &str) -> Result<(), InvoiceError> {
-    let reason = if invoice_number.is_empty() || invoice_number.len() > INVOICE_NUMBER_MAX_LEN {
+    invoice_number_error(invoice_number).map_or(Ok(()), |reason| {
+        Err(InvoiceError::InvalidInvoiceNumber {
+            value: invoice_number.to_string(),
+            reason,
+        })
+    })
+}
+
+/// The first Rule 46 check an invoice number fails, if any
+pub(super) fn invoice_number_error(invoice_number: &str) -> Option<InvoiceNumberError> {
+    if invoice_number.is_empty() || invoice_number.len() > INVOICE_NUMBER_MAX_LEN {
         Some(InvoiceNumberError::Length)
     } else if !invoice_number
         .chars()
@@ -488,14 +501,7 @@ pub(super) fn validate_invoice_number(invoice_number: &str) -> Result<(), Invoic
         Some(InvoiceNumberError::Characters)
     } else {
         None
-    };
-
-    reason.map_or(Ok(()), |reason| {
-        Err(InvoiceError::InvalidInvoiceNumber {
-            value: invoice_number.to_string(),
-            reason,
-        })
-    })
+    }
 }
 
 /// Why an invoice number was rejected

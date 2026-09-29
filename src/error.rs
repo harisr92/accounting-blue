@@ -5,7 +5,7 @@
 
 use bigdecimal::BigDecimal;
 
-use crate::invoice::InvoiceError;
+use crate::invoice::{InvoiceError, PostingError};
 use crate::reconciliation::ReconciliationError;
 use crate::tax::GstError;
 
@@ -24,6 +24,9 @@ pub enum Error {
     /// GST invoice failure
     #[error(transparent)]
     Invoice(#[from] InvoiceError),
+    /// An invoice could not be posted to the ledger
+    #[error(transparent)]
+    Posting(#[from] PostingError),
     /// Reconciliation storage or import failure
     #[error(transparent)]
     Reconciliation(#[from] ReconciliationError),
