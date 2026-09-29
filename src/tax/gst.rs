@@ -1,13 +1,39 @@
 //! GST (Goods and Services Tax) calculation engine for Indian tax compliance
 
-use bigdecimal::{BigDecimal, Signed, Zero};
+use bigdecimal::{BigDecimal, RoundingMode, Signed, Zero};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// `rate` percent of `amount`
+/// Decimal places in an amount of rupees: one paisa is 0.01
+pub const PAISE_SCALE: i64 = 2;
+
+/// `rate` percent of `amount`, exactly; [`GstCalculation`] rounds the result to paise
 #[must_use]
 pub fn percent_of(amount: &BigDecimal, rate: &BigDecimal) -> BigDecimal {
     (amount * rate) / BigDecimal::from(100)
+}
+
+/// Round an amount of rupees to the nearest paisa, with halves rounded away from zero
+///
+/// This is the one rounding rule for money in the crate: 0.025 becomes 0.03 and 0.0249
+/// becomes 0.02. The result always has [`PAISE_SCALE`] decimal places.
+///
+/// # Example
+///
+/// ```
+/// use accounting_core::tax::round_to_paise;
+/// use bigdecimal::BigDecimal;
+/// use std::str::FromStr;
+///
+/// let round = |s| round_to_paise(&BigDecimal::from_str(s).unwrap()).to_string();
+/// assert_eq!(round("0.02475"), "0.02");
+/// assert_eq!(round("0.025"), "0.03");
+/// assert_eq!(round("-0.025"), "-0.03");
+/// assert_eq!(round("90"), "90.00");
+/// ```
+#[must_use]
+pub fn round_to_paise(amount: &BigDecimal) -> BigDecimal {
+    amount.with_scale_round(PAISE_SCALE, RoundingMode::HalfUp)
 }
 
 /// GST rate structure for Indian taxation
@@ -112,15 +138,23 @@ pub struct GstCalculation {
 impl GstCalculation {
     /// Calculate GST amounts from base amount and GST rate
     ///
+    /// Every amount in the result is in paise: the base is rounded with [`round_to_paise`],
+    /// each of CGST, SGST and IGST is rounded on its own, the total tax is the sum of the
+    /// rounded components and the total is the base plus that tax. CGST and SGST therefore stay
+    /// equal on an intra-state rate.
+    ///
     /// # Errors
     ///
     /// Any error from [`GstRate::validate`].
+    #[allow(clippy::needless_pass_by_value)] // takes ownership; rounding builds a new value
     pub fn calculate(base_amount: BigDecimal, gst_rate: GstRate) -> Result<Self, GstError> {
         gst_rate.validate()?;
 
-        let cgst_amount = percent_of(&base_amount, &gst_rate.cgst_rate);
-        let sgst_amount = percent_of(&base_amount, &gst_rate.sgst_rate);
-        let igst_amount = percent_of(&base_amount, &gst_rate.igst_rate);
+        let base_amount = round_to_paise(&base_amount);
+        let component = |rate: &BigDecimal| round_to_paise(&percent_of(&base_amount, rate));
+        let cgst_amount = component(&gst_rate.cgst_rate);
+        let sgst_amount = component(&gst_rate.sgst_rate);
+        let igst_amount = component(&gst_rate.igst_rate);
 
         let total_gst_amount = &cgst_amount + &sgst_amount + &igst_amount;
         let total_amount = &base_amount + &total_gst_amount;
@@ -137,6 +171,14 @@ impl GstCalculation {
     }
 
     /// Calculate base amount from total amount (reverse calculation)
+    ///
+    /// The base is `total * 100 / (100 + rate)` rounded to paise, and the tax is then calculated
+    /// forward from it with [`GstCalculation::calculate`], so the result is in paise and its
+    /// amounts add up. Because the base and each tax component are rounded, the result's
+    /// `total_amount` can differ from the given total. For a total in paise it differs by at most
+    /// one paisa at any rate up to 40% (every GST slab), and by at most two paise above that; a
+    /// total with fractions of a paisa can drift further. Don't post the given total against the
+    /// result's base and tax: post the result's `total_amount`.
     ///
     /// # Errors
     ///
