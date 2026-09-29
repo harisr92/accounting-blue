@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["hsn_lookup","types"]};
+window.SIDEBAR_ITEMS = {"mod":["hsn_lookup","posting","types","validation"]};
