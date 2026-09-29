@@ -1,6 +1,7 @@
 use crate::invoice::types::*;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
+use std::str::FromStr;
 
 const SELLER: &str = "27AAPFU0939F1ZV";
 
@@ -190,4 +191,27 @@ fn test_inter_state_breakdown() {
     assert_eq!(breakdown.sgst, BigDecimal::from(0));
     assert_eq!(breakdown.igst, BigDecimal::from(180));
     assert_eq!(breakdown.total, BigDecimal::from(1180));
+}
+
+#[test]
+fn test_invoice_tax_is_the_sum_of_lines_rounded_to_paise() {
+    let line = GstLineItem::new(
+        "998314",
+        "Micro service",
+        BigDecimal::from(1),
+        BigDecimal::from_str("0.99").unwrap(),
+        BigDecimal::from(5),
+    )
+    .unwrap();
+    let invoice = invoice("27AAPFU0939F2ZU", vec![line.clone(), line]);
+
+    // Each line: CGST = SGST = 0.02475, rounded to 0.02. Rounding once per invoice would give
+    // 0.0495 -> 0.05 instead.
+    for breakdown in invoice.line_breakdowns().unwrap() {
+        assert_eq!(breakdown.cgst, BigDecimal::from_str("0.02").unwrap());
+    }
+    let total = invoice.breakdown().unwrap();
+    assert_eq!(total.cgst, BigDecimal::from_str("0.04").unwrap());
+    assert_eq!(total.sgst, BigDecimal::from_str("0.04").unwrap());
+    assert_eq!(total.total, BigDecimal::from_str("2.06").unwrap());
 }

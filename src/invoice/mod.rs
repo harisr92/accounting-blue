@@ -9,6 +9,12 @@
 //! [`HsnMaster`] holds common HSN/SAC codes with their default GST rates;
 //! [`GstLineItem::with_default_rate`] builds a line at the rate for its code.
 //!
+//! [`validate_invoice`] checks an invoice against the compliance rules (future dates, missing or
+//! unknown HSN/SAC codes, amounts, rates and parties) and returns an [`InvoiceValidationReport`]
+//! of every [`ComplianceIssue`] found. [`GstInvoice::to_entries`] posts a compliant invoice to the
+//! ledger through the accounts named in [`InvoiceAccounts`]; the posting balances by
+//! construction, since the total is the taxable value plus the tax.
+//!
 //! The tax arithmetic comes from [`crate::tax::gst`]. The invoice types are also re-exported at the
 //! crate root. Validation failures are typed: [`InvoiceError`] carries a [`GstinError`],
 //! [`InvoiceNumberError`] or [`LineItemError`] saying which rule was broken.
@@ -46,13 +52,17 @@
 //! ```
 
 pub mod hsn_lookup;
+pub mod posting;
 pub mod types;
+pub mod validation;
 
 pub use hsn_lookup::{HsnMaster, HsnSacEntry, HsnSacKind};
+pub use posting::{posting_legs, InvoiceAccounts, PostingError, PostingLeg};
 pub use types::{
     GstBreakdown, GstInvoice, GstLineItem, Gstin, GstinError, InvoiceError, InvoiceNumberError,
     LineItemError,
 };
+pub use validation::{validate_invoice, ComplianceIssue, InvoiceValidationReport, Severity};
 
 #[cfg(test)]
 mod tests;
