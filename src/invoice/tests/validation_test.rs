@@ -4,6 +4,7 @@ use crate::invoice::types::{InvoiceNumberError, LineItemError};
 use crate::invoice::validation::*;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
+use std::str::FromStr;
 
 const SELLER: &str = "27AAPFU0939F1ZV";
 const BUYER_SAME_STATE: &str = "27AAPFU0939F2ZU";
@@ -294,7 +295,7 @@ fn test_every_issue_is_reported_not_just_the_first() {
 #[test]
 fn test_messages_number_lines_from_one() {
     let issue = ComplianceIssue::ZeroValueLine { line: 0 };
-    assert_eq!(issue.to_string(), "line 1: unit price is zero");
+    assert_eq!(issue.to_string(), "line 1: taxable value rounds to zero");
 }
 
 #[test]
@@ -372,4 +373,22 @@ fn test_error_rules_report_only_errors() {
     let report = validate_invoice(&invoice, date(1), HsnMaster::global());
     assert_eq!(report.errors().cloned().collect::<Vec<_>>(), errors);
     assert_eq!(report.warnings().count(), 2); // unknown 0000, zero price
+}
+
+#[test]
+fn test_line_rounding_to_zero_is_a_warning() {
+    let mut invoice = clean_invoice();
+    invoice.line_items[1].quantity = BigDecimal::from_str("0.001").unwrap();
+    invoice.line_items[1].unit_price = BigDecimal::from(1);
+
+    let report = check(&invoice);
+    assert!(report.is_compliant());
+    assert_eq!(
+        report.issues(),
+        [ComplianceIssue::ZeroValueLine { line: 1 }]
+    );
+
+    // 0.005 rounds up to a paisa, so it is not flagged
+    invoice.line_items[1].quantity = BigDecimal::from_str("0.005").unwrap();
+    assert!(check(&invoice).issues().is_empty());
 }

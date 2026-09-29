@@ -172,13 +172,13 @@ impl GstCalculation {
 
     /// Calculate base amount from total amount (reverse calculation)
     ///
-    /// The base is `total * 100 / (100 + rate)` rounded to paise, and the tax is then calculated
-    /// forward from it with [`GstCalculation::calculate`], so the result is in paise and its
-    /// amounts add up. Because the base and each tax component are rounded, the result's
-    /// `total_amount` can differ from the given total. For a total in paise it differs by at most
-    /// one paisa at any rate up to 40% (every GST slab), and by at most two paise above that; a
-    /// total with fractions of a paisa can drift further. Don't post the given total against the
-    /// result's base and tax: post the result's `total_amount`.
+    /// The total is rounded to paise and kept exactly: the result's `total_amount` is the given
+    /// total, and its base plus its tax always add up to it, so the result can be posted against
+    /// the amount actually received. The tax is calculated with [`GstCalculation::calculate`]
+    /// on `total * 100 / (100 + rate)`, so CGST and SGST stay equal, and the base absorbs the
+    /// rounding: it is the total minus the tax. At any rate up to 40% (every GST slab) the base
+    /// is within a paisa of the exact division. At higher intra-state rates a total of a few
+    /// paise can leave it further off: at 100%, a total of 0.01 gives a base of -0.01.
     ///
     /// # Errors
     ///
@@ -188,12 +188,16 @@ impl GstCalculation {
         total_amount: BigDecimal,
         gst_rate: GstRate,
     ) -> Result<Self, GstError> {
-        gst_rate.validate()?;
-
+        let total_amount = round_to_paise(&total_amount);
         let divisor = BigDecimal::from(100) + &gst_rate.total_rate;
-        let base_amount = (&total_amount * BigDecimal::from(100)) / divisor;
+        let estimated_base = (&total_amount * BigDecimal::from(100)) / divisor;
+        let forward = Self::calculate(estimated_base, gst_rate)?;
 
-        Self::calculate(base_amount, gst_rate)
+        Ok(Self {
+            base_amount: &total_amount - &forward.total_gst_amount,
+            total_amount,
+            ..forward
+        })
     }
 }
 

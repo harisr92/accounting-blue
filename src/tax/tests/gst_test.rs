@@ -187,22 +187,47 @@ fn test_reverse_calculation_with_non_terminating_division_is_in_paise() {
 }
 
 #[test]
-fn test_reverse_calculation_drifts_at_most_a_paisa_at_gst_slabs() {
-    // 1.00 at 18%: base 0.85, CGST = SGST = 0.08, total 1.01
+fn test_reverse_calculation_keeps_the_given_total() {
+    // 1.00 at 18%: the tax on 1.00 / 1.18 = 0.847 is CGST = SGST = 0.08, and the base absorbs
+    // the rounding, so 0.84 + 0.08 + 0.08 = 1.00
     let calc =
         GstCalculation::reverse_calculate(dec("1"), GstRate::intra_state(BigDecimal::from(18)))
             .unwrap();
-    assert_eq!(calc.total_amount, dec("1.01"));
+    assert_eq!(calc.base_amount, dec("0.84"));
+    assert_eq!(calc.cgst_amount, dec("0.08"));
+    assert_eq!(calc.sgst_amount, dec("0.08"));
+    assert_eq!(calc.total_amount, dec("1.00"));
 
+    // A total with fractions of a paisa is rounded first
+    let calc = GstCalculation::reverse_calculate(
+        dec("1000.005"),
+        GstRate::inter_state(BigDecimal::from(18)),
+    )
+    .unwrap();
+    assert_eq!(calc.total_amount, dec("1000.01"));
+    assert_eq!(&calc.base_amount + &calc.igst_amount, dec("1000.01"));
+}
+
+#[test]
+fn test_reverse_calculation_adds_up_and_stays_near_the_exact_base() {
     let paisa = dec("0.01");
-    for rate in ["0.25", "3", "5", "18", "40"] {
+    for rate in ["0.25", "3", "5", "12", "18", "28", "40"] {
         for is_inter_state in [false, true] {
             for paise in (1..=20_000).step_by(7) {
                 let total = BigDecimal::from(paise) / BigDecimal::from(100);
-                let rate = GstRate::for_supply(dec(rate), is_inter_state);
-                let calc = GstCalculation::reverse_calculate(total.clone(), rate).unwrap();
+                let gst_rate = GstRate::for_supply(dec(rate), is_inter_state);
+                let calc = GstCalculation::reverse_calculate(total.clone(), gst_rate).unwrap();
+
                 assert_in_paise(&calc);
-                assert!((&calc.total_amount - &total).abs() <= paisa, "{total}");
+                assert_eq!(calc.total_amount, total);
+                assert_eq!(&calc.base_amount + &calc.total_gst_amount, total);
+                assert_eq!(calc.cgst_amount, calc.sgst_amount);
+                let exact_base =
+                    &total * BigDecimal::from(100) / (BigDecimal::from(100) + dec(rate));
+                assert!(
+                    (&calc.base_amount - exact_base).abs() <= paisa,
+                    "{total} at {rate}%"
+                );
             }
         }
     }

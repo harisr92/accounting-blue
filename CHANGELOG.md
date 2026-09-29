@@ -10,7 +10,7 @@
   - Warnings:
     - an HSN/SAC code the master doesn't know
     - a rate that differs from the default for its exact code. This is not checked when the code only matches a fallback heading, when the line already has a field error, or before `HsnMaster::effective_from`.
-    - a zero unit price
+    - a line whose taxable value rounds to zero paise, including a zero unit price
   - `validate_invoice` is pure: the caller passes the date to check against and the HSN/SAC master to compare with, usually `HsnMaster::global()`.
 - Invoice ledger posting (`accounting_core::invoice::posting`):
   - `GstInvoice::to_entries(&InvoiceAccounts)` posts the invoice as Dr receivable = total, Cr sales = taxable value, and Cr CGST/SGST or IGST output for the tax. The posting balances by construction.
@@ -26,13 +26,13 @@
     - CGST and SGST stay equal on an intra-state rate.
     - Every amount has 2 decimal places, so it displays and serialises as, for example, `90.00` instead of `90`. Zero still prints as `0`, which is how `bigdecimal` formats it. Numeric comparisons are unaffected.
   - Invoices round per line. Each line's breakdown is rounded, and the invoice breakdown is the sum of the rounded lines, as the e-invoice schema expects.
-  - `GstCalculation::reverse_calculate` rounds the derived base (it used to carry up to 100 digits) and calculates the tax forward from it. Its `total_amount` can differ from the given total by at most one paisa at every GST slab, and by at most two paise at intra-state rates above 40%.
+  - `GstCalculation::reverse_calculate` used to carry up to 100 digits. It now rounds the given total to paise and returns exactly that total, with base + tax adding up to it, so the result can be posted against the amount actually received. The tax is calculated forward with CGST = SGST, and the base absorbs the rounding. At every GST slab the base is within a paisa of the exact division.
   - `percent_of` is unchanged and still exact.
 
 ### Breaking changes
 - `accounting_core::Error` has a new `Posting(PostingError)` variant. An exhaustive `match` on it needs an arm for it. `InvoiceError` is unchanged.
 - `GstCalculation` and `GstBreakdown` amounts now serialise with 2 decimal places (`"90.00"`, not `"90"`), so a consumer that compares the serialised strings sees different output.
-- `GstCalculation::reverse_calculate` no longer returns a `total_amount` equal to the given total in every case: it can differ by a paisa (see Fixed). Post the returned `total_amount`, not the given total, against the returned base and tax, or the transaction won't balance.
+- `GstCalculation::reverse_calculate` rounds a given total with fractions of a paisa to paise, so its `total_amount` is the rounded total.
 
 ## 0.2.0
 

@@ -12,6 +12,7 @@
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use super::types::{invoice_number_error, GstInvoice, GstLineItem};
 use super::types::{InvoiceNumberError, LineItemError};
+use crate::tax::round_to_paise;
 use bigdecimal::{BigDecimal, Zero};
 use chrono::NaiveDate;
 
@@ -87,8 +88,8 @@ pub enum ComplianceIssue {
         /// Default rate in the master
         default: BigDecimal,
     },
-    /// A line has a unit price of zero
-    #[error("line {}: unit price is zero", .line + 1)]
+    /// A line's taxable value rounds to zero paise, so it adds nothing to the invoice
+    #[error("line {}: taxable value rounds to zero", .line + 1)]
     ZeroValueLine {
         /// Index of the line
         line: usize,
@@ -329,7 +330,7 @@ fn hsn_master_rule(invoice: &GstInvoice, master: &HsnMaster) -> Vec<ComplianceIs
 
 fn zero_value_rule(invoice: &GstInvoice, _master: &HsnMaster) -> Vec<ComplianceIssue> {
     per_line(invoice, |line, item| {
-        item.unit_price
+        round_to_paise(&item.taxable_value())
             .is_zero()
             .then_some(ComplianceIssue::ZeroValueLine { line })
     })
