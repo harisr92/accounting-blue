@@ -222,7 +222,9 @@ pub mod utils;
 
 pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};
 pub use invoice::{
-    GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster, HsnSacEntry, HsnSacKind, InvoiceError,
+    validate_invoice, ComplianceIssue, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster,
+    HsnSacEntry, HsnSacKind, InvoiceAccounts, InvoiceError, InvoiceValidationReport, PostingError,
+    PostingLeg, Severity,
 };
 pub use ledger::{
     patterns, BillPaymentWithGstParams, InvoiceWithGstParams, Ledger, TransactionBuilder,

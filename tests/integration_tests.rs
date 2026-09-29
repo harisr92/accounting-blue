@@ -3,8 +3,9 @@
 use accounting_core::{
     patterns,
     utils::{EnhancedAccountValidator, EnhancedTransactionValidator, MemoryStorage},
-    AccountStore, AccountType, GstCalculator, GstCategory, GstInvoice, GstLineItem, Gstin, Ledger,
-    PaginationOption, TransactionBuilder, TransactionStore,
+    validate_invoice, AccountStore, AccountType, GstCalculator, GstCategory, GstInvoice,
+    GstLineItem, Gstin, HsnMaster, InvoiceAccounts, Ledger, PaginationOption, TransactionBuilder,
+    TransactionStore,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -183,6 +184,75 @@ async fn test_gst_invoice_with_ledger_integration() {
     assert_eq!(cash_balance, BigDecimal::from(11800)); // 10000 + 1800 GST
     assert_eq!(revenue_balance, BigDecimal::from(10000));
     assert_eq!(gst_balance, BigDecimal::from(1800)); // 18% GST
+}
+
+#[tokio::test]
+async fn test_validated_invoice_posts_balanced_to_the_ledger() {
+    let mut ledger = Ledger::new(MemoryStorage::new());
+    let accounts = [
+        ("receivable", AccountType::Asset),
+        ("sales", AccountType::Income),
+        ("cgst_output", AccountType::Liability),
+        ("sgst_output", AccountType::Liability),
+        ("igst_output", AccountType::Liability),
+    ];
+    for (id, account_type) in accounts {
+        ledger
+            .create_account(id, id, account_type, None)
+            .await
+            .unwrap();
+    }
+
+    let date = NaiveDate::from_ymd_opt(2024, 11, 15).unwrap();
+    let invoice = GstInvoice::new(
+        "INV-002",
+        date,
+        Gstin::parse("27AAPFU0939F1ZV").unwrap(),
+        Gstin::parse("27AAPFU0939F2ZU").unwrap(),
+        vec![GstLineItem::with_default_rate(
+            "998314",
+            "IT consulting",
+            BigDecimal::from(1),
+            BigDecimal::from(10000),
+        )
+        .unwrap()],
+    )
+    .unwrap();
+
+    let report = validate_invoice(&invoice, date, HsnMaster::global());
+    assert!(report.issues().is_empty(), "{:?}", report.issues());
+
+    let entries = invoice
+        .to_entries(&InvoiceAccounts::new(
+            "receivable",
+            "sales",
+            "cgst_output",
+            "sgst_output",
+            "igst_output",
+        ))
+        .unwrap();
+    let transaction = entries
+        .into_iter()
+        .fold(
+            TransactionBuilder::new("inv002", date, "Invoice INV-002")
+                .reference(invoice.invoice_number.clone()),
+            TransactionBuilder::entry,
+        )
+        .build()
+        .unwrap();
+    assert!(transaction.is_balanced());
+    ledger.record_transaction(transaction).await.unwrap();
+
+    for (id, expected) in [
+        ("receivable", 11800),
+        ("sales", 10000),
+        ("cgst_output", 900),
+        ("sgst_output", 900),
+        ("igst_output", 0),
+    ] {
+        let balance = ledger.get_account_balance(id, None).await.unwrap();
+        assert_eq!(balance, BigDecimal::from(expected), "{id}");
+    }
 }
 
 #[tokio::test]

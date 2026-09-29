@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `tax::round_to_paise` and `tax::PAISE_SCALE`: money rounding to the paisa, half-up (0.025 becomes 0.03). This is the one rounding rule in the crate.
+- Invoice compliance checks (`accounting_core::invoice::validation`):
+  - `validate_invoice(&invoice, as_of, &HsnMaster)` returns an `InvoiceValidationReport` listing every `ComplianceIssue` it finds, each with a `Severity`. Use `is_compliant()`, `errors()` and `warnings()` to read it.
+  - Errors: invalid invoice number, no line items, a missing or malformed HSN/SAC code, invalid line fields (empty description, negative price, non-positive quantity, rate outside 0-100), a date after `as_of`, and the same seller and buyer GSTIN.
+  - Warnings:
+    - an HSN/SAC code the master doesn't know
+    - a rate that differs from the default for its exact code. This is not checked when the code only matches a fallback heading, when the line already has a field error, or before `HsnMaster::effective_from`.
+    - a zero unit price
+  - `validate_invoice` is pure: the caller passes the date to check against and the HSN/SAC master to compare with, usually `HsnMaster::global()`.
+- Invoice ledger posting (`accounting_core::invoice::posting`):
+  - `GstInvoice::to_entries(&InvoiceAccounts)` posts the invoice as Dr receivable = total, Cr sales = taxable value, and Cr CGST/SGST or IGST output for the tax. The posting balances by construction.
+  - `to_entries` refuses an invoice that breaks an error-severity compliance rule and returns the new `PostingError`:
+    - It checks the invoice as of its own date, so the future-date rule doesn't apply. Warnings don't block the posting.
+    - `NotCompliant` carries the errors, and `NothingToPost` means the invoice total is zero.
+  - `posting_legs` maps a `GstBreakdown` onto the `PostingLeg`s and leaves out zero legs.
+
+### Fixed
+- GST amounts are rounded to paise, so fractions of a paisa no longer reach the ledger. Before, one unit at 0.99 at 5% intra-state gave CGST = SGST = 0.02475, and `to_entries` posted a receivable of 1.0395.
+  - `GstCalculation::calculate` rounds the base amount and each of CGST, SGST and IGST with `round_to_paise`.
+    - The total tax is the sum of the rounded components, and the total is the base plus the tax.
+    - CGST and SGST stay equal on an intra-state rate.
+    - Every amount has 2 decimal places, so it displays and serialises as, for example, `90.00` instead of `90`. Zero still prints as `0`, which is how `bigdecimal` formats it. Numeric comparisons are unaffected.
+  - Invoices round per line. Each line's breakdown is rounded, and the invoice breakdown is the sum of the rounded lines, as the e-invoice schema expects.
+  - `GstCalculation::reverse_calculate` rounds the derived base (it used to carry up to 100 digits) and calculates the tax forward from it. Its `total_amount` can differ from the given total by at most one paisa at every GST slab, and by at most two paise at intra-state rates above 40%.
+  - `percent_of` is unchanged and still exact.
+
+### Breaking changes
+- `accounting_core::Error` has a new `Posting(PostingError)` variant. An exhaustive `match` on it needs an arm for it. `InvoiceError` is unchanged.
+- `GstCalculation` and `GstBreakdown` amounts now serialise with 2 decimal places (`"90.00"`, not `"90"`), so a consumer that compares the serialised strings sees different output.
+- `GstCalculation::reverse_calculate` no longer returns a `total_amount` equal to the given total in every case: it can differ by a paisa (see Fixed). Post the returned `total_amount`, not the given total, against the returned base and tax, or the transaction won't balance.
+
 ## 0.2.0
 
 This release refactors the crate to the coding standards in [CLAUDE.md](CLAUDE.md): a functional core behind an imperative shell, small traits, one home per accounting rule, typed errors, and no panics in library code. Balances, GST amounts and reconciliation scores are unchanged, and every existing test assertion passes with the same expected values. Report totals change only where the old ones were wrong: see the balance sheet fix under Fixes. The public API has breaking changes, listed below.
