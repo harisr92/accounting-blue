@@ -5,6 +5,8 @@
 
 use bigdecimal::BigDecimal;
 
+#[cfg(feature = "pdf")]
+use crate::invoice::PdfError;
 use crate::invoice::{InvoiceError, PostingError};
 use crate::reconciliation::ReconciliationError;
 use crate::tax::GstError;
@@ -30,6 +32,10 @@ pub enum Error {
     /// Reconciliation storage or import failure
     #[error(transparent)]
     Reconciliation(#[from] ReconciliationError),
+    /// An invoice could not be rendered to PDF
+    #[cfg(feature = "pdf")]
+    #[error(transparent)]
+    Pdf(#[from] PdfError),
 }
 
 /// Result type using the crate-level [`Error`]

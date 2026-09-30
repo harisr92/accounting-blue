@@ -200,6 +200,7 @@
 //! - `api_pagination_patterns.rs` - REST API and GraphQL integration patterns
 //! - `web_integration.rs` - Web framework integration examples
 //! - `gst_invoice.rs` - GSTIN validation, HSN/SAC rate lookup and B2B GST invoices
+//! - `gst_invoice_pdf.rs` - Rendering a GST invoice to PDF (needs the `pdf` feature)
 //! - `reconciliation.rs` - Reconciling a ledger account against a bank statement
 
 #![forbid(unsafe_code)]
@@ -223,9 +224,11 @@ pub mod utils;
 pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};
 pub use invoice::{
     validate_invoice, ComplianceIssue, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster,
-    HsnSacEntry, HsnSacKind, InvoiceAccounts, InvoiceError, InvoiceValidationReport, PostingError,
-    PostingLeg, Severity,
+    HsnSacEntry, HsnSacKind, InvoiceAccounts, InvoiceError, InvoiceParties, InvoiceParty,
+    InvoicePrint, InvoiceValidationReport, PostingError, PostingLeg, Severity,
 };
+#[cfg(feature = "pdf")]
+pub use invoice::{PdfError, PdfFont, PdfOptions};
 pub use ledger::{
     patterns, BillPaymentWithGstParams, InvoiceWithGstParams, Ledger, TransactionBuilder,
     STANDARD_CHART,
