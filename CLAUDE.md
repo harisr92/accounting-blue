@@ -12,9 +12,9 @@ Rust library for double-entry bookkeeping, Indian GST (tax maths and B2B invoice
 | `src/ledger/` | `Ledger` orchestrator (the imperative shell), account and transaction operations, pure `balances` |
 | `src/reports/` | Pure report builders (balance sheet, income statement, cash flow, integrity) and their DTOs |
 | `src/tax/gst.rs` | GST rates and calculations |
-| `src/invoice/` | GSTIN, GST invoices, HSN/SAC master data |
+| `src/invoice/` | GSTIN, GST invoices, HSN/SAC master data, the pure print model, and the PDF renderer behind the `pdf` feature |
 | `src/reconciliation/` | Pure matching engine, split by pass, with scoring and the report |
-| `src/utils/` | `MemoryStorage`, `MemoryReconciliationStorage`, validation rules |
+| `src/utils/` | `MemoryStorage`, `MemoryReconciliationStorage`, validation rules, Indian amount formatting |
 | `src/**/tests/` | Unit test module for its directory: `mod.rs` plus one `<module>_test.rs` per module (see [Tests](#tests)) |
 | `tests/` | Integration tests over the public API |
 
@@ -40,6 +40,7 @@ Rust library for double-entry bookkeeping, Indian GST (tax maths and B2B invoice
 | Pagination | `PaginationOption::paginate` |
 | Choosing a GST rate by supply type | `GstRate::for_supply` |
 | Validation rules | `utils::validation` |
+| Printing amounts (Indian grouping, amount in words) | `utils::formatting` |
 
 If you are about to copy a block, extract it into its home instead.
 
@@ -105,10 +106,13 @@ Run all of these before handing work off. CI runs the same checks.
 ```bash
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --all-targets -- -D warnings    # without the optional `pdf` feature
 cargo test                       # unit, integration and doc tests
+cargo test --all-features        # adds the `pdf` renderer's tests
 cargo doc --no-deps --all-features
 for ex in basic_ledger gst_calculations gst_invoice reconciliation \
           pagination_demo api_pagination_patterns web_integration; do
   cargo run -q --example "$ex" > /dev/null || echo "FAILED: $ex"
 done
+cargo run -q --features pdf --example gst_invoice_pdf > /dev/null || echo "FAILED: gst_invoice_pdf"
 ```

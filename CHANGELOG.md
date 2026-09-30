@@ -19,6 +19,27 @@
     - `NotCompliant` carries the errors, and `NothingToPost` means the invoice total is zero.
   - `posting_legs` maps a `GstBreakdown` onto the `PostingLeg`s and leaves out zero legs.
 
+- Indian amount formatting (`accounting_core::utils::formatting`):
+  - `format_inr` rounds to the paisa and groups digits the Indian way: `12,34,567.89`.
+  - `amount_in_words` spells an amount out in crore, lakh and thousand, for example "Rupees Twelve Lakh Fifty Thousand and Fifty Paise Only".
+- A printable view of an invoice (`accounting_core::invoice::print`):
+  - `InvoicePrint::from_invoice(&invoice, &InvoiceParties)` is pure. It returns everything a printed tax invoice shows, with every amount formatted: title, number, date (`dd-mm-yyyy`), place of supply, the parties, one `PrintRow` per line, the CGST/SGST or IGST `TaxLine`s, the totals and the total in words. It serialises to JSON as is.
+  - `InvoiceParty` holds a name, address lines and a GSTIN, and `InvoiceParties` pairs a seller with a buyer. `GstInvoice` is unchanged: the parties are passed alongside it. A party with an empty name, or whose GSTIN is not the one on the invoice, is refused with `InvoiceError::InvalidParty { role: PartyRole, reason: PartyError }`.
+  - `paginate_rows(&rows, RowCapacity)` splits the item rows into pages. It adds an empty last page when the totals would not fit below the last rows.
+- PDF export behind the new `pdf` cargo feature (`accounting_core::invoice::pdf`). The feature pulls in `printpdf` 0.12, which needs Rust 1.88; the crate without the feature still builds on 1.82.
+  - `GstInvoice::to_pdf(&InvoiceParties, &PdfOptions)` and `render_pdf(&InvoicePrint, &PdfOptions)` return A4 PDF bytes.
+    - The page has a logo placeholder, the seller and the invoice details, the buyer, the item table and the tax summary with the total in words.
+    - It ends with any terms, a signature line and a footer note ("E-Invoice Ready" by default) with page numbers.
+  - Item tables longer than a page continue on further pages. A description too long for its column is cut short with an ellipsis; a number too wide for its column is set in a smaller size, never cut.
+  - `PdfOptions` sets the font, currency label, terms and footer note.
+    - `PdfFont::Builtin` (the default) uses standard Helvetica and labels amounts `Rs.`.
+    - `PdfFont::Custom { regular, bold }` embeds a TrueType or OpenType font. Use it with a currency label of `₹`, or for names in an Indian script.
+  - `PdfError` is the error type, and it converts into `accounting_core::Error::Pdf`. Its variants:
+    - `InvalidFont` for font bytes that don't parse.
+    - `MissingGlyph` for a character the font can't draw. Every character on the page is checked, including the renderer's own labels.
+    - `TermsTooLong` for terms that don't fit below the totals on one page, since the totals, terms and signature always share a page.
+    - `Invoice` for an invalid invoice or parties.
+  - New example: `cargo run --example gst_invoice_pdf --features pdf [font.ttf]`.
 ### Fixed
 - GST amounts are rounded to paise, so fractions of a paisa no longer reach the ledger. Before, one unit at 0.99 at 5% intra-state gave CGST = SGST = 0.02475, and `to_entries` posted a receivable of 1.0395.
   - `GstCalculation::calculate` rounds the base amount and each of CGST, SGST and IGST with `round_to_paise`.
@@ -40,7 +61,8 @@
 ### Breaking changes
 - `LedgerError` has two new variants, `AccountHasTransactions(String)` and `AccountHasChildren(String)`, returned by `Ledger::delete_account` for an account that is still in use. An exhaustive `match` on `LedgerError` needs arms for them. Code that deleted a used account through the `Ledger` now gets an error; `AccountStore::delete_account` itself is unchanged.
 - `reports::classify_cash_flow` and `reports::cash_flow` take the accounts as a new `&HashMap<String, Account>` argument, keyed by account id. `Ledger::generate_cash_flow` is unchanged and passes every account in the ledger.
-- `accounting_core::Error` has a new `Posting(PostingError)` variant. An exhaustive `match` on it needs an arm for it. `InvoiceError` is unchanged.
+- `accounting_core::Error` has a new `Posting(PostingError)` variant, and with the `pdf` feature a `Pdf(PdfError)` variant. An exhaustive `match` on it needs arms for them.
+- `InvoiceError` has a new `InvalidParty { role, reason }` variant, returned when an invoice is printed with parties that don't match it. An exhaustive `match` on `InvoiceError` needs an arm for it.
 - `GstCalculation` and `GstBreakdown` amounts now serialise with 2 decimal places (`"90.00"`, not `"90"`), so a consumer that compares the serialised strings sees different output.
 - `GstCalculation::reverse_calculate` rounds a given total with fractions of a paisa to paise, so its `total_amount` is the rounded total.
 
