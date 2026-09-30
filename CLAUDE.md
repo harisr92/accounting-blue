@@ -13,6 +13,7 @@ Rust library for double-entry bookkeeping, Indian GST (tax maths and B2B invoice
 | `src/reports/` | Pure report builders (balance sheet, income statement, cash flow, integrity) and their DTOs |
 | `src/tax/gst.rs` | GST rates and calculations |
 | `src/invoice/` | GSTIN, GST invoices, HSN/SAC master data, the pure print model, and the PDF renderer behind the `pdf` feature |
+| `src/returns/` | GST returns built from invoices: the pure GSTR-1 builder, its portal-schema DTOs and JSON export, and `ReturnPeriod` |
 | `src/reconciliation/` | Pure matching engine, split by pass, with scoring and the report |
 | `src/utils/` | `MemoryStorage`, `MemoryReconciliationStorage`, validation rules, Indian amount formatting |
 | `src/**/tests/` | Unit test module for its directory: `mod.rs` plus one `<module>_test.rs` per module (see [Tests](#tests)) |
@@ -110,7 +111,7 @@ cargo clippy --all-targets -- -D warnings    # without the optional `pdf` featur
 cargo test                       # unit, integration and doc tests
 cargo test --all-features        # adds the `pdf` renderer's tests
 cargo doc --no-deps --all-features
-for ex in basic_ledger gst_calculations gst_invoice reconciliation \
+for ex in basic_ledger gst_calculations gst_invoice gstr1_export reconciliation \
           pagination_demo api_pagination_patterns web_integration; do
   cargo run -q --example "$ex" > /dev/null || echo "FAILED: $ex"
 done

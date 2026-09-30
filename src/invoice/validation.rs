@@ -220,7 +220,7 @@ pub fn validate_invoice(
 }
 
 /// Only the error-severity issues, which need no HSN/SAC master
-pub(super) fn compliance_errors(invoice: &GstInvoice, as_of: NaiveDate) -> Vec<ComplianceIssue> {
+pub(crate) fn compliance_errors(invoice: &GstInvoice, as_of: NaiveDate) -> Vec<ComplianceIssue> {
     ERROR_RULES
         .iter()
         .flat_map(|rule| rule(invoice, as_of))

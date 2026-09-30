@@ -8,6 +8,7 @@ A comprehensive Rust library for double-entry bookkeeping, GST calculations, and
 - **📊 Account Management**: Support for Assets, Liabilities, Equity, Income, and Expense accounts
 - **🧾 GST Calculations**: Indian GST compliance with CGST/SGST/IGST support
 - **📄 Invoice PDFs**: Print-ready A4 tax invoices with Indian digit grouping and the total in words (optional `pdf` feature)
+- **📑 GSTR-1 Returns**: Aggregate B2B invoices into GSTR-1 and export it as GST portal JSON
 - **📈 Financial Reporting**: Balance sheets, income statements, and trial balance generation
 - **🔗 Reconciliation**: Match ledger records against bank statements and payment gateways
 - **🔍 Storage Abstraction**: Database-agnostic design with trait-based storage
@@ -159,6 +160,8 @@ per gateway.
 - **`traits`**: Storage and validation abstractions
 - **`ledger`**: Account management and transaction processing
 - **`tax`**: GST calculation engine
+- **`invoice`**: GSTINs, B2B GST invoices, HSN/SAC master data, compliance checks and printing
+- **`returns`**: GSTR-1 aggregation and export in the GST portal's JSON schema
 - **`reconciliation`**: Matching engine for bank statements and payment gateways
 - **`utils`**: Utilities including in-memory storage for testing
 
@@ -213,6 +216,9 @@ cargo run --example gst_invoice
 
 # Render a GST invoice to PDF (pass a TTF with the ₹ glyph to print the rupee sign)
 cargo run --example gst_invoice_pdf --features pdf
+
+# Aggregate a month of invoices into GSTR-1 and print the portal JSON
+cargo run --example gstr1_export
 
 # Bank reconciliation
 cargo run --example reconciliation
@@ -278,6 +284,20 @@ let pdf: Vec<u8> = invoice.to_pdf(&parties, &PdfOptions::default())?;
 ```
 
 The standard font has no `₹` glyph, so amounts are labelled `Rs.` by default. To print the rupee sign, pass a TrueType font that has it as `PdfFont::Custom` and set `currency_label` to `"₹"`. `InvoicePrint::from_invoice` gives the same formatted data without the `pdf` feature, for example to serialise as JSON.
+
+### GSTR-1
+
+`Gstr1Return::build` aggregates a filer's B2B invoices for one month into GSTR-1. It fills Table 4A (B2B supplies by buyer GSTIN, one item per rate), Table 12 (the HSN/SAC summary by code and rate) and Table 13 (documents issued). `to_json` writes the portal's offline-tool schema, with amounts as numbers rounded to paise.
+
+```rust,ignore
+use accounting_core::invoice::HsnMaster;
+use accounting_core::returns::{Gstr1Return, ReturnPeriod};
+
+let gstr1 = Gstr1Return::build(&seller_gstin, ReturnPeriod::new(2024, 11)?, &invoices, HsnMaster::global())?;
+std::fs::write("gstr1.json", gstr1.to_json()?)?;
+```
+
+Every invoice must be issued by the filer, dated in the period, carry a unique number and pass the error-severity compliance checks; otherwise `build` returns a `Gstr1Error`. Supplies to unregistered buyers (B2CL, B2CS), exports, credit and debit notes and amendments are not covered yet.
 
 ## Financial Reports
 

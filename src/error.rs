@@ -9,6 +9,7 @@ use bigdecimal::BigDecimal;
 use crate::invoice::PdfError;
 use crate::invoice::{InvoiceError, PostingError};
 use crate::reconciliation::ReconciliationError;
+use crate::returns::Gstr1Error;
 use crate::tax::GstError;
 
 /// Boxed error from a storage backend, kept as the `source` of a storage failure
@@ -29,6 +30,9 @@ pub enum Error {
     /// An invoice could not be posted to the ledger
     #[error(transparent)]
     Posting(#[from] PostingError),
+    /// A GSTR-1 return could not be built or written
+    #[error(transparent)]
+    Gstr1(#[from] Gstr1Error),
     /// Reconciliation storage or import failure
     #[error(transparent)]
     Reconciliation(#[from] ReconciliationError),

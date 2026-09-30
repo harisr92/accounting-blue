@@ -56,6 +56,7 @@ jobs:
           cargo run --example basic_ledger
           cargo run --example gst_calculations
           cargo run --example gst_invoice
+          cargo run --example gstr1_export
           cargo run --example reconciliation
           cargo run --example pagination_demo
           cargo run --example api_pagination_patterns

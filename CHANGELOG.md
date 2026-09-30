@@ -40,6 +40,20 @@
     - `TermsTooLong` for terms that don't fit below the totals on one page, since the totals, terms and signature always share a page.
     - `Invoice` for an invalid invoice or parties.
   - New example: `cargo run --example gst_invoice_pdf --features pdf [font.ttf]`.
+- GSTR-1 aggregation and export (`accounting_core::returns`):
+  - `Gstr1Return::build(&filer, ReturnPeriod, &invoices, &HsnMaster)` is pure. It aggregates a filer's B2B invoices for one month into:
+    - Table 4A (`b2b`): one `B2bParty` per buyer GSTIN, with each `B2bInvoice` split into one `B2bItem` per GST rate. 18 and 18.00 count as one rate.
+    - Table 12 (`hsn.hsn_b2b`): one `HsnRow` per HSN/SAC code and rate. The description comes from the HSN/SAC master, or from the first line if the master lacks the code, Goods (HSN codes) report their summed quantity with the unit `OTH` (`GOODS_UQC`), since line items carry no unit. Services (SAC codes, which start with `99`) report the unit `NA` (`SERVICES_UQC`) with a quantity of 0, as the portal expects.
+    - Table 13 (`doc_issue`): one series of invoices for outward supply, from the first to the last invoice by date and number.
+  - Output is ordered by buyer GSTIN, invoice date and number, and rate, whatever the input order. Trailing digits in invoice numbers compare as numbers, so `INV-9` comes before `INV-10`.
+  - `build` refuses an invoice from another seller (`SellerMismatch`), dated outside the period (`OutsidePeriod`), or that breaks an error-severity compliance rule as of its own date (`NotCompliant`, with the issues). It also refuses a number that another invoice has, ignoring case (`DuplicateInvoiceNumber`). Warnings don't block the return.
+  - `Gstr1Return::to_json` writes the GST portal's offline-tool schema: short keys (`gstin`, `fp`, `ctin`, `inum`, `idt`, `val`, `pos`, `itms`, `itm_det`, `txval`, `iamt`, `camt`, `samt`, `csamt`, ...), dates as `dd-mm-yyyy`, and amounts as JSON numbers rounded to paise.
+  - `ReturnPeriod` is a month from 2017 onwards, written `MMYYYY`.
+  - `Gstr1Error` is the error type, and it converts into `accounting_core::Error::Gstr1`.
+  - Not covered yet: B2CL, B2CS, exports, credit and debit notes, and amendments.
+  - New example: `cargo run --example gstr1_export`.
+- `Gstin` implements `PartialOrd` and `Ord`.
+- `HsnSacKind::of_code` tells goods from services by chapter: SAC codes start with `99`.
 ### Fixed
 - GST amounts are rounded to paise, so fractions of a paisa no longer reach the ledger. Before, one unit at 0.99 at 5% intra-state gave CGST = SGST = 0.02475, and `to_entries` posted a receivable of 1.0395.
   - `GstCalculation::calculate` rounds the base amount and each of CGST, SGST and IGST with `round_to_paise`.
@@ -61,7 +75,7 @@
 ### Breaking changes
 - `LedgerError` has two new variants, `AccountHasTransactions(String)` and `AccountHasChildren(String)`, returned by `Ledger::delete_account` for an account that is still in use. An exhaustive `match` on `LedgerError` needs arms for them. Code that deleted a used account through the `Ledger` now gets an error; `AccountStore::delete_account` itself is unchanged.
 - `reports::classify_cash_flow` and `reports::cash_flow` take the accounts as a new `&HashMap<String, Account>` argument, keyed by account id. `Ledger::generate_cash_flow` is unchanged and passes every account in the ledger.
-- `accounting_core::Error` has a new `Posting(PostingError)` variant, and with the `pdf` feature a `Pdf(PdfError)` variant. An exhaustive `match` on it needs arms for them.
+- `accounting_core::Error` has a new `Posting(PostingError)` variant, a new `Gstr1(Gstr1Error)` variant, and with the `pdf` feature a `Pdf(PdfError)` variant. An exhaustive `match` on it needs arms for them.
 - `InvoiceError` has a new `InvalidParty { role, reason }` variant, returned when an invoice is printed with parties that don't match it. An exhaustive `match` on `InvoiceError` needs an arm for it.
 - `GstCalculation` and `GstBreakdown` amounts now serialise with 2 decimal places (`"90.00"`, not `"90"`), so a consumer that compares the serialised strings sees different output.
 - `GstCalculation::reverse_calculate` rounds a given total with fractions of a paisa to paise, so its `total_amount` is the rounded total.
