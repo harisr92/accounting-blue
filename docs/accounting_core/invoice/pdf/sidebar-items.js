@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_CURRENCY_LABEL","DEFAULT_FOOTER_NOTE"],"enum":["FontFace","PdfError","PdfFont"],"fn":["render_pdf"],"struct":["PdfOptions"]};

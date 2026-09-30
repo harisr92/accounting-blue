@@ -200,49 +200,52 @@
 <a href=#200 id=200 data-nosnippet>200</a>//! - `api_pagination_patterns.rs` - REST API and GraphQL integration patterns
 <a href=#201 id=201 data-nosnippet>201</a>//! - `web_integration.rs` - Web framework integration examples
 <a href=#202 id=202 data-nosnippet>202</a>//! - `gst_invoice.rs` - GSTIN validation, HSN/SAC rate lookup and B2B GST invoices
-<a href=#203 id=203 data-nosnippet>203</a>//! - `reconciliation.rs` - Reconciling a ledger account against a bank statement
-<a href=#204 id=204 data-nosnippet>204</a>
-<a href=#205 id=205 data-nosnippet>205</a></span><span class="attr">#![forbid(unsafe_code)]
-<a href=#206 id=206 data-nosnippet>206</a>#![warn(missing_docs)]
-<a href=#207 id=207 data-nosnippet>207</a>#![cfg_attr(
-<a href=#208 id=208 data-nosnippet>208</a>    not(test),
-<a href=#209 id=209 data-nosnippet>209</a>    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
-<a href=#210 id=210 data-nosnippet>210</a>)]
-<a href=#211 id=211 data-nosnippet>211</a>#![cfg_attr(not(test), warn(clippy::too_many_lines))]
-<a href=#212 id=212 data-nosnippet>212</a>
-<a href=#213 id=213 data-nosnippet>213</a></span><span class="kw">pub mod </span>error;
-<a href=#214 id=214 data-nosnippet>214</a><span class="kw">pub mod </span>invoice;
-<a href=#215 id=215 data-nosnippet>215</a><span class="kw">pub mod </span>ledger;
-<a href=#216 id=216 data-nosnippet>216</a><span class="kw">pub mod </span>reconciliation;
-<a href=#217 id=217 data-nosnippet>217</a><span class="kw">pub mod </span>reports;
-<a href=#218 id=218 data-nosnippet>218</a><span class="kw">pub mod </span>tax;
-<a href=#219 id=219 data-nosnippet>219</a><span class="kw">pub mod </span>traits;
-<a href=#220 id=220 data-nosnippet>220</a><span class="kw">pub mod </span>types;
-<a href=#221 id=221 data-nosnippet>221</a><span class="kw">pub mod </span>utils;
-<a href=#222 id=222 data-nosnippet>222</a>
-<a href=#223 id=223 data-nosnippet>223</a><span class="kw">pub use </span>error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, <span class="prelude-ty">Result</span>};
-<a href=#224 id=224 data-nosnippet>224</a><span class="kw">pub use </span>invoice::{
-<a href=#225 id=225 data-nosnippet>225</a>    validate_invoice, ComplianceIssue, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster,
-<a href=#226 id=226 data-nosnippet>226</a>    HsnSacEntry, HsnSacKind, InvoiceAccounts, InvoiceError, InvoiceValidationReport, PostingError,
-<a href=#227 id=227 data-nosnippet>227</a>    PostingLeg, Severity,
-<a href=#228 id=228 data-nosnippet>228</a>};
-<a href=#229 id=229 data-nosnippet>229</a><span class="kw">pub use </span>ledger::{
-<a href=#230 id=230 data-nosnippet>230</a>    patterns, BillPaymentWithGstParams, InvoiceWithGstParams, Ledger, TransactionBuilder,
-<a href=#231 id=231 data-nosnippet>231</a>    STANDARD_CHART,
-<a href=#232 id=232 data-nosnippet>232</a>};
-<a href=#233 id=233 data-nosnippet>233</a><span class="kw">pub use </span>reports::{
-<a href=#234 id=234 data-nosnippet>234</a>    BalanceSheet, CashFlowItem, CashFlowStatement, IncomeStatement, LedgerIntegrityReport,
+<a href=#203 id=203 data-nosnippet>203</a>//! - `gst_invoice_pdf.rs` - Rendering a GST invoice to PDF (needs the `pdf` feature)
+<a href=#204 id=204 data-nosnippet>204</a>//! - `reconciliation.rs` - Reconciling a ledger account against a bank statement
+<a href=#205 id=205 data-nosnippet>205</a>
+<a href=#206 id=206 data-nosnippet>206</a></span><span class="attr">#![forbid(unsafe_code)]
+<a href=#207 id=207 data-nosnippet>207</a>#![warn(missing_docs)]
+<a href=#208 id=208 data-nosnippet>208</a>#![cfg_attr(
+<a href=#209 id=209 data-nosnippet>209</a>    not(test),
+<a href=#210 id=210 data-nosnippet>210</a>    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+<a href=#211 id=211 data-nosnippet>211</a>)]
+<a href=#212 id=212 data-nosnippet>212</a>#![cfg_attr(not(test), warn(clippy::too_many_lines))]
+<a href=#213 id=213 data-nosnippet>213</a>
+<a href=#214 id=214 data-nosnippet>214</a></span><span class="kw">pub mod </span>error;
+<a href=#215 id=215 data-nosnippet>215</a><span class="kw">pub mod </span>invoice;
+<a href=#216 id=216 data-nosnippet>216</a><span class="kw">pub mod </span>ledger;
+<a href=#217 id=217 data-nosnippet>217</a><span class="kw">pub mod </span>reconciliation;
+<a href=#218 id=218 data-nosnippet>218</a><span class="kw">pub mod </span>reports;
+<a href=#219 id=219 data-nosnippet>219</a><span class="kw">pub mod </span>tax;
+<a href=#220 id=220 data-nosnippet>220</a><span class="kw">pub mod </span>traits;
+<a href=#221 id=221 data-nosnippet>221</a><span class="kw">pub mod </span>types;
+<a href=#222 id=222 data-nosnippet>222</a><span class="kw">pub mod </span>utils;
+<a href=#223 id=223 data-nosnippet>223</a>
+<a href=#224 id=224 data-nosnippet>224</a><span class="kw">pub use </span>error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, <span class="prelude-ty">Result</span>};
+<a href=#225 id=225 data-nosnippet>225</a><span class="kw">pub use </span>invoice::{
+<a href=#226 id=226 data-nosnippet>226</a>    validate_invoice, ComplianceIssue, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster,
+<a href=#227 id=227 data-nosnippet>227</a>    HsnSacEntry, HsnSacKind, InvoiceAccounts, InvoiceError, InvoiceParties, InvoiceParty,
+<a href=#228 id=228 data-nosnippet>228</a>    InvoicePrint, InvoiceValidationReport, PostingError, PostingLeg, Severity,
+<a href=#229 id=229 data-nosnippet>229</a>};
+<a href=#230 id=230 data-nosnippet>230</a><span class="attr">#[cfg(feature = <span class="string">"pdf"</span>)]
+<a href=#231 id=231 data-nosnippet>231</a></span><span class="kw">pub use </span>invoice::{PdfError, PdfFont, PdfOptions};
+<a href=#232 id=232 data-nosnippet>232</a><span class="kw">pub use </span>ledger::{
+<a href=#233 id=233 data-nosnippet>233</a>    patterns, BillPaymentWithGstParams, InvoiceWithGstParams, Ledger, TransactionBuilder,
+<a href=#234 id=234 data-nosnippet>234</a>    STANDARD_CHART,
 <a href=#235 id=235 data-nosnippet>235</a>};
-<a href=#236 id=236 data-nosnippet>236</a><span class="kw">pub use </span>tax::{GstCalculation, GstCalculator, GstCategory, GstError, GstRate};
-<a href=#237 id=237 data-nosnippet>237</a><span class="kw">pub use </span>traits::{
-<a href=#238 id=238 data-nosnippet>238</a>    AccountStore, AccountValidator, LedgerStorage, TransactionStore, TransactionValidator,
-<a href=#239 id=239 data-nosnippet>239</a>};
-<a href=#240 id=240 data-nosnippet>240</a><span class="kw">pub use </span>types::{
-<a href=#241 id=241 data-nosnippet>241</a>    Account, AccountBalance, AccountType, Entry, EntryType, ListResponse, PaginatedResponse,
-<a href=#242 id=242 data-nosnippet>242</a>    PaginationOption, PaginationParams, Transaction, TransactionFilter, TrialBalance,
-<a href=#243 id=243 data-nosnippet>243</a>};
-<a href=#244 id=244 data-nosnippet>244</a><span class="kw">pub use </span>utils::validation::{DefaultAccountValidator, DefaultTransactionValidator};
-<a href=#245 id=245 data-nosnippet>245</a>
-<a href=#246 id=246 data-nosnippet>246</a><span class="attr">#[cfg(test)]
-<a href=#247 id=247 data-nosnippet>247</a></span><span class="kw">mod </span>tests;
+<a href=#236 id=236 data-nosnippet>236</a><span class="kw">pub use </span>reports::{
+<a href=#237 id=237 data-nosnippet>237</a>    BalanceSheet, CashFlowItem, CashFlowStatement, IncomeStatement, LedgerIntegrityReport,
+<a href=#238 id=238 data-nosnippet>238</a>};
+<a href=#239 id=239 data-nosnippet>239</a><span class="kw">pub use </span>tax::{GstCalculation, GstCalculator, GstCategory, GstError, GstRate};
+<a href=#240 id=240 data-nosnippet>240</a><span class="kw">pub use </span>traits::{
+<a href=#241 id=241 data-nosnippet>241</a>    AccountStore, AccountValidator, LedgerStorage, TransactionStore, TransactionValidator,
+<a href=#242 id=242 data-nosnippet>242</a>};
+<a href=#243 id=243 data-nosnippet>243</a><span class="kw">pub use </span>types::{
+<a href=#244 id=244 data-nosnippet>244</a>    Account, AccountBalance, AccountType, Entry, EntryType, ListResponse, PaginatedResponse,
+<a href=#245 id=245 data-nosnippet>245</a>    PaginationOption, PaginationParams, Transaction, TransactionFilter, TrialBalance,
+<a href=#246 id=246 data-nosnippet>246</a>};
+<a href=#247 id=247 data-nosnippet>247</a><span class="kw">pub use </span>utils::validation::{DefaultAccountValidator, DefaultTransactionValidator};
+<a href=#248 id=248 data-nosnippet>248</a>
+<a href=#249 id=249 data-nosnippet>249</a><span class="attr">#[cfg(test)]
+<a href=#250 id=250 data-nosnippet>250</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["memory_storage","validation"]};
+window.SIDEBAR_ITEMS = {"mod":["formatting","memory_storage","validation"]};

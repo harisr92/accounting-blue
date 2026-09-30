@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PRINT_DATE_FORMAT","TAX_INVOICE_TITLE"],"enum":["PartyError","PartyRole"],"fn":["paginate_rows"],"struct":["InvoiceParties","InvoiceParty","InvoicePrint","PrintRow","RowCapacity","TaxLine"]};

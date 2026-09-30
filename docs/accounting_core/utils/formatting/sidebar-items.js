@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["amount_in_words","format_inr"]};
