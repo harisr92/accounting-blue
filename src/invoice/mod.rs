@@ -15,6 +15,11 @@
 //! ledger through the accounts named in [`InvoiceAccounts`]; the posting balances by
 //! construction, since the total is the taxable value plus the tax.
 //!
+//! [`InvoicePrint::from_invoice`] builds the printable view of an invoice from the
+//! [`InvoiceParties`] that issue and receive it, with amounts in Indian digit grouping and the
+//! total in words. With the `pdf` feature, `GstInvoice::to_pdf` renders that view as an A4 PDF
+//! (see the `pdf` module).
+//!
 //! The tax arithmetic comes from [`crate::tax::gst`]. The invoice types are also re-exported at the
 //! crate root. Validation failures are typed: [`InvoiceError`] carries a [`GstinError`],
 //! [`InvoiceNumberError`] or [`LineItemError`] saying which rule was broken.
@@ -52,12 +57,24 @@
 //! ```
 
 pub mod hsn_lookup;
+#[cfg(feature = "pdf")]
+pub mod pdf;
 pub mod posting;
+pub mod print;
 pub mod types;
 pub mod validation;
 
 pub use hsn_lookup::{HsnMaster, HsnSacEntry, HsnSacKind};
+#[cfg(feature = "pdf")]
+pub use pdf::{
+    render_pdf, FontFace, PdfError, PdfFont, PdfOptions, DEFAULT_CURRENCY_LABEL,
+    DEFAULT_FOOTER_NOTE,
+};
 pub use posting::{posting_legs, InvoiceAccounts, PostingError, PostingLeg};
+pub use print::{
+    paginate_rows, InvoiceParties, InvoiceParty, InvoicePrint, PartyError, PartyRole, PrintRow,
+    RowCapacity, TaxLine,
+};
 pub use types::{
     GstBreakdown, GstInvoice, GstLineItem, Gstin, GstinError, InvoiceError, InvoiceNumberError,
     LineItemError,
