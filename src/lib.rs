@@ -9,6 +9,7 @@
 //! - **Account management**: Support for Assets, Liabilities, Equity, Income, and Expense accounts
 //! - **Paginated responses**: Efficient pagination for large datasets with comprehensive metadata
 //! - **GST calculations**: Indian GST compliance with CGST/SGST/IGST support
+//! - **GST returns**: GSTR-1 aggregation and export in the GST portal's JSON schema
 //! - **Financial reporting**: Balance sheets, income statements, and trial balance generation
 //! - **Reconciliation**: Bank statement and payment gateway reconciliation
 //! - **Storage abstraction**: Database-agnostic design with trait-based storage
@@ -201,6 +202,7 @@
 //! - `web_integration.rs` - Web framework integration examples
 //! - `gst_invoice.rs` - GSTIN validation, HSN/SAC rate lookup and B2B GST invoices
 //! - `gst_invoice_pdf.rs` - Rendering a GST invoice to PDF (needs the `pdf` feature)
+//! - `gstr1_export.rs` - Aggregating a month of invoices into GSTR-1 and exporting it as JSON
 //! - `reconciliation.rs` - Reconciling a ledger account against a bank statement
 
 #![forbid(unsafe_code)]
@@ -216,6 +218,7 @@ pub mod invoice;
 pub mod ledger;
 pub mod reconciliation;
 pub mod reports;
+pub mod returns;
 pub mod tax;
 pub mod traits;
 pub mod types;
@@ -236,6 +239,7 @@ pub use ledger::{
 pub use reports::{
     BalanceSheet, CashFlowItem, CashFlowStatement, IncomeStatement, LedgerIntegrityReport,
 };
+pub use returns::{Gstr1Error, Gstr1Return, ReturnPeriod};
 pub use tax::{GstCalculation, GstCalculator, GstCategory, GstError, GstRate};
 pub use traits::{
     AccountStore, AccountValidator, LedgerStorage, TransactionStore, TransactionValidator,

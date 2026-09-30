@@ -35,7 +35,7 @@ const MAX_GST_RATE: u32 = 100;
 ///
 /// Lowercase input is accepted and normalised to uppercase. Deserialising goes through the same
 /// validation, so a `Gstin` value is always well-formed.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct Gstin(String);
 

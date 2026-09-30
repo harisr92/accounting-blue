@@ -31,6 +31,23 @@ pub enum HsnSacKind {
     Sac,
 }
 
+/// Chapter of the classification that holds every SAC code; all other chapters are goods
+const SAC_CHAPTER: &str = "99";
+
+impl HsnSacKind {
+    /// Whether a code classifies goods or services, from its chapter: SAC codes start with `99`
+    ///
+    /// The code's shape is not checked; see [`HsnMaster::lookup`] for well-formed codes.
+    #[must_use]
+    pub fn of_code(code: &str) -> Self {
+        if code.starts_with(SAC_CHAPTER) {
+            Self::Sac
+        } else {
+            Self::Hsn
+        }
+    }
+}
+
 /// One code in the master
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HsnSacEntry {
