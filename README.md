@@ -7,6 +7,7 @@ A comprehensive Rust library for double-entry bookkeeping, GST calculations, and
 - **🏦 Double-entry Bookkeeping**: Complete transaction validation and balance tracking
 - **📊 Account Management**: Support for Assets, Liabilities, Equity, Income, and Expense accounts
 - **🧾 GST Calculations**: Indian GST compliance with CGST/SGST/IGST support
+- **📄 Invoice PDFs**: Print-ready A4 tax invoices with Indian digit grouping and the total in words (optional `pdf` feature)
 - **📈 Financial Reporting**: Balance sheets, income statements, and trial balance generation
 - **🔗 Reconciliation**: Match ledger records against bank statements and payment gateways
 - **🔍 Storage Abstraction**: Database-agnostic design with trait-based storage
@@ -210,6 +211,9 @@ cargo run --example gst_calculations
 # GSTIN validation, HSN/SAC rates and B2B invoices
 cargo run --example gst_invoice
 
+# Render a GST invoice to PDF (pass a TTF with the ₹ glyph to print the rupee sign)
+cargo run --example gst_invoice_pdf --features pdf
+
 # Bank reconciliation
 cargo run --example reconciliation
 ```
@@ -253,6 +257,27 @@ The library supports Indian GST with:
 - **Standard rates**: 0%, 5%, 12%, 18%, 28%
 - **Reverse calculations**: From total amount to base amount
 - **Multi-item invoices**: Complex invoices with different rates
+
+### Invoice PDFs
+
+Enable the `pdf` feature to render an invoice as an A4 PDF. It needs Rust 1.88 because of `printpdf`.
+
+```toml
+[dependencies]
+accounting-core = { version = "0.2", features = ["pdf"] }
+```
+
+```rust,ignore
+use accounting_core::invoice::{InvoiceParties, InvoiceParty, PdfOptions};
+
+let parties = InvoiceParties::new(
+    InvoiceParty::new("Acme Services", vec!["Mumbai".into()], seller_gstin),
+    InvoiceParty::new("Globex Ltd", vec!["Bengaluru".into()], buyer_gstin),
+);
+let pdf: Vec<u8> = invoice.to_pdf(&parties, &PdfOptions::default())?;
+```
+
+The standard font has no `₹` glyph, so amounts are labelled `Rs.` by default. To print the rupee sign, pass a TrueType font that has it as `PdfFont::Custom` and set `currency_label` to `"₹"`. `InvoicePrint::from_invoice` gives the same formatted data without the `pdf` feature, for example to serialise as JSON.
 
 ## Financial Reports
 

@@ -1,6 +1,7 @@
 //! GST invoice domain types
 
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
+use super::print::{PartyError, PartyRole};
 use crate::tax::gst::{GstCalculation, GstError, GstRate};
 use bigdecimal::{BigDecimal, Signed};
 use chrono::NaiveDate;
@@ -563,6 +564,14 @@ pub enum InvoiceError {
     /// The invoice has no line items
     #[error("an invoice needs at least one line item")]
     EmptyInvoice,
+    /// A party's details can't be printed on the invoice
+    #[error("invalid {role}: {reason}")]
+    InvalidParty {
+        /// Which party was rejected
+        role: PartyRole,
+        /// The first rule it breaks
+        reason: PartyError,
+    },
     /// The GST rate is inconsistent
     #[error(transparent)]
     Gst(#[from] GstError),

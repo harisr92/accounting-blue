@@ -48,6 +48,9 @@ jobs:
       - name: Run tests
         run: cargo test --verbose
 
+      - name: Run tests with all features
+        run: cargo test --all-features --verbose
+
       - name: Run examples
         run: |
           cargo run --example basic_ledger
@@ -57,6 +60,7 @@ jobs:
           cargo run --example pagination_demo
           cargo run --example api_pagination_patterns
           cargo run --example web_integration
+          cargo run --features pdf --example gst_invoice_pdf
 
   coverage:
     name: Coverage

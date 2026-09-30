@@ -19,12 +19,16 @@ thiserror = "2.0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 async-trait = "0.1"
 serde_json = "1.0"
+# PDF export, behind the `pdf` feature (needs Rust 1.88)
+printpdf = { version = "0.12", default-features = false, optional = true }
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = []
+# Render GST invoices to PDF with printpdf
+pdf = ["dep:printpdf"]
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -49,3 +53,8 @@ path = "examples/gst_invoice.rs"
 [[example]]
 name = "reconciliation"
 path = "examples/reconciliation.rs"
+
+[[example]]
+name = "gst_invoice_pdf"
+path = "examples/gst_invoice_pdf.rs"
+required-features = ["pdf"]
