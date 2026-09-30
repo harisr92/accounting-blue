@@ -104,25 +104,114 @@ pub enum CashFlowActivity {
     Financing,
 }
 
-/// Classify a transaction by keywords in its account ids and description
-///
-/// This is a heuristic: financing if any account id mentions `payable`, `loan`, `equity` or
-/// `capital`; investing if an asset or cash account is involved and the description mentions
-/// equipment; operating otherwise.
-#[must_use]
-pub fn classify_cash_flow(transaction: &Transaction) -> CashFlowActivity {
-    let mentions = |words: &[&str]| {
-        transaction
-            .entries
-            .iter()
-            .any(|e| words.iter().any(|word| e.account_id.contains(word)))
-    };
+/// Words in a liability's id or name that mark it as borrowing or an amount owed to owners, a
+/// financing activity
+const BORROWING_WORDS: [&str; 9] = [
+    "loan",
+    "borrow",
+    "debt",
+    "debenture",
+    "mortgage",
+    "overdraft",
+    "note payable",
+    "notes payable",
+    "dividend",
+];
 
-    if mentions(&["payable", "loan", "equity", "capital"]) {
+/// Words in an asset's id or name that mark it as long-lived, so buying or selling it is investing
+const FIXED_ASSET_WORDS: [&str; 8] = [
+    "fixed asset",
+    "equipment",
+    "machinery",
+    "plant",
+    "furniture",
+    "vehicle",
+    "building",
+    "property",
+];
+
+/// Words in an asset's id or name that mark it as a contra account against a long-lived asset
+const CONTRA_ASSET_WORDS: [&str; 4] =
+    ["depreciation", "amortisation", "amortization", "impairment"];
+
+/// Whether any of `words` appears in `text`, ignoring case and treating `_` and `-` as spaces
+fn mentions_any(text: &str, words: &[&str]) -> bool {
+    let text = text.to_lowercase().replace(['_', '-'], " ");
+    words.iter().any(|word| text.contains(word))
+}
+
+/// Whether any of `words` appears in the account's id or name, ignoring case
+fn account_mentions(account: &Account, words: &[&str]) -> bool {
+    mentions_any(&account.id, words) || mentions_any(&account.name, words)
+}
+
+/// A contra account against a long-lived asset, such as accumulated depreciation
+fn is_contra_asset(account: &Account) -> bool {
+    account.account_type == AccountType::Asset && account_mentions(account, &CONTRA_ASSET_WORDS)
+}
+
+/// A long-lived asset: property, plant, equipment and the like, but not its contra accounts
+fn is_fixed_asset(account: &Account) -> bool {
+    account.account_type == AccountType::Asset
+        && account_mentions(account, &FIXED_ASSET_WORDS)
+        && !is_contra_asset(account)
+}
+
+/// What a long-lived asset can be exchanged for: another asset, such as cash, or a liability
+fn is_consideration(account: &Account) -> bool {
+    match account.account_type {
+        AccountType::Asset => !is_fixed_asset(account) && !is_contra_asset(account),
+        AccountType::Liability => true,
+        _ => false,
+    }
+}
+
+/// Classify a transaction by the accounts it posts to
+///
+/// `accounts` is keyed by account id; an entry whose account is missing from it counts as
+/// operating. This is a heuristic:
+///
+/// - **Financing** if an entry is on a liability account whose id or name mentions a loan,
+///   borrowing, debt, debentures, a mortgage, an overdraft, notes payable or dividends, or on an
+///   equity account alongside an asset account (owner contributions and withdrawals). A closing
+///   entry between income or expense accounts and retained earnings moves no cash, so it is not
+///   financing.
+/// - **Investing** if an entry is on a long-lived asset account (its id or name mentions a fixed
+///   asset, equipment, machinery, plant, furniture, a vehicle, a building or property) and another
+///   is on what it is exchanged for: a non-fixed asset such as cash, or a liability for a
+///   purchase on credit. Accumulated depreciation, amortisation and impairment accounts are not
+///   long-lived assets, and the description is not read, so depreciation, repairs and write-downs
+///   are not investing.
+/// - **Operating** otherwise, including purchases on trade payables.
+///
+/// Keywords match case-insensitively with `_` and `-` read as spaces, so both descriptive ids
+/// (`loan_payable`, `fixed_asset`) and numbered charts such as
+/// [`STANDARD_CHART`](crate::STANDARD_CHART) (`2100` "Loans Payable") classify.
+#[must_use]
+pub fn classify_cash_flow(
+    transaction: &Transaction,
+    accounts: &HashMap<String, Account>,
+) -> CashFlowActivity {
+    let posted: Vec<&Account> = transaction
+        .entries
+        .iter()
+        .filter_map(|entry| accounts.get(&entry.account_id))
+        .collect();
+
+    let posts_to_asset = posted
+        .iter()
+        .any(|account| account.account_type == AccountType::Asset);
+    let is_financing = |account: &&Account| match account.account_type {
+        AccountType::Equity => posts_to_asset,
+        AccountType::Liability => account_mentions(account, &BORROWING_WORDS),
+        _ => false,
+    };
+    let is_investing = posted.iter().any(|account| is_fixed_asset(account))
+        && posted.iter().any(|account| is_consideration(account));
+
+    if posted.iter().any(is_financing) {
         CashFlowActivity::Financing
-    } else if mentions(&["asset", "cash"])
-        && transaction.description.to_lowercase().contains("equipment")
-    {
+    } else if is_investing {
         CashFlowActivity::Investing
     } else {
         CashFlowActivity::Operating
@@ -130,16 +219,19 @@ pub fn classify_cash_flow(transaction: &Transaction) -> CashFlowActivity {
 }
 
 /// Simplified cash flow statement: each transaction's total debits, in its classified section
+///
+/// `accounts` is keyed by account id and is used by [`classify_cash_flow`].
 #[must_use]
 pub fn cash_flow(
     start_date: NaiveDate,
     end_date: NaiveDate,
     transactions: &[Transaction],
+    accounts: &HashMap<String, Account>,
 ) -> CashFlowStatement {
     let section = |activity: CashFlowActivity| -> Vec<CashFlowItem> {
         transactions
             .iter()
-            .filter(|t| classify_cash_flow(t) == activity)
+            .filter(|t| classify_cash_flow(t, accounts) == activity)
             .map(|t| CashFlowItem {
                 description: t.description.clone(),
                 amount: t.total_debits(),

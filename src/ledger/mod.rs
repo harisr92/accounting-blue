@@ -180,13 +180,20 @@ impl<S: LedgerStorage> Ledger<S> {
         accounts::update_account(&mut self.storage, &*self.account_validator, account).await
     }
 
-    /// Delete an account
+    /// Delete an account that no transaction or child account refers to
+    ///
+    /// Deleting a used account would leave its transactions pointing at nothing, and reports built
+    /// afterwards could no longer tell what the account was. Delete its transactions and move or
+    /// delete its children first.
     ///
     /// # Errors
     ///
-    /// [`LedgerError::AccountNotFound`](crate::LedgerError::AccountNotFound) or a storage error.
+    /// [`LedgerError::AccountNotFound`](crate::LedgerError::AccountNotFound),
+    /// [`LedgerError::AccountHasChildren`](crate::LedgerError::AccountHasChildren),
+    /// [`LedgerError::AccountHasTransactions`](crate::LedgerError::AccountHasTransactions) or a
+    /// storage error. The account is left in place on any error.
     pub async fn delete_account(&mut self, account_id: &str) -> LedgerResult<()> {
-        self.storage.delete_account(account_id).await
+        accounts::delete_account(&mut self.storage, account_id).await
     }
 
     /// Create the accounts in [`STANDARD_CHART`], keyed by their short name
@@ -393,7 +400,8 @@ impl<S: LedgerStorage> Ledger<S> {
         Ok(reports::income_statement(start_date, end_date, by_type))
     }
 
-    /// Simplified cash flow statement for a period
+    /// Simplified cash flow statement for a period, classified by
+    /// [`reports::classify_cash_flow`]
     ///
     /// # Errors
     ///
@@ -406,7 +414,13 @@ impl<S: LedgerStorage> Ledger<S> {
         let period = self
             .list_all_transactions(Some(start_date), Some(end_date))
             .await?;
-        Ok(reports::cash_flow(start_date, end_date, &period))
+        let accounts: HashMap<String, Account> = self
+            .list_all_accounts()
+            .await?
+            .into_iter()
+            .map(|account| (account.id.clone(), account))
+            .collect();
+        Ok(reports::cash_flow(start_date, end_date, &period, &accounts))
     }
 
     /// Check that the trial balance and balance sheet both balance

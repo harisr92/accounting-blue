@@ -87,6 +87,12 @@ pub enum LedgerError {
     /// Following parent links from this account leads back to it
     #[error("account hierarchy has a cycle through '{0}'")]
     AccountCycle(String),
+    /// The account has transactions posted to it, so deleting it would orphan them
+    #[error("account '{0}' has posted transactions and cannot be deleted")]
+    AccountHasTransactions(String),
+    /// The account is the parent of other accounts, so deleting it would orphan them
+    #[error("account '{0}' has child accounts and cannot be deleted")]
+    AccountHasChildren(String),
     /// A transaction needs a debit and a credit leg at least
     #[error("transaction must have at least two entries for double-entry bookkeeping")]
     TooFewEntries,

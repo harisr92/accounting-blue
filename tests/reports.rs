@@ -309,3 +309,119 @@ async fn test_reports_ignore_transactions_after_the_report_date() -> LedgerResul
     assert!(flow.financing_activities.is_empty());
     Ok(())
 }
+
+#[tokio::test]
+async fn test_cash_flow_classifies_a_standard_chart_ledger() -> LedgerResult<()> {
+    let mut ledger = Ledger::new(MemoryStorage::new());
+    let chart = ledger.setup_standard_chart_of_accounts().await?;
+    let id = |key: &str| chart[key].id.clone();
+    ledger
+        .create_account("1500", "Office Equipment", AccountType::Asset, None)
+        .await?;
+
+    let transactions = [
+        patterns::create_owner_investment(
+            "invest",
+            date(1, 1),
+            "Owner investment",
+            id("cash"),
+            id("owners_equity"),
+            BigDecimal::from(50_000),
+        )?,
+        patterns::create_loan_received(
+            "loan",
+            date(1, 2),
+            "Bank loan",
+            id("cash"),
+            id("loans_payable"),
+            BigDecimal::from(20_000),
+        )?,
+        patterns::create_asset_purchase(
+            "equip",
+            date(1, 3),
+            "Bought equipment",
+            "1500",
+            id("cash"),
+            BigDecimal::from(15_000),
+        )?,
+        patterns::create_sales_transaction(
+            "sale",
+            date(1, 10),
+            "January sales",
+            id("cash"),
+            id("sales_revenue"),
+            BigDecimal::from(8_000),
+        )?,
+        TransactionBuilder::new("stock", date(1, 12), "Stock bought on credit")
+            .debit(id("inventory"), BigDecimal::from(3_000), None)
+            .credit(id("accounts_payable"), BigDecimal::from(3_000), None)
+            .build()?,
+    ];
+    for transaction in transactions {
+        ledger.record_transaction(transaction).await?;
+    }
+
+    let flow = ledger.generate_cash_flow(date(1, 1), date(1, 31)).await?;
+
+    assert_eq!(flow.net_financing_cash_flow, BigDecimal::from(70_000));
+    assert_eq!(flow.net_investing_cash_flow, BigDecimal::from(15_000));
+    // The sale and the purchase on trade payables
+    assert_eq!(flow.net_operating_cash_flow, BigDecimal::from(11_000));
+    assert_eq!(flow.operating_activities.len(), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_depreciation_and_repairs_stay_out_of_investing() -> LedgerResult<()> {
+    let mut ledger = Ledger::new(MemoryStorage::new());
+    let chart = ledger.setup_standard_chart_of_accounts().await?;
+    let id = |key: &str| chart[key].id.clone();
+    for (account_id, name, account_type) in [
+        ("1500", "Office Equipment", AccountType::Asset),
+        (
+            "1510",
+            "Accumulated Depreciation - Equipment",
+            AccountType::Asset,
+        ),
+        ("6200", "Depreciation Expense", AccountType::Expense),
+        ("6300", "Repairs and Maintenance", AccountType::Expense),
+    ] {
+        ledger
+            .create_account(account_id, name, account_type, None)
+            .await?;
+    }
+
+    let transactions = [
+        patterns::create_asset_purchase(
+            "equip",
+            date(1, 3),
+            "Bought equipment",
+            "1500",
+            id("cash"),
+            BigDecimal::from(12_000),
+        )?,
+        TransactionBuilder::new("dep", date(1, 31), "Depreciation on equipment")
+            .debit("6200", BigDecimal::from(1_000), None)
+            .credit("1510", BigDecimal::from(1_000), None)
+            .build()?,
+        patterns::create_expense_payment(
+            "repair",
+            date(1, 20),
+            "Equipment repair",
+            "6300",
+            id("cash"),
+            BigDecimal::from(500),
+        )?,
+    ];
+    for transaction in transactions {
+        ledger.record_transaction(transaction).await?;
+    }
+
+    let flow = ledger.generate_cash_flow(date(1, 1), date(1, 31)).await?;
+
+    assert_eq!(flow.investing_activities.len(), 1);
+    assert_eq!(flow.net_investing_cash_flow, BigDecimal::from(12_000));
+    assert_eq!(flow.operating_activities.len(), 2);
+    assert_eq!(flow.net_operating_cash_flow, BigDecimal::from(1_500));
+    Ok(())
+}

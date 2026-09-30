@@ -1,10 +1,11 @@
-//! Account operations: creation, updates and hierarchy lookups against an [`AccountStore`]
+//! Account operations: creation, updates, deletion and hierarchy lookups against an
+//! [`AccountStore`]
 
 use std::collections::{HashMap, HashSet};
 
 use crate::error::{LedgerError, LedgerResult};
-use crate::traits::{AccountStore, AccountValidator};
-use crate::types::{Account, AccountType, PaginationOption};
+use crate::traits::{AccountStore, AccountValidator, LedgerStorage};
+use crate::types::{Account, AccountType, PaginationOption, PaginationParams, TransactionFilter};
 
 /// A standard chart of accounts for a small business: `(key, id, name, type)`
 ///
@@ -111,6 +112,31 @@ pub(crate) async fn update_account<S: AccountStore>(
 ) -> LedgerResult<()> {
     validator.validate_account(account)?;
     store.update_account(account).await
+}
+
+/// Delete an account that exists and that no transaction or child account refers to
+pub(crate) async fn delete_account<S: LedgerStorage>(
+    store: &mut S,
+    account_id: &str,
+) -> LedgerResult<()> {
+    require_account(store, account_id).await?;
+
+    if !child_accounts(store, account_id).await?.is_empty() {
+        return Err(LedgerError::AccountHasChildren(account_id.to_string()));
+    }
+
+    let filter = TransactionFilter::default().for_account(account_id);
+    let first = PaginationOption::Paginated(PaginationParams::new(1, 1)?);
+    if !store
+        .list_transactions(&filter, first)
+        .await?
+        .items()
+        .is_empty()
+    {
+        return Err(LedgerError::AccountHasTransactions(account_id.to_string()));
+    }
+
+    store.delete_account(account_id).await
 }
 
 /// Create every account in [`STANDARD_CHART`]

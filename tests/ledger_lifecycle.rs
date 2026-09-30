@@ -2,7 +2,8 @@
 //! running balances they leave behind
 
 use accounting_core::{
-    utils::MemoryStorage, AccountType, Ledger, LedgerError, LedgerResult, TransactionBuilder,
+    utils::MemoryStorage, AccountStore, AccountType, Ledger, LedgerError, LedgerResult,
+    TransactionBuilder,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -280,11 +281,56 @@ async fn test_deleting_a_transaction_skips_accounts_deleted_since() -> LedgerRes
         .credit("cash", BigDecimal::from(300), None)
         .build()?;
     ledger.record_transaction(rent).await?;
-    ledger.delete_account("rent").await?;
+    // The ledger refuses to delete a used account, but a backend can still lose one
+    let mut storage = ledger.into_storage();
+    storage.delete_account("rent").await?;
+    let mut ledger = Ledger::new(storage);
 
     ledger.delete_transaction("rent-jan").await?;
 
     assert!(ledger.get_transaction("rent-jan").await?.is_none());
     assert_eq!(balance(&ledger, "cash").await, BigDecimal::from(0));
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_an_account_with_transactions_cannot_be_deleted() -> LedgerResult<()> {
+    let mut ledger = ledger_with_accounts().await?;
+    let rent = TransactionBuilder::new("rent-jan", date(1, 10), "January rent")
+        .debit("rent", BigDecimal::from(300), None)
+        .credit("cash", BigDecimal::from(300), None)
+        .build()?;
+    ledger.record_transaction(rent).await?;
+
+    assert!(matches!(
+        ledger.delete_account("rent").await,
+        Err(LedgerError::AccountHasTransactions(id)) if id == "rent"
+    ));
+    assert_eq!(balance(&ledger, "rent").await, BigDecimal::from(300));
+    assert!(ledger.validate_integrity(date(1, 31)).await?.is_valid);
+
+    // Once its transactions are gone, the account can go too
+    ledger.delete_transaction("rent-jan").await?;
+    ledger.delete_account("rent").await?;
+    assert!(ledger.get_account("rent").await?.is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_a_parent_account_cannot_be_deleted_before_its_children() -> LedgerResult<()> {
+    let mut ledger = ledger_with_accounts().await?;
+    ledger
+        .create_account("till", "Till", AccountType::Asset, Some("cash".to_string()))
+        .await?;
+
+    assert!(matches!(
+        ledger.delete_account("cash").await,
+        Err(LedgerError::AccountHasChildren(id)) if id == "cash"
+    ));
+    assert!(ledger.get_account("cash").await?.is_some());
+
+    ledger.delete_account("till").await?;
+    ledger.delete_account("cash").await?;
+    assert!(ledger.get_account("cash").await?.is_none());
     Ok(())
 }
