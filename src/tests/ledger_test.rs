@@ -1,5 +1,6 @@
 use crate::error::LedgerError;
 use crate::ledger::{patterns, Ledger, STANDARD_CHART};
+use crate::traits::AccountStore;
 use crate::types::{AccountType, PaginatedResponse, PaginationOption, PaginationParams};
 use crate::utils::memory_storage::MemoryStorage;
 use bigdecimal::BigDecimal;
@@ -550,7 +551,10 @@ async fn test_transactions_on_a_deleted_account_can_still_be_removed() {
     )
     .unwrap();
     ledger.record_transaction(sale.clone()).await.unwrap();
-    ledger.delete_account("revenue").await.unwrap();
+    // The ledger refuses to delete a used account, but a backend can still lose one
+    let mut storage = ledger.into_storage();
+    storage.delete_account("revenue").await.unwrap();
+    let mut ledger = Ledger::new(storage);
 
     // Updating to entries on an account that is gone still fails...
     let result = ledger.update_transaction(&sale).await;
