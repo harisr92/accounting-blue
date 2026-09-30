@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["gstr1","period"]};

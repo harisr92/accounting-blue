@@ -220,7 +220,7 @@
 <a href=#220 id=220 data-nosnippet>220</a>}
 <a href=#221 id=221 data-nosnippet>221</a>
 <a href=#222 id=222 data-nosnippet>222</a><span class="doccomment">/// Only the error-severity issues, which need no HSN/SAC master
-<a href=#223 id=223 data-nosnippet>223</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>compliance_errors(invoice: <span class="kw-2">&amp;</span>GstInvoice, as_of: NaiveDate) -&gt; Vec&lt;ComplianceIssue&gt; {
+<a href=#223 id=223 data-nosnippet>223</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>compliance_errors(invoice: <span class="kw-2">&amp;</span>GstInvoice, as_of: NaiveDate) -&gt; Vec&lt;ComplianceIssue&gt; {
 <a href=#224 id=224 data-nosnippet>224</a>    ERROR_RULES
 <a href=#225 id=225 data-nosnippet>225</a>        .iter()
 <a href=#226 id=226 data-nosnippet>226</a>        .flat_map(|rule| rule(invoice, as_of))
