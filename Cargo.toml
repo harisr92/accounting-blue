@@ -51,6 +51,10 @@ name = "gst_invoice"
 path = "examples/gst_invoice.rs"
 
 [[example]]
+name = "gstr1_export"
+path = "examples/gstr1_export.rs"
+
+[[example]]
 name = "reconciliation"
 path = "examples/reconciliation.rs"
 
