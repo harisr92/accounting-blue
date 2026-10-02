@@ -21,6 +21,16 @@ const INVOICE_NUMBER_MAX_LEN: usize = 16;
 /// Largest GST rate a line item may carry, as a percentage
 const MAX_GST_RATE: u32 = 100;
 
+/// Invoice value above which an inter-state supply to an unregistered buyer is B2CL, for
+/// invoices dated on or after [`b2cl_threshold_revised_from`] (Notification 12/2024-Central Tax)
+pub const B2CL_THRESHOLD_RUPEES: u32 = 100_000;
+
+/// The B2CL threshold for invoices dated before [`b2cl_threshold_revised_from`]
+pub const B2CL_THRESHOLD_BEFORE_REVISION_RUPEES: u32 = 250_000;
+
+/// Year, month and day from which [`B2CL_THRESHOLD_RUPEES`] applies
+const B2CL_THRESHOLD_REVISED_FROM: (i32, u32, u32) = (2024, 8, 1);
+
 /// A validated GST Identification Number
 ///
 /// A GSTIN is 15 characters, laid out as:
@@ -131,13 +141,26 @@ fn check_rule(holds: bool, error: GstinError) -> Result<(), GstinError> {
     }
 }
 
+/// Code of the centre jurisdiction, which a GSTIN may start with but which is never a place of
+/// supply
+const CENTRE_JURISDICTION_CODE: u32 = 99;
+
 /// State and union territory codes, plus `97` (other territory) and `99` (centre jurisdiction)
 fn is_valid_state_code(code: &[u8]) -> bool {
-    code.iter().all(u8::is_ascii_digit)
-        && matches!(
-            code.iter().fold(0u32, |n, d| n * 10 + u32::from(d - b'0')),
-            1..=38 | 97 | 99
-        )
+    state_code_number(code).is_some_and(|n| is_place_of_supply(n) || n == CENTRE_JURISDICTION_CODE)
+}
+
+/// State and union territory codes, plus `97` (other territory): the codes goods or services can
+/// be supplied to
+fn is_place_of_supply(code: u32) -> bool {
+    matches!(code, 1..=38 | 97)
+}
+
+/// A state code's digits as a number, if they are all digits
+fn state_code_number(code: &[u8]) -> Option<u32> {
+    code.iter().try_fold(0u32, |n, d| {
+        d.is_ascii_digit().then(|| n * 10 + u32::from(d - b'0'))
+    })
 }
 
 /// Whether ten characters have the shape of a PAN: five letters, four digits, one letter
@@ -192,6 +215,169 @@ impl fmt::Display for Gstin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
     }
+}
+
+/// A validated two-digit GST state code naming a place of supply, such as `27` for Maharashtra
+///
+/// Accepts the state and union territory codes `01`-`38`, plus `97` (other territory). Unlike a
+/// [`Gstin`], it refuses `99` (centre jurisdiction), which is a registration and never a place of
+/// supply. Deserialising goes through [`StateCode::parse`].
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct StateCode(String);
+
+impl StateCode {
+    /// Parse and validate a state code
+    ///
+    /// # Errors
+    ///
+    /// [`InvoiceError::InvalidStateCode`] unless the value is two digits naming a state, a union
+    /// territory or `97` (other territory).
+    pub fn parse(value: &str) -> Result<Self, InvoiceError> {
+        if value.len() == 2 && state_code_number(value.as_bytes()).is_some_and(is_place_of_supply) {
+            Ok(Self(value.to_string()))
+        } else {
+            Err(InvoiceError::InvalidStateCode(value.to_string()))
+        }
+    }
+
+    /// The code as a string
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl FromStr for StateCode {
+    type Err = InvoiceError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s)
+    }
+}
+
+impl TryFrom<String> for StateCode {
+    type Error = InvoiceError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::parse(&value)
+    }
+}
+
+impl From<StateCode> for String {
+    fn from(code: StateCode) -> Self {
+        code.0
+    }
+}
+
+impl fmt::Display for StateCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+/// Who an invoice is issued to
+///
+/// A registered buyer is identified by its GSTIN, whose state is the place of supply. An
+/// unregistered buyer (a B2C supply) has no GSTIN, so the invoice names the place of supply.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Recipient {
+    /// A buyer registered under GST
+    Registered(Gstin),
+    /// A buyer without a GSTIN
+    Unregistered {
+        /// State the goods or services are supplied to
+        place_of_supply: StateCode,
+    },
+}
+
+impl Recipient {
+    /// An unregistered buyer receiving the supply in `place_of_supply`
+    #[must_use]
+    pub fn unregistered(place_of_supply: StateCode) -> Self {
+        Self::Unregistered { place_of_supply }
+    }
+
+    /// State code of the place of supply
+    #[must_use]
+    pub fn place_of_supply(&self) -> &str {
+        match self {
+            Self::Registered(gstin) => gstin.state_code(),
+            Self::Unregistered { place_of_supply } => place_of_supply.as_str(),
+        }
+    }
+
+    /// The buyer's GSTIN, if it is registered
+    #[must_use]
+    pub fn gstin(&self) -> Option<&Gstin> {
+        match self {
+            Self::Registered(gstin) => Some(gstin),
+            Self::Unregistered { .. } => None,
+        }
+    }
+
+    /// Whether the buyer is registered under GST
+    #[must_use]
+    pub fn is_registered(&self) -> bool {
+        matches!(self, Self::Registered(_))
+    }
+}
+
+impl fmt::Display for Recipient {
+    /// The GSTIN, or `Unregistered (place of supply NN)`
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Registered(gstin) => gstin.fmt(f),
+            Self::Unregistered { place_of_supply } => {
+                write!(f, "Unregistered (place of supply {place_of_supply})")
+            }
+        }
+    }
+}
+
+impl From<Gstin> for Recipient {
+    fn from(gstin: Gstin) -> Self {
+        Self::Registered(gstin)
+    }
+}
+
+/// How a supply is reported in GSTR-1
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SupplyKind {
+    /// To a registered buyer (Table 4)
+    B2b,
+    /// Inter-state to an unregistered buyer, above the B2CL threshold (Table 5)
+    B2cl,
+    /// Any other supply to an unregistered buyer (Table 7)
+    B2cs,
+}
+
+impl fmt::Display for SupplyKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::B2b => "B2B",
+            Self::B2cl => "B2CL",
+            Self::B2cs => "B2CS",
+        })
+    }
+}
+
+/// The B2CL threshold, in rupees, for an invoice dated `date`
+#[must_use]
+pub fn b2cl_threshold(date: NaiveDate) -> BigDecimal {
+    if date >= b2cl_threshold_revised_from() {
+        BigDecimal::from(B2CL_THRESHOLD_RUPEES)
+    } else {
+        BigDecimal::from(B2CL_THRESHOLD_BEFORE_REVISION_RUPEES)
+    }
+}
+
+/// First invoice date the lower [`B2CL_THRESHOLD_RUPEES`] applies to
+#[must_use]
+pub fn b2cl_threshold_revised_from() -> NaiveDate {
+    let (year, month, day) = B2CL_THRESHOLD_REVISED_FROM;
+    NaiveDate::from_ymd_opt(year, month, day).unwrap_or(NaiveDate::MIN)
 }
 
 /// Tax components for an amount, or the sum of them across an invoice
@@ -378,11 +564,11 @@ impl GstLineItem {
     }
 }
 
-/// A B2B tax invoice under Indian GST
+/// A tax invoice under Indian GST, to a registered or an unregistered buyer
 ///
 /// Whether the supply is inter-state (IGST) or intra-state (CGST + SGST) is derived from the
-/// state codes of the seller and buyer GSTINs. Deserialising goes through [`GstInvoice::new`],
-/// so the same rules apply.
+/// state of the seller's GSTIN and the place of supply of the [`Recipient`]. Deserialising goes
+/// through [`GstInvoice::new`], so the same rules apply.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawGstInvoice")]
 pub struct GstInvoice {
@@ -392,8 +578,8 @@ pub struct GstInvoice {
     pub invoice_date: NaiveDate,
     /// Supplier's GSTIN
     pub seller_gstin: Gstin,
-    /// Recipient's GSTIN
-    pub buyer_gstin: Gstin,
+    /// Recipient: a registered buyer's GSTIN, or an unregistered buyer's place of supply
+    pub buyer: Recipient,
     /// Invoice lines
     pub line_items: Vec<GstLineItem>,
 }
@@ -404,7 +590,7 @@ struct RawGstInvoice {
     invoice_number: String,
     invoice_date: NaiveDate,
     seller_gstin: Gstin,
-    buyer_gstin: Gstin,
+    buyer: Recipient,
     line_items: Vec<GstLineItem>,
 }
 
@@ -416,7 +602,7 @@ impl TryFrom<RawGstInvoice> for GstInvoice {
             raw.invoice_number,
             raw.invoice_date,
             raw.seller_gstin,
-            raw.buyer_gstin,
+            raw.buyer,
             raw.line_items,
         )
     }
@@ -425,6 +611,8 @@ impl TryFrom<RawGstInvoice> for GstInvoice {
 impl GstInvoice {
     /// Create a validated invoice
     ///
+    /// `buyer` is a [`Recipient`]; pass a [`Gstin`] for a registered buyer.
+    ///
     /// # Errors
     ///
     /// [`InvoiceError::InvalidInvoiceNumber`] or [`InvoiceError::EmptyInvoice`].
@@ -432,7 +620,7 @@ impl GstInvoice {
         invoice_number: impl Into<String>,
         invoice_date: NaiveDate,
         seller_gstin: Gstin,
-        buyer_gstin: Gstin,
+        buyer: impl Into<Recipient>,
         line_items: Vec<GstLineItem>,
     ) -> Result<Self, InvoiceError> {
         let invoice_number = invoice_number.into();
@@ -446,15 +634,15 @@ impl GstInvoice {
             invoice_number,
             invoice_date,
             seller_gstin,
-            buyer_gstin,
+            buyer: buyer.into(),
             line_items,
         })
     }
 
-    /// Whether seller and buyer are registered in different states
+    /// Whether the place of supply is in a different state from the seller's registration
     #[must_use]
     pub fn is_inter_state(&self) -> bool {
-        self.seller_gstin.state_code() != self.buyer_gstin.state_code()
+        self.seller_gstin.state_code() != self.buyer.place_of_supply()
     }
 
     /// Tax breakdown for each line, in order
@@ -477,6 +665,30 @@ impl GstInvoice {
     /// The first error from [`GstLineItem::breakdown`].
     pub fn breakdown(&self) -> Result<GstBreakdown, InvoiceError> {
         Ok(self.line_breakdowns()?.iter().sum())
+    }
+
+    /// How the invoice is reported in GSTR-1
+    ///
+    /// A supply to a registered buyer is B2B. A supply to an unregistered buyer is B2CL when it is
+    /// inter-state and its value, tax included, is more than [`b2cl_threshold`] for its date;
+    /// otherwise it is B2CS.
+    ///
+    /// # Errors
+    ///
+    /// The first error from [`GstLineItem::breakdown`].
+    pub fn supply_kind(&self) -> Result<SupplyKind, InvoiceError> {
+        Ok(supply_kind_for(self, &self.breakdown()?.total))
+    }
+}
+
+/// [`GstInvoice::supply_kind`] for an invoice whose value, tax included, is already known
+pub(crate) fn supply_kind_for(invoice: &GstInvoice, invoice_value: &BigDecimal) -> SupplyKind {
+    if invoice.buyer.is_registered() {
+        SupplyKind::B2b
+    } else if invoice.is_inter_state() && *invoice_value > b2cl_threshold(invoice.invoice_date) {
+        SupplyKind::B2cl
+    } else {
+        SupplyKind::B2cs
     }
 }
 
@@ -552,6 +764,9 @@ pub enum InvoiceError {
         /// The first rule it breaks
         reason: InvoiceNumberError,
     },
+    /// The place of supply is not a known two-digit state code
+    #[error("invalid state code: {0}")]
+    InvalidStateCode(String),
     /// The HSN/SAC code is not 4, 6 or 8 digits
     #[error("invalid HSN/SAC code: {0}")]
     InvalidHsnSac(String),

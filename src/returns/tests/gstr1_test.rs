@@ -1,5 +1,5 @@
 use crate::invoice::validation::ComplianceIssue;
-use crate::invoice::{GstInvoice, GstLineItem, Gstin, HsnMaster};
+use crate::invoice::{GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode, SupplyKind};
 use crate::returns::gstr1::*;
 use crate::returns::period::ReturnPeriod;
 use bigdecimal::BigDecimal;
@@ -351,7 +351,7 @@ fn test_non_compliant_invoice_is_rejected_with_its_errors() {
         BUYER_SAME_STATE,
         vec![line("998314", "1", "1", "18")],
     );
-    inv.buyer_gstin = gstin(SELLER);
+    inv.buyer = gstin(SELLER).into();
     assert!(matches!(
         build(&[inv]),
         Err(Gstr1Error::NotCompliant { issues, .. })
@@ -498,4 +498,182 @@ fn test_invoice_numbers_order_by_their_numeric_suffix() {
         .map(|inv| inv.invoice_number.as_str())
         .collect();
     assert_eq!(numbers, ["INV-9", "INV-10"]);
+}
+
+/// An invoice to an unregistered buyer receiving the supply in `place_of_supply`
+fn b2c_invoice(
+    number: &str,
+    date: NaiveDate,
+    place_of_supply: &str,
+    lines: Vec<GstLineItem>,
+) -> GstInvoice {
+    let buyer = Recipient::unregistered(StateCode::parse(place_of_supply).unwrap());
+    GstInvoice::new(number, date, gstin(SELLER), buyer, lines).unwrap()
+}
+
+#[test]
+fn test_b2cl_invoices_are_grouped_by_place_of_supply() {
+    let gstr1 = build(&[
+        b2c_invoice(
+            "INV-003",
+            day(20),
+            "29",
+            vec![line("998314", "1", "200000", "18")],
+        ),
+        invoice(
+            "INV-001",
+            day(5),
+            BUYER_SAME_STATE,
+            vec![line("998314", "2", "500", "18")],
+        ),
+        b2c_invoice(
+            "INV-002",
+            day(10),
+            "07",
+            vec![
+                line("847130", "2", "55000", "18"),
+                line("1905", "100", "12.50", "5"),
+            ],
+        ),
+        b2c_invoice(
+            "INV-004",
+            day(25),
+            "29",
+            vec![line("998314", "1", "150000", "18")],
+        ),
+    ])
+    .unwrap();
+
+    assert_eq!(gstr1.b2b.len(), 1);
+    assert_eq!(gstr1.b2b[0].invoices.len(), 1);
+
+    let places: Vec<_> = gstr1
+        .b2cl
+        .iter()
+        .map(|p| p.place_of_supply.as_str())
+        .collect();
+    assert_eq!(places, ["07", "29"]);
+    let numbers: Vec<_> = gstr1.b2cl[1]
+        .invoices
+        .iter()
+        .map(|i| i.invoice_number.as_str())
+        .collect();
+    assert_eq!(numbers, ["INV-003", "INV-004"]);
+
+    let delhi = &gstr1.b2cl[0].invoices[0];
+    assert_eq!(delhi.invoice_value, dec("131112.50"));
+    let rates: Vec<_> = delhi.items.iter().map(|i| i.detail.rate.clone()).collect();
+    assert_eq!(rates, [dec("5"), dec("18")]);
+    assert_eq!(delhi.items[0].detail.taxable_value, dec("1250"));
+    assert_eq!(delhi.items[0].detail.igst, dec("62.50"));
+    assert_eq!(delhi.items[1].detail.igst, dec("19800"));
+}
+
+#[test]
+fn test_hsn_summary_splits_b2b_and_b2c_tabs() {
+    let gstr1 = build(&[
+        invoice(
+            "INV-001",
+            day(5),
+            BUYER_OTHER_STATE,
+            vec![line("998314", "2", "500", "18")],
+        ),
+        b2c_invoice(
+            "INV-002",
+            day(10),
+            "29",
+            vec![line("998314", "1", "200000", "18")],
+        ),
+    ])
+    .unwrap();
+
+    assert_eq!(gstr1.hsn.b2b.len(), 1);
+    assert_eq!(gstr1.hsn.b2b[0].taxable_value, dec("1000"));
+    assert_eq!(gstr1.hsn.b2c.len(), 1);
+    assert_eq!(gstr1.hsn.b2c[0].number, 1);
+    assert_eq!(gstr1.hsn.b2c[0].taxable_value, dec("200000"));
+    assert_eq!(gstr1.hsn.b2c[0].igst, dec("36000"));
+}
+
+#[test]
+fn test_doc_issue_counts_b2b_and_b2cl_invoices_as_one_series() {
+    let gstr1 = build(&[
+        b2c_invoice(
+            "INV-002",
+            day(10),
+            "29",
+            vec![line("998314", "1", "200000", "18")],
+        ),
+        invoice(
+            "INV-001",
+            day(5),
+            BUYER_SAME_STATE,
+            vec![line("998314", "2", "500", "18")],
+        ),
+    ])
+    .unwrap();
+
+    let series = &gstr1.doc_issue.documents[0].series[0];
+    assert_eq!(
+        (series.from.as_str(), series.to.as_str()),
+        ("INV-001", "INV-002")
+    );
+    assert_eq!(series.total, 2);
+}
+
+#[test]
+fn test_b2cs_invoices_are_refused() {
+    let small = b2c_invoice(
+        "INV-001",
+        day(5),
+        "29",
+        vec![line("998314", "1", "1000", "18")],
+    );
+    let intra = b2c_invoice(
+        "INV-002",
+        day(5),
+        "27",
+        vec![line("998314", "1", "500000", "18")],
+    );
+
+    for invoice in [small, intra] {
+        let number = invoice.invoice_number.clone();
+        assert!(matches!(
+            build(&[invoice]),
+            Err(Gstr1Error::UnsupportedSupply { invoice_number, kind: SupplyKind::B2cs })
+                if invoice_number == number
+        ));
+    }
+}
+
+#[test]
+fn test_b2cl_json_uses_portal_keys() {
+    let gstr1 = build(&[b2c_invoice(
+        "INV-001",
+        day(15),
+        "29",
+        vec![line("998314", "3", "40000.005", "18")],
+    )])
+    .unwrap();
+    let value = to_value(&gstr1);
+
+    assert!(value.get("b2b").is_none());
+    assert_eq!(
+        value["b2cl"],
+        json!([{
+            "pos": "29",
+            "inv": [{
+                "inum": "INV-001",
+                "idt": "15-11-2024",
+                "val": 141600.02,
+                "itms": [{
+                    "num": 1,
+                    "itm_det": { "rt": 18.0, "txval": 120000.02, "iamt": 21600.0, "csamt": 0.0 }
+                }]
+            }]
+        }])
+    );
+    assert!(value["hsn"].get("hsn_b2b").is_none());
+    assert_eq!(value["hsn"]["hsn_b2c"][0]["hsn_sc"], "998314");
+    assert_eq!(value["hsn"]["hsn_b2c"][0]["uqc"], "NA");
 }

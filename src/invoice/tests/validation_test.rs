@@ -1,5 +1,5 @@
 use crate::invoice::hsn_lookup::HsnMaster;
-use crate::invoice::types::{GstInvoice, GstLineItem, Gstin};
+use crate::invoice::types::{GstInvoice, GstLineItem, Gstin, Recipient, StateCode};
 use crate::invoice::types::{InvoiceNumberError, LineItemError};
 use crate::invoice::validation::*;
 use bigdecimal::BigDecimal;
@@ -390,5 +390,18 @@ fn test_line_rounding_to_zero_is_a_warning() {
 
     // 0.005 rounds up to a paisa, so it is not flagged
     invoice.line_items[1].quantity = BigDecimal::from_str("0.005").unwrap();
+    assert!(check(&invoice).issues().is_empty());
+}
+
+#[test]
+fn test_unregistered_buyer_never_matches_the_seller() {
+    let invoice = GstInvoice::new(
+        "INV/2025-26/002",
+        date(15),
+        Gstin::parse(SELLER).unwrap(),
+        Recipient::unregistered(StateCode::parse("27").unwrap()),
+        vec![item("998314", 18)],
+    )
+    .unwrap();
     assert!(check(&invoice).issues().is_empty());
 }

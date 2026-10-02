@@ -6,9 +6,12 @@
 use super::draw::{frame, grey_text, page_setup, rule, text, Align, PAGE_HEIGHT, PAGE_WIDTH};
 use super::fonts::{Face, Fonts};
 use super::text::{fit, wrap};
-use super::{PdfError, PdfOptions};
+use super::{PdfError, PdfOptions, DEFAULT_FOOTER_NOTE};
 use crate::invoice::print::{InvoiceParty, InvoicePrint, PrintRow, RowCapacity};
 use printpdf::Op;
+
+/// What the GSTIN line of an unregistered buyer says
+const UNREGISTERED_GSTIN_LINE: &str = "GSTIN: Unregistered";
 
 const MARGIN: f32 = 12.0;
 const LEFT: f32 = MARGIN;
@@ -482,6 +485,19 @@ impl<'a> Layout<'a> {
         )
     }
 
+    /// The note at the foot of every page
+    ///
+    /// The default [`DEFAULT_FOOTER_NOTE`] is left out for an unregistered buyer: e-invoicing
+    /// (an IRN from the IRP) applies only to B2B supplies. A custom note is always printed.
+    fn footer_note(&self) -> &str {
+        let note = self.options.footer_note.as_str();
+        if note == DEFAULT_FOOTER_NOTE && self.print.buyer.gstin.is_none() {
+            ""
+        } else {
+            note
+        }
+    }
+
     /// Footer note and page number at the foot of every page
     fn page_strip(&self, number: usize, count: usize) -> Vec<Op> {
         let y = PAGE_HEIGHT - MARGIN;
@@ -495,7 +511,7 @@ impl<'a> Layout<'a> {
                 MUTED,
                 (LEFT, y),
                 Align::Left,
-                &self.options.footer_note,
+                self.footer_note(),
             ),
             grey_text(face, SMALL_SIZE, MUTED, (RIGHT, y), Align::Right, &page),
         ]
@@ -549,13 +565,17 @@ impl<'a> Layout<'a> {
     }
 }
 
-/// Address lines followed by the GSTIN
+/// Address lines followed by the GSTIN, or `GSTIN: Unregistered` for a party without one
 fn party_lines(party: &InvoiceParty) -> Vec<String> {
+    let identity = party.gstin.as_ref().map_or_else(
+        || UNREGISTERED_GSTIN_LINE.to_string(),
+        |gstin| format!("GSTIN: {gstin}"),
+    );
     party
         .address
         .iter()
         .cloned()
-        .chain(std::iter::once(format!("GSTIN: {}", party.gstin.as_str())))
+        .chain(std::iter::once(identity))
         .collect()
 }
 

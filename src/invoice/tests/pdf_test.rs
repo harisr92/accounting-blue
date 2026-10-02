@@ -1,6 +1,6 @@
 use crate::invoice::pdf::*;
 use crate::invoice::print::{InvoiceParties, InvoiceParty};
-use crate::invoice::types::{GstInvoice, GstLineItem, Gstin, InvoiceError};
+use crate::invoice::types::{GstInvoice, GstLineItem, Gstin, InvoiceError, Recipient, StateCode};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 use printpdf::{BuiltinFont, PdfDocument, PdfParseOptions};
@@ -182,7 +182,7 @@ fn test_text_the_font_cannot_draw_is_refused() {
 #[test]
 fn test_parties_that_do_not_match_are_refused() {
     let mut parties = parties();
-    parties.buyer.gstin = gstin(SELLER);
+    parties.buyer.gstin = Some(gstin(SELLER));
     let result = invoice(1).to_pdf(&parties, &PdfOptions::default());
 
     assert!(matches!(
@@ -296,4 +296,46 @@ fn test_terms_that_just_fit_share_a_page_with_the_totals() {
     assert!(last.contains("Amount in words"));
     assert!(last.contains(&format!("Term number {max_lines}.")));
     assert!(last.contains("Authorised Signatory"));
+}
+
+#[test]
+fn test_unregistered_buyer_renders_without_a_gstin() {
+    let invoice = GstInvoice::new(
+        "INV/2025-26/043",
+        NaiveDate::from_ymd_opt(2025, 6, 30).unwrap(),
+        gstin(SELLER),
+        Recipient::unregistered(StateCode::parse("29").unwrap()),
+        vec![item("Consulting")],
+    )
+    .unwrap();
+    let parties = InvoiceParties::new(
+        parties().seller,
+        InvoiceParty::unregistered("Ravi Kumar", vec!["Bengaluru 560001".into()]),
+    );
+    let pdf = invoice.to_pdf(&parties, &PdfOptions::default()).unwrap();
+
+    let page = &pages(&pdf)[0];
+    for expected in [
+        "Ravi Kumar",
+        "GSTIN: Unregistered",
+        "Place of Supply: State code 29",
+        "IGST",
+    ] {
+        assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
+    }
+    assert!(!page.contains(BUYER), "no buyer GSTIN expected in:\n{page}");
+    assert!(
+        !page.contains(DEFAULT_FOOTER_NOTE),
+        "no e-invoice note expected for an unregistered buyer in:\n{page}"
+    );
+
+    let custom = PdfOptions {
+        footer_note: "Thank you for your business".into(),
+        ..PdfOptions::default()
+    };
+    let page = &pages(&invoice.to_pdf(&parties, &custom).unwrap())[0];
+    assert!(
+        page.contains("Thank you for your business"),
+        "custom note missing in:\n{page}"
+    );
 }

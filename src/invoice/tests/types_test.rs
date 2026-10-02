@@ -215,3 +215,143 @@ fn test_invoice_tax_is_the_sum_of_lines_rounded_to_paise() {
     assert_eq!(total.sgst, BigDecimal::from_str("0.04").unwrap());
     assert_eq!(total.total, BigDecimal::from_str("2.06").unwrap());
 }
+
+fn unregistered_invoice(place_of_supply: &str, date: NaiveDate, price: &str) -> GstInvoice {
+    let item = GstLineItem::new(
+        "998314",
+        "IT consulting",
+        BigDecimal::from(1),
+        BigDecimal::from_str(price).unwrap(),
+        BigDecimal::from(0),
+    )
+    .unwrap();
+    GstInvoice::new(
+        "INV-B2C-001",
+        date,
+        Gstin::parse(SELLER).unwrap(),
+        Recipient::unregistered(StateCode::parse(place_of_supply).unwrap()),
+        vec![item],
+    )
+    .unwrap()
+}
+
+#[test]
+fn test_state_code_accepts_known_states_only() {
+    assert_eq!(StateCode::parse("29").unwrap().as_str(), "29");
+    assert_eq!(StateCode::parse("97").unwrap().to_string(), "97");
+    for bad in ["", "7", "007", "00", "39", "96", "99", "AB", "2 "] {
+        assert!(
+            matches!(StateCode::parse(bad), Err(InvoiceError::InvalidStateCode(v)) if v == bad),
+            "{bad:?} should be rejected"
+        );
+    }
+}
+
+#[test]
+fn test_unregistered_buyer_is_taxed_by_place_of_supply() {
+    let date = NaiveDate::from_ymd_opt(2024, 11, 15).unwrap();
+    let make = |pos: &str| {
+        GstInvoice::new(
+            "INV-B2C-001",
+            date,
+            Gstin::parse(SELLER).unwrap(),
+            Recipient::unregistered(StateCode::parse(pos).unwrap()),
+            vec![item(18)],
+        )
+        .unwrap()
+    };
+
+    let inter_state = make("29").breakdown().unwrap();
+    assert_eq!(inter_state.igst, BigDecimal::from(180));
+    assert_eq!(inter_state.cgst, BigDecimal::from(0));
+
+    let intra_state = make("27").breakdown().unwrap();
+    assert_eq!(intra_state.cgst, BigDecimal::from(90));
+    assert_eq!(intra_state.sgst, BigDecimal::from(90));
+    assert_eq!(intra_state.igst, BigDecimal::from(0));
+}
+
+#[test]
+fn test_recipient_exposes_gstin_and_place_of_supply() {
+    let registered = Recipient::from(Gstin::parse("29AAPFU0939F1ZR").unwrap());
+    assert!(registered.is_registered());
+    assert_eq!(registered.place_of_supply(), "29");
+    assert_eq!(registered.to_string(), "29AAPFU0939F1ZR");
+
+    let unregistered = Recipient::unregistered(StateCode::parse("07").unwrap());
+    assert!(!unregistered.is_registered());
+    assert_eq!(unregistered.gstin(), None);
+    assert_eq!(unregistered.place_of_supply(), "07");
+    assert_eq!(
+        unregistered.to_string(),
+        "Unregistered (place of supply 07)"
+    );
+}
+
+#[test]
+fn test_supply_kind_uses_the_b2cl_threshold_for_the_invoice_date() {
+    let after = NaiveDate::from_ymd_opt(2024, 8, 1).unwrap();
+    let before = NaiveDate::from_ymd_opt(2024, 7, 31).unwrap();
+    let kind = |pos, date, price| {
+        unregistered_invoice(pos, date, price)
+            .supply_kind()
+            .unwrap()
+    };
+
+    assert_eq!(kind("29", after, "100000"), SupplyKind::B2cs);
+    assert_eq!(kind("29", after, "100000.01"), SupplyKind::B2cl);
+    assert_eq!(kind("27", after, "500000"), SupplyKind::B2cs);
+    assert_eq!(kind("29", before, "250000"), SupplyKind::B2cs);
+    assert_eq!(kind("29", before, "250000.01"), SupplyKind::B2cl);
+
+    assert_eq!(
+        b2cl_threshold(after),
+        BigDecimal::from(B2CL_THRESHOLD_RUPEES)
+    );
+    assert_eq!(b2cl_threshold_revised_from(), after);
+    assert_eq!(
+        invoice("29AAPFU0939F1ZR", vec![item(18)])
+            .supply_kind()
+            .unwrap(),
+        SupplyKind::B2b
+    );
+}
+
+#[test]
+fn test_supply_kind_counts_tax_in_the_invoice_value() {
+    let date = NaiveDate::from_ymd_opt(2024, 11, 15).unwrap();
+    // 90,000 taxable + 18% IGST = 1,06,200, which is over the threshold
+    let invoice = GstInvoice::new(
+        "INV-B2C-002",
+        date,
+        Gstin::parse(SELLER).unwrap(),
+        Recipient::unregistered(StateCode::parse("29").unwrap()),
+        vec![GstLineItem::new(
+            "998314",
+            "IT consulting",
+            BigDecimal::from(1),
+            BigDecimal::from(90_000),
+            BigDecimal::from(18),
+        )
+        .unwrap()],
+    )
+    .unwrap();
+    assert_eq!(invoice.supply_kind().unwrap(), SupplyKind::B2cl);
+}
+
+#[test]
+fn test_unregistered_invoice_round_trips_through_serde() {
+    let date = NaiveDate::from_ymd_opt(2024, 11, 15).unwrap();
+    let invoice = unregistered_invoice("29", date, "150000");
+    let json = serde_json::to_value(&invoice).unwrap();
+    assert_eq!(
+        json["buyer"],
+        serde_json::json!({ "unregistered": { "place_of_supply": "29" } })
+    );
+    let back: GstInvoice = serde_json::from_value(json.clone()).unwrap();
+    assert_eq!(back, invoice);
+
+    let mut bad = json;
+    bad["buyer"]["unregistered"]["place_of_supply"] = "40".into();
+    assert!(serde_json::from_value::<GstInvoice>(bad).is_err());
+}

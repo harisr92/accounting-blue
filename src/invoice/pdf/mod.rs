@@ -67,7 +67,8 @@ use std::fmt;
 
 /// Currency label printed before amounts when the built-in font is used
 pub const DEFAULT_CURRENCY_LABEL: &str = "Rs.";
-/// Note printed at the foot of every page by default
+/// Note printed at the foot of every page by default; left out when the buyer is unregistered,
+/// since e-invoicing applies only to B2B supplies
 pub const DEFAULT_FOOTER_NOTE: &str = "E-Invoice Ready";
 
 /// The font an invoice is set in
@@ -94,7 +95,8 @@ pub struct PdfOptions {
     pub currency_label: String,
     /// Terms and conditions, one paragraph each, printed above the page foot on the last page
     pub terms: Vec<String>,
-    /// Note printed at the foot of every page
+    /// Note printed at the foot of every page. The default, [`DEFAULT_FOOTER_NOTE`], is left out
+    /// for an unregistered buyer; any other note is always printed.
     pub footer_note: String,
 }
 

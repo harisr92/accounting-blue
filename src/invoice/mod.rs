@@ -1,10 +1,13 @@
 //! GST invoices under Indian rules
 //!
-//! [`GstInvoice`] models a B2B tax invoice: invoice number, date, seller and buyer [`Gstin`], and
-//! [`GstLineItem`]s carrying an HSN/SAC code. Every identifier is validated on construction, so an
-//! invoice that exists is well-formed. Whether tax is split as CGST + SGST or charged as IGST
-//! follows from the seller and buyer state codes; [`GstInvoice::breakdown`] returns the totals as
-//! a [`GstBreakdown`].
+//! [`GstInvoice`] models a tax invoice: invoice number, date, the seller's [`Gstin`], the
+//! [`Recipient`] and [`GstLineItem`]s carrying an HSN/SAC code. The recipient is a registered
+//! buyer, named by its GSTIN, or an unregistered buyer, named by the [`StateCode`] of its place
+//! of supply. Every identifier is validated on construction, so an invoice that exists is
+//! well-formed. Whether tax is split as CGST + SGST or charged as IGST follows from the seller's
+//! state and the place of supply; [`GstInvoice::breakdown`] returns the totals as a
+//! [`GstBreakdown`], and [`GstInvoice::supply_kind`] says whether GSTR-1 reports it as B2B, B2CL
+//! or B2CS.
 //!
 //! [`HsnMaster`] holds common HSN/SAC codes with their default GST rates;
 //! [`GstLineItem::with_default_rate`] builds a line at the rate for its code.
@@ -76,8 +79,9 @@ pub use print::{
     RowCapacity, TaxLine,
 };
 pub use types::{
-    GstBreakdown, GstInvoice, GstLineItem, Gstin, GstinError, InvoiceError, InvoiceNumberError,
-    LineItemError,
+    b2cl_threshold, b2cl_threshold_revised_from, GstBreakdown, GstInvoice, GstLineItem, Gstin,
+    GstinError, InvoiceError, InvoiceNumberError, LineItemError, Recipient, StateCode, SupplyKind,
+    B2CL_THRESHOLD_BEFORE_REVISION_RUPEES, B2CL_THRESHOLD_RUPEES,
 };
 pub use validation::{validate_invoice, ComplianceIssue, InvoiceValidationReport, Severity};
 

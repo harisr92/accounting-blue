@@ -228,7 +228,8 @@ pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, Paginati
 pub use invoice::{
     validate_invoice, ComplianceIssue, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster,
     HsnSacEntry, HsnSacKind, InvoiceAccounts, InvoiceError, InvoiceParties, InvoiceParty,
-    InvoicePrint, InvoiceValidationReport, PostingError, PostingLeg, Severity,
+    InvoicePrint, InvoiceValidationReport, PostingError, PostingLeg, Recipient, Severity,
+    StateCode, SupplyKind,
 };
 #[cfg(feature = "pdf")]
 pub use invoice::{PdfError, PdfFont, PdfOptions};

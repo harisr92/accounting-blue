@@ -1,5 +1,5 @@
 use crate::invoice::print::*;
-use crate::invoice::types::{GstInvoice, GstLineItem, Gstin, InvoiceError};
+use crate::invoice::types::{GstInvoice, GstLineItem, Gstin, InvoiceError, Recipient, StateCode};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 
@@ -185,4 +185,64 @@ fn test_a_page_always_exists() {
         totals: 0,
     };
     assert_eq!(paginate_rows(&[], capacity).len(), 1);
+}
+
+fn unregistered_invoice(place_of_supply: &str) -> GstInvoice {
+    GstInvoice::new(
+        "INV/2025-26/008",
+        NaiveDate::from_ymd_opt(2025, 4, 3).unwrap(),
+        gstin(SELLER),
+        Recipient::unregistered(StateCode::parse(place_of_supply).unwrap()),
+        vec![item("100")],
+    )
+    .unwrap()
+}
+
+fn unregistered_parties() -> InvoiceParties {
+    InvoiceParties::new(
+        parties(BUYER_SAME_STATE).seller,
+        InvoiceParty::unregistered("Ravi Kumar", vec!["Bengaluru".into()]),
+    )
+}
+
+#[test]
+fn test_unregistered_buyer_prints_without_a_gstin() {
+    let print =
+        InvoicePrint::from_invoice(&unregistered_invoice("29"), &unregistered_parties()).unwrap();
+
+    assert_eq!(print.title, "Tax Invoice");
+    assert_eq!(print.place_of_supply, "29");
+    assert!(print.is_inter_state);
+    assert_eq!(print.buyer.gstin, None);
+    assert_eq!(print.tax_lines[0].label, "IGST");
+
+    let json = serde_json::to_value(&print).unwrap();
+    assert!(json["buyer"].get("gstin").is_none());
+    let back: InvoicePrint = serde_json::from_value(json).unwrap();
+    assert_eq!(back, print);
+}
+
+#[test]
+fn test_buyer_gstin_must_agree_with_the_recipient() {
+    let to_unregistered =
+        InvoicePrint::from_invoice(&unregistered_invoice("29"), &parties(BUYER_OTHER_STATE));
+    assert!(matches!(
+        to_unregistered,
+        Err(InvoiceError::InvalidParty {
+            role: PartyRole::Buyer,
+            reason: PartyError::UnexpectedGstin { .. },
+        })
+    ));
+
+    let to_registered = InvoicePrint::from_invoice(
+        &invoice(BUYER_OTHER_STATE, vec![item("1")]),
+        &unregistered_parties(),
+    );
+    assert!(matches!(
+        to_registered,
+        Err(InvoiceError::InvalidParty {
+            role: PartyRole::Buyer,
+            reason: PartyError::MissingGstin { .. },
+        })
+    ));
 }
