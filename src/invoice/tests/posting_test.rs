@@ -1,5 +1,7 @@
 use crate::invoice::posting::*;
-use crate::invoice::types::{GstBreakdown, GstInvoice, GstLineItem, Gstin, LineItemError};
+use crate::invoice::types::{
+    GstBreakdown, GstInvoice, GstLineItem, Gstin, LineItemError, Recipient, StateCode,
+};
 use crate::invoice::validation::ComplianceIssue;
 use crate::ledger::TransactionBuilder;
 use crate::tax::round_to_paise;
@@ -196,4 +198,38 @@ fn test_fractional_quantities_post_balanced_paise() {
         .build()
         .unwrap();
     assert!(transaction.is_balanced());
+}
+
+#[test]
+fn test_unregistered_inter_state_invoice_posts_igst() {
+    let item = GstLineItem::new(
+        "998314",
+        "IT consulting",
+        BigDecimal::from(1),
+        BigDecimal::from(150_000),
+        BigDecimal::from(18),
+    )
+    .unwrap();
+    let invoice = GstInvoice::new(
+        "INV-B2C-001",
+        NaiveDate::from_ymd_opt(2024, 11, 15).unwrap(),
+        Gstin::parse(SELLER).unwrap(),
+        Recipient::unregistered(StateCode::parse("29").unwrap()),
+        vec![item],
+    )
+    .unwrap();
+
+    let entries = invoice.to_entries(&accounts()).unwrap();
+    let posted: Vec<_> = entries
+        .iter()
+        .map(|e| (e.account_id.as_str(), e.entry_type, e.amount.clone()))
+        .collect();
+    assert_eq!(
+        posted,
+        vec![
+            ("ar", EntryType::Debit, BigDecimal::from(177_000)),
+            ("sales", EntryType::Credit, BigDecimal::from(150_000)),
+            ("igst_out", EntryType::Credit, BigDecimal::from(27_000)),
+        ]
+    );
 }

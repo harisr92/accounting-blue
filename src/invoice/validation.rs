@@ -289,7 +289,7 @@ fn date_rule(invoice: &GstInvoice, as_of: NaiveDate) -> Vec<ComplianceIssue> {
 }
 
 fn parties_rule(invoice: &GstInvoice, _as_of: NaiveDate) -> Vec<ComplianceIssue> {
-    if invoice.seller_gstin == invoice.buyer_gstin {
+    if invoice.buyer.gstin() == Some(&invoice.seller_gstin) {
         vec![ComplianceIssue::SameSellerAndBuyer(
             invoice.seller_gstin.to_string(),
         )]

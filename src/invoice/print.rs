@@ -23,17 +23,27 @@ pub struct InvoiceParty {
     pub name: String,
     /// Address lines, top to bottom
     pub address: Vec<String>,
-    /// GSTIN, which must match the one on the invoice
-    pub gstin: Gstin,
+    /// GSTIN, which must match the one on the invoice; `None` for an unregistered buyer
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gstin: Option<Gstin>,
 }
 
 impl InvoiceParty {
-    /// A party with its name, address lines and GSTIN
+    /// A registered party with its name, address lines and GSTIN
     pub fn new(name: impl Into<String>, address: Vec<String>, gstin: Gstin) -> Self {
         Self {
             name: name.into(),
             address,
-            gstin,
+            gstin: Some(gstin),
+        }
+    }
+
+    /// An unregistered buyer with its name and address lines
+    pub fn unregistered(name: impl Into<String>, address: Vec<String>) -> Self {
+        Self {
+            name: name.into(),
+            address,
+            gstin: None,
         }
     }
 }
@@ -54,14 +64,15 @@ impl InvoiceParties {
         Self { seller, buyer }
     }
 
-    /// Check each party's name and that its GSTIN is the one on `invoice`
+    /// Check each party's name and that its GSTIN is the one on `invoice`, or that it has none
+    /// when the invoice's buyer is unregistered
     ///
     /// # Errors
     ///
     /// [`InvoiceError::InvalidParty`] for the first party that fails, seller first.
     pub fn check_against(&self, invoice: &GstInvoice) -> Result<(), InvoiceError> {
-        check_party(PartyRole::Seller, &self.seller, &invoice.seller_gstin)?;
-        check_party(PartyRole::Buyer, &self.buyer, &invoice.buyer_gstin)
+        check_party(PartyRole::Seller, &self.seller, Some(&invoice.seller_gstin))?;
+        check_party(PartyRole::Buyer, &self.buyer, invoice.buyer.gstin())
     }
 }
 
@@ -97,27 +108,51 @@ pub enum PartyError {
         /// GSTIN given with the party
         found: Gstin,
     },
+    /// The invoice names a GSTIN for the party, but the party has none
+    #[error("the invoice names GSTIN {expected} but the party has none")]
+    MissingGstin {
+        /// GSTIN on the invoice
+        expected: Gstin,
+    },
+    /// The party has a GSTIN, but the invoice is to an unregistered buyer
+    #[error("the party has GSTIN {found} but the invoice's buyer is unregistered")]
+    UnexpectedGstin {
+        /// GSTIN given with the party
+        found: Gstin,
+    },
 }
 
-/// Check one party against the GSTIN the invoice names for its role
+/// Check one party against the GSTIN the invoice names for its role, if any
 fn check_party(
     role: PartyRole,
     party: &InvoiceParty,
-    expected: &Gstin,
+    expected: Option<&Gstin>,
 ) -> Result<(), InvoiceError> {
     let reason = if party.name.trim().is_empty() {
         Some(PartyError::EmptyName)
-    } else if &party.gstin != expected {
-        Some(PartyError::GstinMismatch {
-            expected: expected.clone(),
-            found: party.gstin.clone(),
-        })
     } else {
-        None
+        gstin_error(expected, party.gstin.as_ref())
     };
     reason.map_or(Ok(()), |reason| {
         Err(InvoiceError::InvalidParty { role, reason })
     })
+}
+
+/// How a party's GSTIN differs from the one the invoice names, if it does
+fn gstin_error(expected: Option<&Gstin>, found: Option<&Gstin>) -> Option<PartyError> {
+    match (expected, found) {
+        (Some(expected), Some(found)) if expected != found => Some(PartyError::GstinMismatch {
+            expected: expected.clone(),
+            found: found.clone(),
+        }),
+        (Some(expected), None) => Some(PartyError::MissingGstin {
+            expected: expected.clone(),
+        }),
+        (None, Some(found)) => Some(PartyError::UnexpectedGstin {
+            found: found.clone(),
+        }),
+        _ => None,
+    }
 }
 
 /// One line of the item table, formatted for print
@@ -161,7 +196,8 @@ pub struct InvoicePrint {
     pub invoice_number: String,
     /// Date of issue, `dd-mm-yyyy`
     pub invoice_date: String,
-    /// State code of the place of supply: the buyer's state for a B2B supply
+    /// State code of the place of supply: the buyer's GSTIN state for a B2B supply, or the
+    /// state named on the invoice for an unregistered buyer
     pub place_of_supply: String,
     /// Whether IGST applies rather than CGST + SGST
     pub is_inter_state: bool,
@@ -249,7 +285,7 @@ impl InvoicePrint {
             title: TAX_INVOICE_TITLE.to_string(),
             invoice_number: invoice.invoice_number.clone(),
             invoice_date: invoice.invoice_date.format(PRINT_DATE_FORMAT).to_string(),
-            place_of_supply: invoice.buyer_gstin.state_code().to_string(),
+            place_of_supply: invoice.buyer.place_of_supply().to_string(),
             is_inter_state: invoice.is_inter_state(),
             seller: parties.seller.clone(),
             buyer: parties.buyer.clone(),
