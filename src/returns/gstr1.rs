@@ -1,20 +1,24 @@
 //! GSTR-1: the return of outward supplies
 //!
-//! [`Gstr1Return::build`] aggregates a filer's B2B invoices for one [`ReturnPeriod`] into the
+//! [`Gstr1Return::build`] aggregates a filer's invoices for one [`ReturnPeriod`] into the
 //! sections of GSTR-1 this crate can fill: Table 4A (B2B supplies, grouped by buyer GSTIN with
-//! one item per rate), Table 12 (the HSN/SAC summary, grouped by code and rate) and Table 13
-//! (documents issued). The builder is pure; [`Gstr1Return::to_json`] writes the result in the
+//! one item per rate), Table 5 (B2CL: large inter-state supplies to unregistered buyers,
+//! grouped by place of supply), Table 12 (the HSN/SAC summary, grouped by code and rate) and
+//! Table 13 (documents issued). The builder is pure; [`Gstr1Return::to_json`] writes the result in the
 //! GST portal's offline-tool schema, with its short keys and amounts as JSON numbers rounded to
 //! paise, ready to upload.
 //!
-//! Table 12 rows go under `hsn.hsn_b2b`, the B2B tab of the HSN summary the portal has used
-//! since it split Table 12 into B2B and B2C tabs.
+//! Table 12 is split into the two tabs the portal has used since 2025: rows for B2B supplies go
+//! under `hsn.hsn_b2b`, and rows for B2CL supplies under `hsn.hsn_b2c`. Which table an invoice
+//! belongs to is [`GstInvoice::supply_kind`]; B2CS supplies are not covered yet and are refused.
 
 use super::period::ReturnPeriod;
 use crate::invoice::print::PRINT_DATE_FORMAT;
+use crate::invoice::types::supply_kind_for;
 use crate::invoice::validation::compliance_errors;
 use crate::invoice::{
     ComplianceIssue, GstBreakdown, GstInvoice, Gstin, HsnMaster, HsnSacKind, InvoiceError,
+    SupplyKind,
 };
 use crate::tax::round_to_paise;
 use bigdecimal::{BigDecimal, ToPrimitive, Zero};
@@ -49,6 +53,9 @@ pub struct Gstr1Return {
     /// Table 4A: invoices to registered buyers, one entry per buyer GSTIN
     #[serde(rename = "b2b", skip_serializing_if = "Vec::is_empty")]
     pub b2b: Vec<B2bParty>,
+    /// Table 5: large inter-state invoices to unregistered buyers, one entry per place of supply
+    #[serde(rename = "b2cl", skip_serializing_if = "Vec::is_empty")]
+    pub b2cl: Vec<B2clPlace>,
     /// Table 12: HSN/SAC summary
     #[serde(rename = "hsn", skip_serializing_if = "HsnSummary::is_empty")]
     pub hsn: HsnSummary,
@@ -149,19 +156,89 @@ impl ItemDetail {
     }
 }
 
+/// Every B2CL invoice to one place of supply
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct B2clPlace {
+    /// Place of supply: a state code
+    #[serde(rename = "pos")]
+    pub place_of_supply: String,
+    /// The invoices, by date then number
+    #[serde(rename = "inv")]
+    pub invoices: Vec<B2clInvoice>,
+}
+
+/// One invoice in Table 5
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct B2clInvoice {
+    /// Invoice number
+    #[serde(rename = "inum")]
+    pub invoice_number: String,
+    /// Date of issue, written `dd-mm-yyyy`
+    #[serde(rename = "idt", serialize_with = "portal_date")]
+    pub invoice_date: NaiveDate,
+    /// Invoice value: taxable value plus tax
+    #[serde(rename = "val", serialize_with = "portal_amount")]
+    pub invoice_value: BigDecimal,
+    /// One item per GST rate on the invoice, by rate
+    #[serde(rename = "itms")]
+    pub items: Vec<B2clItem>,
+}
+
+/// The lines of one B2CL invoice at one GST rate
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct B2clItem {
+    /// Serial number within the invoice, from 1
+    #[serde(rename = "num")]
+    pub number: usize,
+    /// Taxable value and tax at this rate
+    #[serde(rename = "itm_det")]
+    pub detail: B2clItemDetail,
+}
+
+/// Taxable value and tax of the lines at one rate; a B2CL supply is inter-state, so IGST only
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct B2clItemDetail {
+    /// Total GST rate as a percentage
+    #[serde(rename = "rt", serialize_with = "portal_number")]
+    pub rate: BigDecimal,
+    /// Taxable value
+    #[serde(rename = "txval", serialize_with = "portal_amount")]
+    pub taxable_value: BigDecimal,
+    /// Integrated GST
+    #[serde(rename = "iamt", serialize_with = "portal_amount")]
+    pub igst: BigDecimal,
+    /// Compensation cess, which this crate does not charge
+    #[serde(rename = "csamt", serialize_with = "portal_amount")]
+    pub cess: BigDecimal,
+}
+
+impl B2clItemDetail {
+    fn new(rate: BigDecimal, breakdown: &GstBreakdown) -> Self {
+        Self {
+            rate,
+            taxable_value: breakdown.taxable_value.clone(),
+            igst: breakdown.igst.clone(),
+            cess: BigDecimal::zero(),
+        }
+    }
+}
+
 /// Table 12: supplies summarised by HSN/SAC code and rate
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct HsnSummary {
     /// Rows for supplies to registered buyers, by code then rate
-    #[serde(rename = "hsn_b2b")]
+    #[serde(rename = "hsn_b2b", skip_serializing_if = "Vec::is_empty")]
     pub b2b: Vec<HsnRow>,
+    /// Rows for supplies to unregistered buyers, by code then rate
+    #[serde(rename = "hsn_b2c", skip_serializing_if = "Vec::is_empty")]
+    pub b2c: Vec<HsnRow>,
 }
 
 impl HsnSummary {
     /// Whether the summary has no rows
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.b2b.is_empty()
+        self.b2b.is_empty() && self.b2c.is_empty()
     }
 }
 
@@ -288,6 +365,14 @@ pub enum Gstr1Error {
         /// The period being filed
         period: ReturnPeriod,
     },
+    /// The invoice is a kind of supply this crate cannot report yet
+    #[error("invoice {invoice_number} is a {kind} supply, which GSTR-1 here does not cover yet")]
+    UnsupportedSupply {
+        /// The invoice number
+        invoice_number: String,
+        /// How the supply would be reported
+        kind: SupplyKind,
+    },
     /// Two invoices share a number, compared case-insensitively
     #[error("invoice number {0} appears more than once")]
     DuplicateInvoiceNumber(String),
@@ -307,26 +392,51 @@ pub enum Gstr1Error {
     Json(#[from] serde_json::Error),
 }
 
-/// An invoice with the tax breakdown of each of its lines, computed once
+/// An invoice with the tax breakdown of each of its lines, their sum and its supply kind,
+/// computed once
 struct PricedInvoice<'a> {
     invoice: &'a GstInvoice,
     lines: Vec<GstBreakdown>,
+    total: GstBreakdown,
+    kind: SupplyKind,
+}
+
+impl<'a> PricedInvoice<'a> {
+    /// Price an invoice, refusing a supply kind no section covers
+    fn new(invoice: &'a GstInvoice) -> Result<Self, Gstr1Error> {
+        let lines = invoice.line_breakdowns()?;
+        let total: GstBreakdown = lines.iter().sum();
+        match supply_kind_for(invoice, &total.total) {
+            SupplyKind::B2cs => Err(Gstr1Error::UnsupportedSupply {
+                invoice_number: invoice.invoice_number.clone(),
+                kind: SupplyKind::B2cs,
+            }),
+            kind => Ok(Self {
+                invoice,
+                lines,
+                total,
+                kind,
+            }),
+        }
+    }
 }
 
 impl Gstr1Return {
     /// Aggregate a filer's invoices for a period into GSTR-1
     ///
     /// Every invoice must be issued by `filer`, dated in `period`, carry a number no other
-    /// invoice has (ignoring case), and pass the error-severity rules of
-    /// [`validate_invoice`](crate::invoice::validate_invoice) as of its own date. `master`
-    /// supplies the HSN/SAC summary's descriptions, usually [`HsnMaster::global`]. Output is
-    /// ordered by buyer GSTIN, invoice date and number, and rate, whatever the input order.
+    /// invoice has (ignoring case), pass the error-severity rules of
+    /// [`validate_invoice`](crate::invoice::validate_invoice) as of its own date, and be a B2B or
+    /// B2CL supply ([`GstInvoice::supply_kind`]). `master` supplies the HSN/SAC summary's
+    /// descriptions, usually [`HsnMaster::global`]. Output is ordered by buyer GSTIN or place of
+    /// supply, then invoice date and number, then rate, whatever the input order.
     ///
     /// # Errors
     ///
     /// [`Gstr1Error::SellerMismatch`], [`Gstr1Error::OutsidePeriod`],
     /// [`Gstr1Error::DuplicateInvoiceNumber`] or [`Gstr1Error::NotCompliant`] for the first
-    /// invoice that fails, or [`Gstr1Error::Invoice`] if a line's tax can't be computed.
+    /// invoice that fails, [`Gstr1Error::Invoice`] if a line's tax can't be computed, or
+    /// [`Gstr1Error::UnsupportedSupply`] for a B2CS invoice.
     ///
     /// # Example
     ///
@@ -363,20 +473,21 @@ impl Gstr1Return {
 
         let mut priced = invoices
             .iter()
-            .map(|invoice| {
-                Ok(PricedInvoice {
-                    invoice,
-                    lines: invoice.line_breakdowns()?,
-                })
-            })
-            .collect::<Result<Vec<_>, InvoiceError>>()?;
+            .map(PricedInvoice::new)
+            .collect::<Result<Vec<_>, _>>()?;
         priced.sort_by(|a, b| invoice_order(a.invoice, b.invoice));
+        let b2b = of_kind(&priced, SupplyKind::B2b);
+        let b2cl = of_kind(&priced, SupplyKind::B2cl);
 
         Ok(Self {
             filer_gstin: filer.clone(),
             period,
-            b2b: b2b_section(&priced),
-            hsn: hsn_section(&priced, master),
+            b2b: b2b_section(&b2b),
+            b2cl: b2cl_section(&b2cl),
+            hsn: HsnSummary {
+                b2b: hsn_rows(&b2b, master),
+                b2c: hsn_rows(&b2cl, master),
+            },
             doc_issue: doc_issue_section(&priced),
         })
     }
@@ -462,17 +573,23 @@ fn check_invoice(
     }
 }
 
+/// The priced invoices of one supply kind, keeping their order
+fn of_kind<'p, 'a>(
+    priced: &'p [PricedInvoice<'a>],
+    kind: SupplyKind,
+) -> Vec<&'p PricedInvoice<'a>> {
+    priced.iter().filter(|p| p.kind == kind).collect()
+}
+
 /// Table 4A: invoices grouped by buyer GSTIN, keeping their order within each buyer
-fn b2b_section(priced: &[PricedInvoice]) -> Vec<B2bParty> {
+fn b2b_section(priced: &[&PricedInvoice]) -> Vec<B2bParty> {
     priced
         .iter()
+        .filter_map(|p| Some((p.invoice.buyer.gstin()?, b2b_invoice(p))))
         .fold(
             BTreeMap::<&Gstin, Vec<B2bInvoice>>::new(),
-            |mut parties, p| {
-                parties
-                    .entry(&p.invoice.buyer_gstin)
-                    .or_default()
-                    .push(b2b_invoice(p));
+            |mut parties, (buyer_gstin, invoice)| {
+                parties.entry(buyer_gstin).or_default().push(invoice);
                 parties
             },
         )
@@ -485,12 +602,11 @@ fn b2b_section(priced: &[PricedInvoice]) -> Vec<B2bParty> {
 }
 
 fn b2b_invoice(p: &PricedInvoice) -> B2bInvoice {
-    let total: GstBreakdown = p.lines.iter().sum();
     B2bInvoice {
         invoice_number: p.invoice.invoice_number.clone(),
         invoice_date: p.invoice.invoice_date,
-        invoice_value: total.total,
-        place_of_supply: p.invoice.buyer_gstin.state_code().to_string(),
+        invoice_value: p.total.total.clone(),
+        place_of_supply: p.invoice.buyer.place_of_supply().to_string(),
         reverse_charge: false,
         invoice_type: B2bInvoiceType::Regular,
         items: by_rate(p)
@@ -499,6 +615,44 @@ fn b2b_invoice(p: &PricedInvoice) -> B2bInvoice {
             .map(|(i, (rate, breakdown))| B2bItem {
                 number: i + 1,
                 detail: ItemDetail::new(rate, &breakdown),
+            })
+            .collect(),
+    }
+}
+
+/// Table 5: invoices grouped by place of supply, keeping their order within each place
+fn b2cl_section(priced: &[&PricedInvoice]) -> Vec<B2clPlace> {
+    priced
+        .iter()
+        .fold(
+            BTreeMap::<&str, Vec<B2clInvoice>>::new(),
+            |mut places, p| {
+                places
+                    .entry(p.invoice.buyer.place_of_supply())
+                    .or_default()
+                    .push(b2cl_invoice(p));
+                places
+            },
+        )
+        .into_iter()
+        .map(|(place_of_supply, invoices)| B2clPlace {
+            place_of_supply: place_of_supply.to_string(),
+            invoices,
+        })
+        .collect()
+}
+
+fn b2cl_invoice(p: &PricedInvoice) -> B2clInvoice {
+    B2clInvoice {
+        invoice_number: p.invoice.invoice_number.clone(),
+        invoice_date: p.invoice.invoice_date,
+        invoice_value: p.total.total.clone(),
+        items: by_rate(p)
+            .into_iter()
+            .enumerate()
+            .map(|(i, (rate, breakdown))| B2clItem {
+                number: i + 1,
+                detail: B2clItemDetail::new(rate, &breakdown),
             })
             .collect(),
     }
@@ -523,8 +677,8 @@ struct HsnTotals {
     first_description: String,
 }
 
-/// Table 12: every line grouped by HSN/SAC code and rate
-fn hsn_section(priced: &[PricedInvoice], master: &HsnMaster) -> HsnSummary {
+/// One tab of Table 12: every line of `priced` grouped by HSN/SAC code and rate
+fn hsn_rows(priced: &[&PricedInvoice], master: &HsnMaster) -> Vec<HsnRow> {
     let totals = priced
         .iter()
         .flat_map(|p| p.invoice.line_items.iter().zip(&p.lines))
@@ -540,13 +694,11 @@ fn hsn_section(priced: &[PricedInvoice], master: &HsnMaster) -> HsnSummary {
             rows
         });
 
-    HsnSummary {
-        b2b: totals
-            .into_iter()
-            .enumerate()
-            .map(|(i, ((hsn_sac, rate), totals))| hsn_row(i + 1, hsn_sac, rate, totals, master))
-            .collect(),
-    }
+    totals
+        .into_iter()
+        .enumerate()
+        .map(|(i, ((hsn_sac, rate), totals))| hsn_row(i + 1, hsn_sac, rate, totals, master))
+        .collect()
 }
 
 fn hsn_row(
