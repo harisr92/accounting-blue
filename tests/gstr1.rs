@@ -1,6 +1,8 @@
 //! GSTR-1 built from a month of invoices through the public API, checked on its JSON
 
-use accounting_core::invoice::{GstInvoice, GstLineItem, Gstin, HsnMaster};
+use accounting_core::invoice::{
+    GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode, SupplyKind,
+};
 use accounting_core::{Gstr1Error, Gstr1Return, ReturnPeriod};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -193,4 +195,71 @@ fn test_a_bad_invoice_fails_the_whole_return() {
 
     let error: accounting_core::Error = result.unwrap_err().into();
     assert!(matches!(error, accounting_core::Error::Gstr1(_)));
+}
+
+fn retail_invoice(number: &str, day: u32, state: &str, lines: Vec<GstLineItem>) -> GstInvoice {
+    GstInvoice::new(
+        number,
+        NaiveDate::from_ymd_opt(2024, 11, day).unwrap(),
+        Gstin::parse(SELLER).unwrap(),
+        Recipient::unregistered(StateCode::parse(state).unwrap()),
+        lines,
+    )
+    .unwrap()
+}
+
+#[test]
+fn test_large_inter_state_sales_to_unregistered_buyers_are_reported_as_b2cl() {
+    let mut invoices = november_invoices();
+    let laptops = retail_invoice(
+        "INV-006",
+        29,
+        "29",
+        vec![line("847130", "Laptop", 2, "55000", 18)],
+    );
+    assert_eq!(laptops.supply_kind().unwrap(), SupplyKind::B2cl);
+    invoices.push(laptops);
+
+    let seller = Gstin::parse(SELLER).unwrap();
+    let period = ReturnPeriod::new(2024, 11).unwrap();
+    let gstr1 = Gstr1Return::build(&seller, period, &invoices, HsnMaster::global()).unwrap();
+    let value: Value = serde_json::from_str(&gstr1.to_json().unwrap()).unwrap();
+
+    assert_eq!(value["b2b"].as_array().unwrap().len(), 3);
+    assert_eq!(value["b2cl"][0]["pos"], json!("29"));
+    assert_eq!(value["b2cl"][0]["inv"][0]["val"], json!(129800.0));
+    assert_eq!(
+        value["b2cl"][0]["inv"][0]["itms"][0]["itm_det"]["iamt"],
+        json!(19800.0)
+    );
+    assert_eq!(value["hsn"]["hsn_b2b"].as_array().unwrap().len(), 5);
+    assert_eq!(value["hsn"]["hsn_b2c"][0]["hsn_sc"], json!("847130"));
+    assert_eq!(
+        value["doc_issue"]["doc_det"][0]["docs"][0]["to"],
+        json!("INV-006")
+    );
+    assert_eq!(
+        value["doc_issue"]["doc_det"][0]["docs"][0]["totnum"],
+        json!(6)
+    );
+}
+
+#[test]
+fn test_small_sales_to_unregistered_buyers_are_not_reported_yet() {
+    let small = retail_invoice(
+        "INV-006",
+        29,
+        "29",
+        vec![line("1905", "Biscuits", 10, "12.50", 5)],
+    );
+    let seller = Gstin::parse(SELLER).unwrap();
+    let period = ReturnPeriod::new(2024, 11).unwrap();
+    let result = Gstr1Return::build(&seller, period, &[small], HsnMaster::global());
+    assert!(matches!(
+        result,
+        Err(Gstr1Error::UnsupportedSupply {
+            kind: SupplyKind::B2cs,
+            ..
+        })
+    ));
 }
