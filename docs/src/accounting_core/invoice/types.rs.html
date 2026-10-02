@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/invoice/types.rs`."><title>types.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="accounting_core" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.1 (48a229cea 2026-09-01)" data-channel="1.98.1" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">accounting_core/invoice/</div>types.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! GST invoice domain types
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/invoice/types.rs`."><title>types.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="accounting_core" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.0 (b940084d7 2026-09-28)" data-channel="1.99.0" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">accounting_core/invoice/</div>types.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! GST invoice domain types
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">super</span>::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span><span class="kw">super</span>::print::{PartyError, PartyRole};
@@ -21,559 +21,774 @@
 <a href=#21 id=21 data-nosnippet>21</a><span class="doccomment">/// Largest GST rate a line item may carry, as a percentage
 <a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">const </span>MAX_GST_RATE: u32 = <span class="number">100</span>;
 <a href=#23 id=23 data-nosnippet>23</a>
-<a href=#24 id=24 data-nosnippet>24</a><span class="doccomment">/// A validated GST Identification Number
-<a href=#25 id=25 data-nosnippet>25</a>///
-<a href=#26 id=26 data-nosnippet>26</a>/// A GSTIN is 15 characters, laid out as:
-<a href=#27 id=27 data-nosnippet>27</a>///
-<a href=#28 id=28 data-nosnippet>28</a>/// | Position | Meaning                                          |
-<a href=#29 id=29 data-nosnippet>29</a>/// |----------|--------------------------------------------------|
-<a href=#30 id=30 data-nosnippet>30</a>/// | 1-2      | State code (`01`-`38`, `97` or `99`)             |
-<a href=#31 id=31 data-nosnippet>31</a>/// | 3-12     | PAN of the taxpayer (`AAAAA9999A`)               |
-<a href=#32 id=32 data-nosnippet>32</a>/// | 13       | Entity number for the same PAN (`1`-`9`, `A`-`Z`) |
-<a href=#33 id=33 data-nosnippet>33</a>/// | 14       | `Z` by default                                   |
-<a href=#34 id=34 data-nosnippet>34</a>/// | 15       | Mod-36 checksum over the first 14 characters     |
+<a href=#24 id=24 data-nosnippet>24</a><span class="doccomment">/// Invoice value above which an inter-state supply to an unregistered buyer is B2CL, for
+<a href=#25 id=25 data-nosnippet>25</a>/// invoices dated on or after [`b2cl_threshold_revised_from`] (Notification 12/2024-Central Tax)
+<a href=#26 id=26 data-nosnippet>26</a></span><span class="kw">pub const </span>B2CL_THRESHOLD_RUPEES: u32 = <span class="number">100_000</span>;
+<a href=#27 id=27 data-nosnippet>27</a>
+<a href=#28 id=28 data-nosnippet>28</a><span class="doccomment">/// The B2CL threshold for invoices dated before [`b2cl_threshold_revised_from`]
+<a href=#29 id=29 data-nosnippet>29</a></span><span class="kw">pub const </span>B2CL_THRESHOLD_BEFORE_REVISION_RUPEES: u32 = <span class="number">250_000</span>;
+<a href=#30 id=30 data-nosnippet>30</a>
+<a href=#31 id=31 data-nosnippet>31</a><span class="doccomment">/// Year, month and day from which [`B2CL_THRESHOLD_RUPEES`] applies
+<a href=#32 id=32 data-nosnippet>32</a></span><span class="kw">const </span>B2CL_THRESHOLD_REVISED_FROM: (i32, u32, u32) = (<span class="number">2024</span>, <span class="number">8</span>, <span class="number">1</span>);
+<a href=#33 id=33 data-nosnippet>33</a>
+<a href=#34 id=34 data-nosnippet>34</a><span class="doccomment">/// A validated GST Identification Number
 <a href=#35 id=35 data-nosnippet>35</a>///
-<a href=#36 id=36 data-nosnippet>36</a>/// Lowercase input is accepted and normalised to uppercase. Deserialising goes through the same
-<a href=#37 id=37 data-nosnippet>37</a>/// validation, so a `Gstin` value is always well-formed.
-<a href=#38 id=38 data-nosnippet>38</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-<a href=#39 id=39 data-nosnippet>39</a>#[serde(try_from = <span class="string">"String"</span>, into = <span class="string">"String"</span>)]
-<a href=#40 id=40 data-nosnippet>40</a></span><span class="kw">pub struct </span>Gstin(String);
-<a href=#41 id=41 data-nosnippet>41</a>
-<a href=#42 id=42 data-nosnippet>42</a><span class="kw">impl </span>Gstin {
-<a href=#43 id=43 data-nosnippet>43</a>    <span class="doccomment">/// Parse and validate a GSTIN
-<a href=#44 id=44 data-nosnippet>44</a>    ///
-<a href=#45 id=45 data-nosnippet>45</a>    /// # Errors
-<a href=#46 id=46 data-nosnippet>46</a>    ///
-<a href=#47 id=47 data-nosnippet>47</a>    /// [`InvoiceError::InvalidGstin`] naming the first rule the value breaks.
-<a href=#48 id=48 data-nosnippet>48</a>    </span><span class="kw">pub fn </span>parse(value: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, InvoiceError&gt; {
-<a href=#49 id=49 data-nosnippet>49</a>        <span class="kw">let </span>gstin = value.to_ascii_uppercase();
-<a href=#50 id=50 data-nosnippet>50</a>        check_gstin(gstin.as_bytes()).map_err(|reason| InvoiceError::InvalidGstin {
-<a href=#51 id=51 data-nosnippet>51</a>            value: value.to_string(),
-<a href=#52 id=52 data-nosnippet>52</a>            reason,
-<a href=#53 id=53 data-nosnippet>53</a>        })<span class="question-mark">?</span>;
-<a href=#54 id=54 data-nosnippet>54</a>        <span class="prelude-val">Ok</span>(<span class="self">Self</span>(gstin))
-<a href=#55 id=55 data-nosnippet>55</a>    }
-<a href=#56 id=56 data-nosnippet>56</a>
-<a href=#57 id=57 data-nosnippet>57</a>    <span class="doccomment">/// The GSTIN as a string
-<a href=#58 id=58 data-nosnippet>58</a>    </span><span class="attr">#[must_use]
-<a href=#59 id=59 data-nosnippet>59</a>    </span><span class="kw">pub fn </span>as_str(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
-<a href=#60 id=60 data-nosnippet>60</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0
-<a href=#61 id=61 data-nosnippet>61</a>    </span>}
-<a href=#62 id=62 data-nosnippet>62</a>
-<a href=#63 id=63 data-nosnippet>63</a>    <span class="doccomment">/// Two-digit state code the taxpayer is registered in
-<a href=#64 id=64 data-nosnippet>64</a>    </span><span class="attr">#[must_use]
-<a href=#65 id=65 data-nosnippet>65</a>    </span><span class="kw">pub fn </span>state_code(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
-<a href=#66 id=66 data-nosnippet>66</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>[<span class="number">0</span>..<span class="number">2</span>]
-<a href=#67 id=67 data-nosnippet>67</a>    }
-<a href=#68 id=68 data-nosnippet>68</a>
-<a href=#69 id=69 data-nosnippet>69</a>    <span class="doccomment">/// PAN embedded in the GSTIN
-<a href=#70 id=70 data-nosnippet>70</a>    </span><span class="attr">#[must_use]
-<a href=#71 id=71 data-nosnippet>71</a>    </span><span class="kw">pub fn </span>pan(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
-<a href=#72 id=72 data-nosnippet>72</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>[<span class="number">2</span>..<span class="number">12</span>]
-<a href=#73 id=73 data-nosnippet>73</a>    }
-<a href=#74 id=74 data-nosnippet>74</a>}
-<a href=#75 id=75 data-nosnippet>75</a>
-<a href=#76 id=76 data-nosnippet>76</a><span class="doccomment">/// Why a GSTIN was rejected
-<a href=#77 id=77 data-nosnippet>77</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-<a href=#78 id=78 data-nosnippet>78</a></span><span class="kw">pub enum </span>GstinError {
-<a href=#79 id=79 data-nosnippet>79</a>    <span class="doccomment">/// Not exactly 15 characters
-<a href=#80 id=80 data-nosnippet>80</a>    </span><span class="attr">#[error(<span class="string">"must be exactly {GSTIN_LEN} characters"</span>)]
-<a href=#81 id=81 data-nosnippet>81</a>    </span>Length,
-<a href=#82 id=82 data-nosnippet>82</a>    <span class="doccomment">/// The first two characters are not a known state code
-<a href=#83 id=83 data-nosnippet>83</a>    </span><span class="attr">#[error(<span class="string">"invalid state code"</span>)]
-<a href=#84 id=84 data-nosnippet>84</a>    </span>StateCode,
-<a href=#85 id=85 data-nosnippet>85</a>    <span class="doccomment">/// Characters 3-12 are not shaped like a PAN
-<a href=#86 id=86 data-nosnippet>86</a>    </span><span class="attr">#[error(<span class="string">"characters 3-12 must be a PAN (AAAAA9999A)"</span>)]
-<a href=#87 id=87 data-nosnippet>87</a>    </span>Pan,
-<a href=#88 id=88 data-nosnippet>88</a>    <span class="doccomment">/// Character 13 is not 1-9 or A-Z
-<a href=#89 id=89 data-nosnippet>89</a>    </span><span class="attr">#[error(<span class="string">"entity number must be 1-9 or A-Z"</span>)]
-<a href=#90 id=90 data-nosnippet>90</a>    </span>EntityNumber,
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="doccomment">/// Character 14 is not `Z`
-<a href=#92 id=92 data-nosnippet>92</a>    </span><span class="attr">#[error(<span class="string">"character 14 must be 'Z'"</span>)]
-<a href=#93 id=93 data-nosnippet>93</a>    </span>DefaultZ,
-<a href=#94 id=94 data-nosnippet>94</a>    <span class="doccomment">/// The check character does not match
-<a href=#95 id=95 data-nosnippet>95</a>    </span><span class="attr">#[error(<span class="string">"checksum mismatch, expected '{expected}'"</span>)]
-<a href=#96 id=96 data-nosnippet>96</a>    </span>Checksum {
-<a href=#97 id=97 data-nosnippet>97</a>        <span class="doccomment">/// The check character the first 14 characters call for
-<a href=#98 id=98 data-nosnippet>98</a>        </span>expected: char,
-<a href=#99 id=99 data-nosnippet>99</a>    },
-<a href=#100 id=100 data-nosnippet>100</a>}
-<a href=#101 id=101 data-nosnippet>101</a>
-<a href=#102 id=102 data-nosnippet>102</a><span class="doccomment">/// Run every GSTIN rule over an uppercased value
-<a href=#103 id=103 data-nosnippet>103</a></span><span class="kw">fn </span>check_gstin(bytes: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), GstinError&gt; {
-<a href=#104 id=104 data-nosnippet>104</a>    <span class="kw">let </span>(<span class="prelude-val">Some</span>(body), <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>check), GSTIN_LEN) = (bytes.get(..<span class="number">14</span>), bytes.get(<span class="number">14</span>), bytes.len())
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">else </span>{
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(GstinError::Length);
-<a href=#107 id=107 data-nosnippet>107</a>    };
-<a href=#108 id=108 data-nosnippet>108</a>
-<a href=#109 id=109 data-nosnippet>109</a>    check_rule(is_valid_state_code(<span class="kw-2">&amp;</span>body[<span class="number">0</span>..<span class="number">2</span>]), GstinError::StateCode)<span class="question-mark">?</span>;
-<a href=#110 id=110 data-nosnippet>110</a>    check_rule(is_pan(<span class="kw-2">&amp;</span>body[<span class="number">2</span>..<span class="number">12</span>]), GstinError::Pan)<span class="question-mark">?</span>;
-<a href=#111 id=111 data-nosnippet>111</a>    check_rule(
-<a href=#112 id=112 data-nosnippet>112</a>        <span class="macro">matches!</span>(body[<span class="number">12</span>], <span class="string">b'1'</span>..=<span class="string">b'9'</span>) || body[<span class="number">12</span>].is_ascii_uppercase(),
-<a href=#113 id=113 data-nosnippet>113</a>        GstinError::EntityNumber,
-<a href=#114 id=114 data-nosnippet>114</a>    )<span class="question-mark">?</span>;
-<a href=#115 id=115 data-nosnippet>115</a>    check_rule(body[<span class="number">13</span>] == <span class="string">b'Z'</span>, GstinError::DefaultZ)<span class="question-mark">?</span>;
-<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">match </span>gstin_checksum(body) {
-<a href=#117 id=117 data-nosnippet>117</a>        <span class="prelude-val">Some</span>(expected) <span class="kw">if </span>expected == check =&gt; <span class="prelude-val">Ok</span>(()),
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="prelude-val">Some</span>(expected) =&gt; <span class="prelude-val">Err</span>(GstinError::Checksum {
-<a href=#119 id=119 data-nosnippet>119</a>            expected: char::from(expected),
-<a href=#120 id=120 data-nosnippet>120</a>        }),
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="comment">// Unreachable after the checks above, which admit only charset characters
-<a href=#122 id=122 data-nosnippet>122</a>        </span><span class="prelude-val">None </span>=&gt; <span class="prelude-val">Err</span>(GstinError::Pan),
-<a href=#123 id=123 data-nosnippet>123</a>    }
-<a href=#124 id=124 data-nosnippet>124</a>}
-<a href=#125 id=125 data-nosnippet>125</a>
-<a href=#126 id=126 data-nosnippet>126</a><span class="kw">fn </span>check_rule(holds: bool, error: GstinError) -&gt; <span class="prelude-ty">Result</span>&lt;(), GstinError&gt; {
-<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">if </span>holds {
-<a href=#128 id=128 data-nosnippet>128</a>        <span class="prelude-val">Ok</span>(())
-<a href=#129 id=129 data-nosnippet>129</a>    } <span class="kw">else </span>{
-<a href=#130 id=130 data-nosnippet>130</a>        <span class="prelude-val">Err</span>(error)
-<a href=#131 id=131 data-nosnippet>131</a>    }
-<a href=#132 id=132 data-nosnippet>132</a>}
-<a href=#133 id=133 data-nosnippet>133</a>
-<a href=#134 id=134 data-nosnippet>134</a><span class="doccomment">/// State and union territory codes, plus `97` (other territory) and `99` (centre jurisdiction)
-<a href=#135 id=135 data-nosnippet>135</a></span><span class="kw">fn </span>is_valid_state_code(code: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
-<a href=#136 id=136 data-nosnippet>136</a>    code.iter().all(u8::is_ascii_digit)
-<a href=#137 id=137 data-nosnippet>137</a>        &amp;&amp; <span class="macro">matches!</span>(
-<a href=#138 id=138 data-nosnippet>138</a>            code.iter().fold(<span class="number">0u32</span>, |n, d| n * <span class="number">10 </span>+ u32::from(d - <span class="string">b'0'</span>)),
-<a href=#139 id=139 data-nosnippet>139</a>            <span class="number">1</span>..=<span class="number">38 </span>| <span class="number">97 </span>| <span class="number">99
-<a href=#140 id=140 data-nosnippet>140</a>        </span>)
-<a href=#141 id=141 data-nosnippet>141</a>}
-<a href=#142 id=142 data-nosnippet>142</a>
-<a href=#143 id=143 data-nosnippet>143</a><span class="doccomment">/// Whether ten characters have the shape of a PAN: five letters, four digits, one letter
-<a href=#144 id=144 data-nosnippet>144</a></span><span class="kw">fn </span>is_pan(pan: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
-<a href=#145 id=145 data-nosnippet>145</a>    pan.len() == <span class="number">10
-<a href=#146 id=146 data-nosnippet>146</a>        </span>&amp;&amp; pan[<span class="number">0</span>..<span class="number">5</span>].iter().all(u8::is_ascii_uppercase)
-<a href=#147 id=147 data-nosnippet>147</a>        &amp;&amp; pan[<span class="number">5</span>..<span class="number">9</span>].iter().all(u8::is_ascii_digit)
-<a href=#148 id=148 data-nosnippet>148</a>        &amp;&amp; pan[<span class="number">9</span>].is_ascii_uppercase()
-<a href=#149 id=149 data-nosnippet>149</a>}
-<a href=#150 id=150 data-nosnippet>150</a>
-<a href=#151 id=151 data-nosnippet>151</a><span class="doccomment">/// Compute the GSTIN check character for the first 14 characters
-<a href=#152 id=152 data-nosnippet>152</a>///
-<a href=#153 id=153 data-nosnippet>153</a>/// Returns `None` if any character is outside [`GSTIN_CHARSET`].
-<a href=#154 id=154 data-nosnippet>154</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>gstin_checksum(body: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Option</span>&lt;u8&gt; {
-<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">let </span>radix = GSTIN_CHARSET.len();
-<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">let </span>sum = body
-<a href=#157 id=157 data-nosnippet>157</a>        .iter()
-<a href=#158 id=158 data-nosnippet>158</a>        .enumerate()
-<a href=#159 id=159 data-nosnippet>159</a>        .map(|(i, c)| {
-<a href=#160 id=160 data-nosnippet>160</a>            <span class="kw">let </span>value = GSTIN_CHARSET.iter().position(|x| x == c)<span class="question-mark">?</span>;
-<a href=#161 id=161 data-nosnippet>161</a>            <span class="kw">let </span>product = value * <span class="kw">if </span>i % <span class="number">2 </span>== <span class="number">0 </span>{ <span class="number">1 </span>} <span class="kw">else </span>{ <span class="number">2 </span>};
-<a href=#162 id=162 data-nosnippet>162</a>            <span class="prelude-val">Some</span>(product / radix + product % radix)
-<a href=#163 id=163 data-nosnippet>163</a>        })
-<a href=#164 id=164 data-nosnippet>164</a>        .sum::&lt;<span class="prelude-ty">Option</span>&lt;usize&gt;&gt;()<span class="question-mark">?</span>;
+<a href=#36 id=36 data-nosnippet>36</a>/// A GSTIN is 15 characters, laid out as:
+<a href=#37 id=37 data-nosnippet>37</a>///
+<a href=#38 id=38 data-nosnippet>38</a>/// | Position | Meaning                                          |
+<a href=#39 id=39 data-nosnippet>39</a>/// |----------|--------------------------------------------------|
+<a href=#40 id=40 data-nosnippet>40</a>/// | 1-2      | State code (`01`-`38`, `97` or `99`)             |
+<a href=#41 id=41 data-nosnippet>41</a>/// | 3-12     | PAN of the taxpayer (`AAAAA9999A`)               |
+<a href=#42 id=42 data-nosnippet>42</a>/// | 13       | Entity number for the same PAN (`1`-`9`, `A`-`Z`) |
+<a href=#43 id=43 data-nosnippet>43</a>/// | 14       | `Z` by default                                   |
+<a href=#44 id=44 data-nosnippet>44</a>/// | 15       | Mod-36 checksum over the first 14 characters     |
+<a href=#45 id=45 data-nosnippet>45</a>///
+<a href=#46 id=46 data-nosnippet>46</a>/// Lowercase input is accepted and normalised to uppercase. Deserialising goes through the same
+<a href=#47 id=47 data-nosnippet>47</a>/// validation, so a `Gstin` value is always well-formed.
+<a href=#48 id=48 data-nosnippet>48</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+<a href=#49 id=49 data-nosnippet>49</a>#[serde(try_from = <span class="string">"String"</span>, into = <span class="string">"String"</span>)]
+<a href=#50 id=50 data-nosnippet>50</a></span><span class="kw">pub struct </span>Gstin(String);
+<a href=#51 id=51 data-nosnippet>51</a>
+<a href=#52 id=52 data-nosnippet>52</a><span class="kw">impl </span>Gstin {
+<a href=#53 id=53 data-nosnippet>53</a>    <span class="doccomment">/// Parse and validate a GSTIN
+<a href=#54 id=54 data-nosnippet>54</a>    ///
+<a href=#55 id=55 data-nosnippet>55</a>    /// # Errors
+<a href=#56 id=56 data-nosnippet>56</a>    ///
+<a href=#57 id=57 data-nosnippet>57</a>    /// [`InvoiceError::InvalidGstin`] naming the first rule the value breaks.
+<a href=#58 id=58 data-nosnippet>58</a>    </span><span class="kw">pub fn </span>parse(value: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, InvoiceError&gt; {
+<a href=#59 id=59 data-nosnippet>59</a>        <span class="kw">let </span>gstin = value.to_ascii_uppercase();
+<a href=#60 id=60 data-nosnippet>60</a>        check_gstin(gstin.as_bytes()).map_err(|reason| InvoiceError::InvalidGstin {
+<a href=#61 id=61 data-nosnippet>61</a>            value: value.to_string(),
+<a href=#62 id=62 data-nosnippet>62</a>            reason,
+<a href=#63 id=63 data-nosnippet>63</a>        })<span class="question-mark">?</span>;
+<a href=#64 id=64 data-nosnippet>64</a>        <span class="prelude-val">Ok</span>(<span class="self">Self</span>(gstin))
+<a href=#65 id=65 data-nosnippet>65</a>    }
+<a href=#66 id=66 data-nosnippet>66</a>
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="doccomment">/// The GSTIN as a string
+<a href=#68 id=68 data-nosnippet>68</a>    </span><span class="attr">#[must_use]
+<a href=#69 id=69 data-nosnippet>69</a>    </span><span class="kw">pub fn </span>as_str(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
+<a href=#70 id=70 data-nosnippet>70</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0
+<a href=#71 id=71 data-nosnippet>71</a>    </span>}
+<a href=#72 id=72 data-nosnippet>72</a>
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="doccomment">/// Two-digit state code the taxpayer is registered in
+<a href=#74 id=74 data-nosnippet>74</a>    </span><span class="attr">#[must_use]
+<a href=#75 id=75 data-nosnippet>75</a>    </span><span class="kw">pub fn </span>state_code(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
+<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>[<span class="number">0</span>..<span class="number">2</span>]
+<a href=#77 id=77 data-nosnippet>77</a>    }
+<a href=#78 id=78 data-nosnippet>78</a>
+<a href=#79 id=79 data-nosnippet>79</a>    <span class="doccomment">/// PAN embedded in the GSTIN
+<a href=#80 id=80 data-nosnippet>80</a>    </span><span class="attr">#[must_use]
+<a href=#81 id=81 data-nosnippet>81</a>    </span><span class="kw">pub fn </span>pan(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
+<a href=#82 id=82 data-nosnippet>82</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>[<span class="number">2</span>..<span class="number">12</span>]
+<a href=#83 id=83 data-nosnippet>83</a>    }
+<a href=#84 id=84 data-nosnippet>84</a>}
+<a href=#85 id=85 data-nosnippet>85</a>
+<a href=#86 id=86 data-nosnippet>86</a><span class="doccomment">/// Why a GSTIN was rejected
+<a href=#87 id=87 data-nosnippet>87</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+<a href=#88 id=88 data-nosnippet>88</a></span><span class="kw">pub enum </span>GstinError {
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="doccomment">/// Not exactly 15 characters
+<a href=#90 id=90 data-nosnippet>90</a>    </span><span class="attr">#[error(<span class="string">"must be exactly {GSTIN_LEN} characters"</span>)]
+<a href=#91 id=91 data-nosnippet>91</a>    </span>Length,
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="doccomment">/// The first two characters are not a known state code
+<a href=#93 id=93 data-nosnippet>93</a>    </span><span class="attr">#[error(<span class="string">"invalid state code"</span>)]
+<a href=#94 id=94 data-nosnippet>94</a>    </span>StateCode,
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="doccomment">/// Characters 3-12 are not shaped like a PAN
+<a href=#96 id=96 data-nosnippet>96</a>    </span><span class="attr">#[error(<span class="string">"characters 3-12 must be a PAN (AAAAA9999A)"</span>)]
+<a href=#97 id=97 data-nosnippet>97</a>    </span>Pan,
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="doccomment">/// Character 13 is not 1-9 or A-Z
+<a href=#99 id=99 data-nosnippet>99</a>    </span><span class="attr">#[error(<span class="string">"entity number must be 1-9 or A-Z"</span>)]
+<a href=#100 id=100 data-nosnippet>100</a>    </span>EntityNumber,
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="doccomment">/// Character 14 is not `Z`
+<a href=#102 id=102 data-nosnippet>102</a>    </span><span class="attr">#[error(<span class="string">"character 14 must be 'Z'"</span>)]
+<a href=#103 id=103 data-nosnippet>103</a>    </span>DefaultZ,
+<a href=#104 id=104 data-nosnippet>104</a>    <span class="doccomment">/// The check character does not match
+<a href=#105 id=105 data-nosnippet>105</a>    </span><span class="attr">#[error(<span class="string">"checksum mismatch, expected '{expected}'"</span>)]
+<a href=#106 id=106 data-nosnippet>106</a>    </span>Checksum {
+<a href=#107 id=107 data-nosnippet>107</a>        <span class="doccomment">/// The check character the first 14 characters call for
+<a href=#108 id=108 data-nosnippet>108</a>        </span>expected: char,
+<a href=#109 id=109 data-nosnippet>109</a>    },
+<a href=#110 id=110 data-nosnippet>110</a>}
+<a href=#111 id=111 data-nosnippet>111</a>
+<a href=#112 id=112 data-nosnippet>112</a><span class="doccomment">/// Run every GSTIN rule over an uppercased value
+<a href=#113 id=113 data-nosnippet>113</a></span><span class="kw">fn </span>check_gstin(bytes: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), GstinError&gt; {
+<a href=#114 id=114 data-nosnippet>114</a>    <span class="kw">let </span>(<span class="prelude-val">Some</span>(body), <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>check), GSTIN_LEN) = (bytes.get(..<span class="number">14</span>), bytes.get(<span class="number">14</span>), bytes.len())
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">else </span>{
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(GstinError::Length);
+<a href=#117 id=117 data-nosnippet>117</a>    };
+<a href=#118 id=118 data-nosnippet>118</a>
+<a href=#119 id=119 data-nosnippet>119</a>    check_rule(is_valid_state_code(<span class="kw-2">&amp;</span>body[<span class="number">0</span>..<span class="number">2</span>]), GstinError::StateCode)<span class="question-mark">?</span>;
+<a href=#120 id=120 data-nosnippet>120</a>    check_rule(is_pan(<span class="kw-2">&amp;</span>body[<span class="number">2</span>..<span class="number">12</span>]), GstinError::Pan)<span class="question-mark">?</span>;
+<a href=#121 id=121 data-nosnippet>121</a>    check_rule(
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="macro">matches!</span>(body[<span class="number">12</span>], <span class="string">b'1'</span>..=<span class="string">b'9'</span>) || body[<span class="number">12</span>].is_ascii_uppercase(),
+<a href=#123 id=123 data-nosnippet>123</a>        GstinError::EntityNumber,
+<a href=#124 id=124 data-nosnippet>124</a>    )<span class="question-mark">?</span>;
+<a href=#125 id=125 data-nosnippet>125</a>    check_rule(body[<span class="number">13</span>] == <span class="string">b'Z'</span>, GstinError::DefaultZ)<span class="question-mark">?</span>;
+<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">match </span>gstin_checksum(body) {
+<a href=#127 id=127 data-nosnippet>127</a>        <span class="prelude-val">Some</span>(expected) <span class="kw">if </span>expected == check =&gt; <span class="prelude-val">Ok</span>(()),
+<a href=#128 id=128 data-nosnippet>128</a>        <span class="prelude-val">Some</span>(expected) =&gt; <span class="prelude-val">Err</span>(GstinError::Checksum {
+<a href=#129 id=129 data-nosnippet>129</a>            expected: char::from(expected),
+<a href=#130 id=130 data-nosnippet>130</a>        }),
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="comment">// Unreachable after the checks above, which admit only charset characters
+<a href=#132 id=132 data-nosnippet>132</a>        </span><span class="prelude-val">None </span>=&gt; <span class="prelude-val">Err</span>(GstinError::Pan),
+<a href=#133 id=133 data-nosnippet>133</a>    }
+<a href=#134 id=134 data-nosnippet>134</a>}
+<a href=#135 id=135 data-nosnippet>135</a>
+<a href=#136 id=136 data-nosnippet>136</a><span class="kw">fn </span>check_rule(holds: bool, error: GstinError) -&gt; <span class="prelude-ty">Result</span>&lt;(), GstinError&gt; {
+<a href=#137 id=137 data-nosnippet>137</a>    <span class="kw">if </span>holds {
+<a href=#138 id=138 data-nosnippet>138</a>        <span class="prelude-val">Ok</span>(())
+<a href=#139 id=139 data-nosnippet>139</a>    } <span class="kw">else </span>{
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="prelude-val">Err</span>(error)
+<a href=#141 id=141 data-nosnippet>141</a>    }
+<a href=#142 id=142 data-nosnippet>142</a>}
+<a href=#143 id=143 data-nosnippet>143</a>
+<a href=#144 id=144 data-nosnippet>144</a><span class="doccomment">/// Code of the centre jurisdiction, which a GSTIN may start with but which is never a place of
+<a href=#145 id=145 data-nosnippet>145</a>/// supply
+<a href=#146 id=146 data-nosnippet>146</a></span><span class="kw">const </span>CENTRE_JURISDICTION_CODE: u32 = <span class="number">99</span>;
+<a href=#147 id=147 data-nosnippet>147</a>
+<a href=#148 id=148 data-nosnippet>148</a><span class="doccomment">/// State and union territory codes, plus `97` (other territory) and `99` (centre jurisdiction)
+<a href=#149 id=149 data-nosnippet>149</a></span><span class="kw">fn </span>is_valid_state_code(code: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
+<a href=#150 id=150 data-nosnippet>150</a>    state_code_number(code).is_some_and(|n| is_place_of_supply(n) || n == CENTRE_JURISDICTION_CODE)
+<a href=#151 id=151 data-nosnippet>151</a>}
+<a href=#152 id=152 data-nosnippet>152</a>
+<a href=#153 id=153 data-nosnippet>153</a><span class="doccomment">/// State and union territory codes, plus `97` (other territory): the codes goods or services can
+<a href=#154 id=154 data-nosnippet>154</a>/// be supplied to
+<a href=#155 id=155 data-nosnippet>155</a></span><span class="kw">fn </span>is_place_of_supply(code: u32) -&gt; bool {
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="macro">matches!</span>(code, <span class="number">1</span>..=<span class="number">38 </span>| <span class="number">97</span>)
+<a href=#157 id=157 data-nosnippet>157</a>}
+<a href=#158 id=158 data-nosnippet>158</a>
+<a href=#159 id=159 data-nosnippet>159</a><span class="doccomment">/// A state code's digits as a number, if they are all digits
+<a href=#160 id=160 data-nosnippet>160</a></span><span class="kw">fn </span>state_code_number(code: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Option</span>&lt;u32&gt; {
+<a href=#161 id=161 data-nosnippet>161</a>    code.iter().try_fold(<span class="number">0u32</span>, |n, d| {
+<a href=#162 id=162 data-nosnippet>162</a>        d.is_ascii_digit().then(|| n * <span class="number">10 </span>+ u32::from(d - <span class="string">b'0'</span>))
+<a href=#163 id=163 data-nosnippet>163</a>    })
+<a href=#164 id=164 data-nosnippet>164</a>}
 <a href=#165 id=165 data-nosnippet>165</a>
-<a href=#166 id=166 data-nosnippet>166</a>    GSTIN_CHARSET.get((radix - sum % radix) % radix).copied()
-<a href=#167 id=167 data-nosnippet>167</a>}
-<a href=#168 id=168 data-nosnippet>168</a>
-<a href=#169 id=169 data-nosnippet>169</a><span class="kw">impl </span>FromStr <span class="kw">for </span>Gstin {
-<a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">type </span><span class="prelude-val">Err </span>= InvoiceError;
-<a href=#171 id=171 data-nosnippet>171</a>
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">fn </span>from_str(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Err&gt; {
-<a href=#173 id=173 data-nosnippet>173</a>        <span class="self">Self</span>::parse(s)
-<a href=#174 id=174 data-nosnippet>174</a>    }
-<a href=#175 id=175 data-nosnippet>175</a>}
-<a href=#176 id=176 data-nosnippet>176</a>
-<a href=#177 id=177 data-nosnippet>177</a><span class="kw">impl </span>TryFrom&lt;String&gt; <span class="kw">for </span>Gstin {
-<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">type </span>Error = InvoiceError;
-<a href=#179 id=179 data-nosnippet>179</a>
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">fn </span>try_from(value: String) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
-<a href=#181 id=181 data-nosnippet>181</a>        <span class="self">Self</span>::parse(<span class="kw-2">&amp;</span>value)
-<a href=#182 id=182 data-nosnippet>182</a>    }
-<a href=#183 id=183 data-nosnippet>183</a>}
-<a href=#184 id=184 data-nosnippet>184</a>
-<a href=#185 id=185 data-nosnippet>185</a><span class="kw">impl </span>From&lt;Gstin&gt; <span class="kw">for </span>String {
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">fn </span>from(gstin: Gstin) -&gt; <span class="self">Self </span>{
-<a href=#187 id=187 data-nosnippet>187</a>        gstin.<span class="number">0
-<a href=#188 id=188 data-nosnippet>188</a>    </span>}
-<a href=#189 id=189 data-nosnippet>189</a>}
-<a href=#190 id=190 data-nosnippet>190</a>
-<a href=#191 id=191 data-nosnippet>191</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>Gstin {
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
-<a href=#193 id=193 data-nosnippet>193</a>        f.write_str(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>)
-<a href=#194 id=194 data-nosnippet>194</a>    }
-<a href=#195 id=195 data-nosnippet>195</a>}
-<a href=#196 id=196 data-nosnippet>196</a>
-<a href=#197 id=197 data-nosnippet>197</a><span class="doccomment">/// Tax components for an amount, or the sum of them across an invoice
-<a href=#198 id=198 data-nosnippet>198</a></span><span class="attr">#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-<a href=#199 id=199 data-nosnippet>199</a></span><span class="kw">pub struct </span>GstBreakdown {
-<a href=#200 id=200 data-nosnippet>200</a>    <span class="doccomment">/// Taxable value (before GST)
-<a href=#201 id=201 data-nosnippet>201</a>    </span><span class="kw">pub </span>taxable_value: BigDecimal,
-<a href=#202 id=202 data-nosnippet>202</a>    <span class="doccomment">/// Central GST amount
-<a href=#203 id=203 data-nosnippet>203</a>    </span><span class="kw">pub </span>cgst: BigDecimal,
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="doccomment">/// State GST amount
-<a href=#205 id=205 data-nosnippet>205</a>    </span><span class="kw">pub </span>sgst: BigDecimal,
-<a href=#206 id=206 data-nosnippet>206</a>    <span class="doccomment">/// Integrated GST amount
-<a href=#207 id=207 data-nosnippet>207</a>    </span><span class="kw">pub </span>igst: BigDecimal,
-<a href=#208 id=208 data-nosnippet>208</a>    <span class="doccomment">/// Total tax (CGST + SGST + IGST)
-<a href=#209 id=209 data-nosnippet>209</a>    </span><span class="kw">pub </span>total_tax: BigDecimal,
-<a href=#210 id=210 data-nosnippet>210</a>    <span class="doccomment">/// Taxable value plus total tax
-<a href=#211 id=211 data-nosnippet>211</a>    </span><span class="kw">pub </span>total: BigDecimal,
+<a href=#166 id=166 data-nosnippet>166</a><span class="doccomment">/// Whether ten characters have the shape of a PAN: five letters, four digits, one letter
+<a href=#167 id=167 data-nosnippet>167</a></span><span class="kw">fn </span>is_pan(pan: <span class="kw-2">&amp;</span>[u8]) -&gt; bool {
+<a href=#168 id=168 data-nosnippet>168</a>    pan.len() == <span class="number">10
+<a href=#169 id=169 data-nosnippet>169</a>        </span>&amp;&amp; pan[<span class="number">0</span>..<span class="number">5</span>].iter().all(u8::is_ascii_uppercase)
+<a href=#170 id=170 data-nosnippet>170</a>        &amp;&amp; pan[<span class="number">5</span>..<span class="number">9</span>].iter().all(u8::is_ascii_digit)
+<a href=#171 id=171 data-nosnippet>171</a>        &amp;&amp; pan[<span class="number">9</span>].is_ascii_uppercase()
+<a href=#172 id=172 data-nosnippet>172</a>}
+<a href=#173 id=173 data-nosnippet>173</a>
+<a href=#174 id=174 data-nosnippet>174</a><span class="doccomment">/// Compute the GSTIN check character for the first 14 characters
+<a href=#175 id=175 data-nosnippet>175</a>///
+<a href=#176 id=176 data-nosnippet>176</a>/// Returns `None` if any character is outside [`GSTIN_CHARSET`].
+<a href=#177 id=177 data-nosnippet>177</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>gstin_checksum(body: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Option</span>&lt;u8&gt; {
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">let </span>radix = GSTIN_CHARSET.len();
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">let </span>sum = body
+<a href=#180 id=180 data-nosnippet>180</a>        .iter()
+<a href=#181 id=181 data-nosnippet>181</a>        .enumerate()
+<a href=#182 id=182 data-nosnippet>182</a>        .map(|(i, c)| {
+<a href=#183 id=183 data-nosnippet>183</a>            <span class="kw">let </span>value = GSTIN_CHARSET.iter().position(|x| x == c)<span class="question-mark">?</span>;
+<a href=#184 id=184 data-nosnippet>184</a>            <span class="kw">let </span>product = value * <span class="kw">if </span>i % <span class="number">2 </span>== <span class="number">0 </span>{ <span class="number">1 </span>} <span class="kw">else </span>{ <span class="number">2 </span>};
+<a href=#185 id=185 data-nosnippet>185</a>            <span class="prelude-val">Some</span>(product / radix + product % radix)
+<a href=#186 id=186 data-nosnippet>186</a>        })
+<a href=#187 id=187 data-nosnippet>187</a>        .sum::&lt;<span class="prelude-ty">Option</span>&lt;usize&gt;&gt;()<span class="question-mark">?</span>;
+<a href=#188 id=188 data-nosnippet>188</a>
+<a href=#189 id=189 data-nosnippet>189</a>    GSTIN_CHARSET.get((radix - sum % radix) % radix).copied()
+<a href=#190 id=190 data-nosnippet>190</a>}
+<a href=#191 id=191 data-nosnippet>191</a>
+<a href=#192 id=192 data-nosnippet>192</a><span class="kw">impl </span>FromStr <span class="kw">for </span>Gstin {
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">type </span><span class="prelude-val">Err </span>= InvoiceError;
+<a href=#194 id=194 data-nosnippet>194</a>
+<a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">fn </span>from_str(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Err&gt; {
+<a href=#196 id=196 data-nosnippet>196</a>        <span class="self">Self</span>::parse(s)
+<a href=#197 id=197 data-nosnippet>197</a>    }
+<a href=#198 id=198 data-nosnippet>198</a>}
+<a href=#199 id=199 data-nosnippet>199</a>
+<a href=#200 id=200 data-nosnippet>200</a><span class="kw">impl </span>TryFrom&lt;String&gt; <span class="kw">for </span>Gstin {
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">type </span>Error = InvoiceError;
+<a href=#202 id=202 data-nosnippet>202</a>
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">fn </span>try_from(value: String) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
+<a href=#204 id=204 data-nosnippet>204</a>        <span class="self">Self</span>::parse(<span class="kw-2">&amp;</span>value)
+<a href=#205 id=205 data-nosnippet>205</a>    }
+<a href=#206 id=206 data-nosnippet>206</a>}
+<a href=#207 id=207 data-nosnippet>207</a>
+<a href=#208 id=208 data-nosnippet>208</a><span class="kw">impl </span>From&lt;Gstin&gt; <span class="kw">for </span>String {
+<a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">fn </span>from(gstin: Gstin) -&gt; <span class="self">Self </span>{
+<a href=#210 id=210 data-nosnippet>210</a>        gstin.<span class="number">0
+<a href=#211 id=211 data-nosnippet>211</a>    </span>}
 <a href=#212 id=212 data-nosnippet>212</a>}
 <a href=#213 id=213 data-nosnippet>213</a>
-<a href=#214 id=214 data-nosnippet>214</a><span class="kw">impl </span>From&lt;GstCalculation&gt; <span class="kw">for </span>GstBreakdown {
-<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">fn </span>from(calculation: GstCalculation) -&gt; <span class="self">Self </span>{
-<a href=#216 id=216 data-nosnippet>216</a>        <span class="self">Self </span>{
-<a href=#217 id=217 data-nosnippet>217</a>            taxable_value: calculation.base_amount,
-<a href=#218 id=218 data-nosnippet>218</a>            cgst: calculation.cgst_amount,
-<a href=#219 id=219 data-nosnippet>219</a>            sgst: calculation.sgst_amount,
-<a href=#220 id=220 data-nosnippet>220</a>            igst: calculation.igst_amount,
-<a href=#221 id=221 data-nosnippet>221</a>            total_tax: calculation.total_gst_amount,
-<a href=#222 id=222 data-nosnippet>222</a>            total: calculation.total_amount,
-<a href=#223 id=223 data-nosnippet>223</a>        }
-<a href=#224 id=224 data-nosnippet>224</a>    }
-<a href=#225 id=225 data-nosnippet>225</a>}
-<a href=#226 id=226 data-nosnippet>226</a>
-<a href=#227 id=227 data-nosnippet>227</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; std::iter::Sum&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>GstBreakdown&gt; <span class="kw">for </span>GstBreakdown {
-<a href=#228 id=228 data-nosnippet>228</a>    <span class="kw">fn </span>sum&lt;I: Iterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>GstBreakdown&gt;&gt;(iter: I) -&gt; <span class="self">Self </span>{
-<a href=#229 id=229 data-nosnippet>229</a>        iter.fold(<span class="self">Self</span>::default(), |<span class="kw-2">mut </span>total, line| {
-<a href=#230 id=230 data-nosnippet>230</a>            total += line;
-<a href=#231 id=231 data-nosnippet>231</a>            total
-<a href=#232 id=232 data-nosnippet>232</a>        })
-<a href=#233 id=233 data-nosnippet>233</a>    }
-<a href=#234 id=234 data-nosnippet>234</a>}
-<a href=#235 id=235 data-nosnippet>235</a>
-<a href=#236 id=236 data-nosnippet>236</a><span class="kw">impl </span>std::ops::AddAssign&lt;<span class="kw-2">&amp;</span>GstBreakdown&gt; <span class="kw">for </span>GstBreakdown {
-<a href=#237 id=237 data-nosnippet>237</a>    <span class="kw">fn </span>add_assign(<span class="kw-2">&amp;mut </span><span class="self">self</span>, other: <span class="kw-2">&amp;</span>GstBreakdown) {
-<a href=#238 id=238 data-nosnippet>238</a>        <span class="self">self</span>.taxable_value += <span class="kw-2">&amp;</span>other.taxable_value;
-<a href=#239 id=239 data-nosnippet>239</a>        <span class="self">self</span>.cgst += <span class="kw-2">&amp;</span>other.cgst;
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="self">self</span>.sgst += <span class="kw-2">&amp;</span>other.sgst;
-<a href=#241 id=241 data-nosnippet>241</a>        <span class="self">self</span>.igst += <span class="kw-2">&amp;</span>other.igst;
-<a href=#242 id=242 data-nosnippet>242</a>        <span class="self">self</span>.total_tax += <span class="kw-2">&amp;</span>other.total_tax;
-<a href=#243 id=243 data-nosnippet>243</a>        <span class="self">self</span>.total += <span class="kw-2">&amp;</span>other.total;
-<a href=#244 id=244 data-nosnippet>244</a>    }
-<a href=#245 id=245 data-nosnippet>245</a>}
-<a href=#246 id=246 data-nosnippet>246</a>
-<a href=#247 id=247 data-nosnippet>247</a><span class="doccomment">/// A line on a GST invoice
-<a href=#248 id=248 data-nosnippet>248</a>///
-<a href=#249 id=249 data-nosnippet>249</a>/// Deserialising goes through [`GstLineItem::new`], so the same rules apply.
-<a href=#250 id=250 data-nosnippet>250</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-<a href=#251 id=251 data-nosnippet>251</a>#[serde(try_from = <span class="string">"RawGstLineItem"</span>)]
-<a href=#252 id=252 data-nosnippet>252</a></span><span class="kw">pub struct </span>GstLineItem {
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="doccomment">/// HSN code (goods) or SAC code (services): 4, 6 or 8 digits
-<a href=#254 id=254 data-nosnippet>254</a>    </span><span class="kw">pub </span>hsn_sac: String,
-<a href=#255 id=255 data-nosnippet>255</a>    <span class="doccomment">/// Item description
-<a href=#256 id=256 data-nosnippet>256</a>    </span><span class="kw">pub </span>description: String,
-<a href=#257 id=257 data-nosnippet>257</a>    <span class="doccomment">/// Quantity supplied
-<a href=#258 id=258 data-nosnippet>258</a>    </span><span class="kw">pub </span>quantity: BigDecimal,
-<a href=#259 id=259 data-nosnippet>259</a>    <span class="doccomment">/// Unit price before GST
-<a href=#260 id=260 data-nosnippet>260</a>    </span><span class="kw">pub </span>unit_price: BigDecimal,
-<a href=#261 id=261 data-nosnippet>261</a>    <span class="doccomment">/// Total GST rate as a percentage (e.g. 18 for 18%)
-<a href=#262 id=262 data-nosnippet>262</a>    </span><span class="kw">pub </span>gst_rate: BigDecimal,
-<a href=#263 id=263 data-nosnippet>263</a>}
-<a href=#264 id=264 data-nosnippet>264</a>
-<a href=#265 id=265 data-nosnippet>265</a><span class="doccomment">/// Unvalidated shape of a [`GstLineItem`], used when deserialising
-<a href=#266 id=266 data-nosnippet>266</a></span><span class="attr">#[derive(Deserialize)]
-<a href=#267 id=267 data-nosnippet>267</a></span><span class="kw">struct </span>RawGstLineItem {
-<a href=#268 id=268 data-nosnippet>268</a>    hsn_sac: String,
-<a href=#269 id=269 data-nosnippet>269</a>    description: String,
-<a href=#270 id=270 data-nosnippet>270</a>    quantity: BigDecimal,
-<a href=#271 id=271 data-nosnippet>271</a>    unit_price: BigDecimal,
-<a href=#272 id=272 data-nosnippet>272</a>    gst_rate: BigDecimal,
-<a href=#273 id=273 data-nosnippet>273</a>}
-<a href=#274 id=274 data-nosnippet>274</a>
-<a href=#275 id=275 data-nosnippet>275</a><span class="kw">impl </span>TryFrom&lt;RawGstLineItem&gt; <span class="kw">for </span>GstLineItem {
-<a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">type </span>Error = InvoiceError;
-<a href=#277 id=277 data-nosnippet>277</a>
-<a href=#278 id=278 data-nosnippet>278</a>    <span class="kw">fn </span>try_from(raw: RawGstLineItem) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
-<a href=#279 id=279 data-nosnippet>279</a>        <span class="self">Self</span>::new(
-<a href=#280 id=280 data-nosnippet>280</a>            raw.hsn_sac,
-<a href=#281 id=281 data-nosnippet>281</a>            raw.description,
-<a href=#282 id=282 data-nosnippet>282</a>            raw.quantity,
-<a href=#283 id=283 data-nosnippet>283</a>            raw.unit_price,
-<a href=#284 id=284 data-nosnippet>284</a>            raw.gst_rate,
-<a href=#285 id=285 data-nosnippet>285</a>        )
-<a href=#286 id=286 data-nosnippet>286</a>    }
-<a href=#287 id=287 data-nosnippet>287</a>}
-<a href=#288 id=288 data-nosnippet>288</a>
-<a href=#289 id=289 data-nosnippet>289</a><span class="kw">impl </span>GstLineItem {
-<a href=#290 id=290 data-nosnippet>290</a>    <span class="doccomment">/// Create a validated line item
-<a href=#291 id=291 data-nosnippet>291</a>    ///
-<a href=#292 id=292 data-nosnippet>292</a>    /// # Errors
-<a href=#293 id=293 data-nosnippet>293</a>    ///
-<a href=#294 id=294 data-nosnippet>294</a>    /// [`InvoiceError::InvalidHsnSac`] for a malformed code, or [`InvoiceError::InvalidLineItem`]
-<a href=#295 id=295 data-nosnippet>295</a>    /// naming the first rule the other fields break.
-<a href=#296 id=296 data-nosnippet>296</a>    </span><span class="kw">pub fn </span>new(
-<a href=#297 id=297 data-nosnippet>297</a>        hsn_sac: <span class="kw">impl </span>Into&lt;String&gt;,
-<a href=#298 id=298 data-nosnippet>298</a>        description: <span class="kw">impl </span>Into&lt;String&gt;,
-<a href=#299 id=299 data-nosnippet>299</a>        quantity: BigDecimal,
-<a href=#300 id=300 data-nosnippet>300</a>        unit_price: BigDecimal,
-<a href=#301 id=301 data-nosnippet>301</a>        gst_rate: BigDecimal,
-<a href=#302 id=302 data-nosnippet>302</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, InvoiceError&gt; {
-<a href=#303 id=303 data-nosnippet>303</a>        <span class="kw">let </span>hsn_sac = hsn_sac.into();
-<a href=#304 id=304 data-nosnippet>304</a>        <span class="kw">if </span>!is_valid_hsn_sac(<span class="kw-2">&amp;</span>hsn_sac) {
-<a href=#305 id=305 data-nosnippet>305</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(InvoiceError::InvalidHsnSac(hsn_sac));
-<a href=#306 id=306 data-nosnippet>306</a>        }
-<a href=#307 id=307 data-nosnippet>307</a>
-<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">let </span>item = <span class="self">Self </span>{
-<a href=#309 id=309 data-nosnippet>309</a>            hsn_sac,
-<a href=#310 id=310 data-nosnippet>310</a>            description: description.into(),
-<a href=#311 id=311 data-nosnippet>311</a>            quantity,
-<a href=#312 id=312 data-nosnippet>312</a>            unit_price,
-<a href=#313 id=313 data-nosnippet>313</a>            gst_rate,
-<a href=#314 id=314 data-nosnippet>314</a>        };
-<a href=#315 id=315 data-nosnippet>315</a>        item.check().map_err(InvoiceError::InvalidLineItem)<span class="question-mark">?</span>;
-<a href=#316 id=316 data-nosnippet>316</a>        <span class="prelude-val">Ok</span>(item)
-<a href=#317 id=317 data-nosnippet>317</a>    }
-<a href=#318 id=318 data-nosnippet>318</a>
-<a href=#319 id=319 data-nosnippet>319</a>    <span class="doccomment">/// The field rules other than the HSN/SAC shape
-<a href=#320 id=320 data-nosnippet>320</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>check(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), LineItemError&gt; {
-<a href=#321 id=321 data-nosnippet>321</a>        <span class="kw">if </span><span class="self">self</span>.description.trim().is_empty() {
-<a href=#322 id=322 data-nosnippet>322</a>            <span class="prelude-val">Err</span>(LineItemError::EmptyDescription)
-<a href=#323 id=323 data-nosnippet>323</a>        } <span class="kw">else if </span>!<span class="self">self</span>.quantity.is_positive() {
-<a href=#324 id=324 data-nosnippet>324</a>            <span class="prelude-val">Err</span>(LineItemError::NonPositiveQuantity)
-<a href=#325 id=325 data-nosnippet>325</a>        } <span class="kw">else if </span><span class="self">self</span>.unit_price.is_negative() {
-<a href=#326 id=326 data-nosnippet>326</a>            <span class="prelude-val">Err</span>(LineItemError::NegativeUnitPrice)
-<a href=#327 id=327 data-nosnippet>327</a>        } <span class="kw">else if </span><span class="self">self</span>.gst_rate.is_negative() || <span class="self">self</span>.gst_rate &gt; MAX_GST_RATE {
-<a href=#328 id=328 data-nosnippet>328</a>            <span class="prelude-val">Err</span>(LineItemError::RateOutOfRange(<span class="self">self</span>.gst_rate.clone()))
-<a href=#329 id=329 data-nosnippet>329</a>        } <span class="kw">else </span>{
-<a href=#330 id=330 data-nosnippet>330</a>            <span class="prelude-val">Ok</span>(())
-<a href=#331 id=331 data-nosnippet>331</a>        }
-<a href=#332 id=332 data-nosnippet>332</a>    }
-<a href=#333 id=333 data-nosnippet>333</a>
-<a href=#334 id=334 data-nosnippet>334</a>    <span class="doccomment">/// Create a validated line item at the default GST rate for its HSN/SAC code
-<a href=#335 id=335 data-nosnippet>335</a>    ///
-<a href=#336 id=336 data-nosnippet>336</a>    /// The rate comes from [`HsnMaster::global`], falling back from the exact code to its 6- and
-<a href=#337 id=337 data-nosnippet>337</a>    /// 4-digit headings. Use [`GstLineItem::new`] to charge a different rate.
-<a href=#338 id=338 data-nosnippet>338</a>    ///
-<a href=#339 id=339 data-nosnippet>339</a>    /// # Errors
-<a href=#340 id=340 data-nosnippet>340</a>    ///
-<a href=#341 id=341 data-nosnippet>341</a>    /// [`InvoiceError::InvalidHsnSac`] for a malformed code, [`InvoiceError::UnknownHsnSac`] for a
-<a href=#342 id=342 data-nosnippet>342</a>    /// code the master does not know, or any error from [`GstLineItem::new`].
-<a href=#343 id=343 data-nosnippet>343</a>    </span><span class="kw">pub fn </span>with_default_rate(
-<a href=#344 id=344 data-nosnippet>344</a>        hsn_sac: <span class="kw">impl </span>Into&lt;String&gt;,
-<a href=#345 id=345 data-nosnippet>345</a>        description: <span class="kw">impl </span>Into&lt;String&gt;,
-<a href=#346 id=346 data-nosnippet>346</a>        quantity: BigDecimal,
-<a href=#347 id=347 data-nosnippet>347</a>        unit_price: BigDecimal,
-<a href=#348 id=348 data-nosnippet>348</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, InvoiceError&gt; {
-<a href=#349 id=349 data-nosnippet>349</a>        <span class="kw">let </span>hsn_sac = hsn_sac.into();
-<a href=#350 id=350 data-nosnippet>350</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(gst_rate) = HsnMaster::global().default_rate(<span class="kw-2">&amp;</span>hsn_sac) <span class="kw">else </span>{
-<a href=#351 id=351 data-nosnippet>351</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="kw">if </span>is_valid_hsn_sac(<span class="kw-2">&amp;</span>hsn_sac) {
-<a href=#352 id=352 data-nosnippet>352</a>                InvoiceError::UnknownHsnSac(hsn_sac)
-<a href=#353 id=353 data-nosnippet>353</a>            } <span class="kw">else </span>{
-<a href=#354 id=354 data-nosnippet>354</a>                InvoiceError::InvalidHsnSac(hsn_sac)
-<a href=#355 id=355 data-nosnippet>355</a>            });
-<a href=#356 id=356 data-nosnippet>356</a>        };
-<a href=#357 id=357 data-nosnippet>357</a>
-<a href=#358 id=358 data-nosnippet>358</a>        <span class="self">Self</span>::new(hsn_sac, description, quantity, unit_price, gst_rate)
-<a href=#359 id=359 data-nosnippet>359</a>    }
-<a href=#360 id=360 data-nosnippet>360</a>
-<a href=#361 id=361 data-nosnippet>361</a>    <span class="doccomment">/// Taxable value of the line (quantity x unit price), exactly
-<a href=#362 id=362 data-nosnippet>362</a>    ///
-<a href=#363 id=363 data-nosnippet>363</a>    /// This is not rounded; [`GstLineItem::breakdown`] rounds it to paise, so its
-<a href=#364 id=364 data-nosnippet>364</a>    /// `taxable_value` is the amount that is invoiced and posted.
-<a href=#365 id=365 data-nosnippet>365</a>    </span><span class="attr">#[must_use]
-<a href=#366 id=366 data-nosnippet>366</a>    </span><span class="kw">pub fn </span>taxable_value(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; BigDecimal {
-<a href=#367 id=367 data-nosnippet>367</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.quantity * <span class="kw-2">&amp;</span><span class="self">self</span>.unit_price
-<a href=#368 id=368 data-nosnippet>368</a>    }
-<a href=#369 id=369 data-nosnippet>369</a>
-<a href=#370 id=370 data-nosnippet>370</a>    <span class="doccomment">/// Tax breakdown for this line, split as IGST for inter-state supply or CGST + SGST otherwise
-<a href=#371 id=371 data-nosnippet>371</a>    ///
-<a href=#372 id=372 data-nosnippet>372</a>    /// # Errors
-<a href=#373 id=373 data-nosnippet>373</a>    ///
-<a href=#374 id=374 data-nosnippet>374</a>    /// [`InvoiceError::Gst`] if the rate fails [`GstRate::validate`].
-<a href=#375 id=375 data-nosnippet>375</a>    </span><span class="kw">pub fn </span>breakdown(<span class="kw-2">&amp;</span><span class="self">self</span>, is_inter_state: bool) -&gt; <span class="prelude-ty">Result</span>&lt;GstBreakdown, InvoiceError&gt; {
-<a href=#376 id=376 data-nosnippet>376</a>        <span class="kw">let </span>rate = GstRate::for_supply(<span class="self">self</span>.gst_rate.clone(), is_inter_state);
-<a href=#377 id=377 data-nosnippet>377</a>        <span class="prelude-val">Ok</span>(GstCalculation::calculate(<span class="self">self</span>.taxable_value(), rate)<span class="question-mark">?</span>.into())
-<a href=#378 id=378 data-nosnippet>378</a>    }
-<a href=#379 id=379 data-nosnippet>379</a>}
-<a href=#380 id=380 data-nosnippet>380</a>
-<a href=#381 id=381 data-nosnippet>381</a><span class="doccomment">/// A B2B tax invoice under Indian GST
-<a href=#382 id=382 data-nosnippet>382</a>///
-<a href=#383 id=383 data-nosnippet>383</a>/// Whether the supply is inter-state (IGST) or intra-state (CGST + SGST) is derived from the
-<a href=#384 id=384 data-nosnippet>384</a>/// state codes of the seller and buyer GSTINs. Deserialising goes through [`GstInvoice::new`],
-<a href=#385 id=385 data-nosnippet>385</a>/// so the same rules apply.
-<a href=#386 id=386 data-nosnippet>386</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-<a href=#387 id=387 data-nosnippet>387</a>#[serde(try_from = <span class="string">"RawGstInvoice"</span>)]
-<a href=#388 id=388 data-nosnippet>388</a></span><span class="kw">pub struct </span>GstInvoice {
-<a href=#389 id=389 data-nosnippet>389</a>    <span class="doccomment">/// Invoice number: at most 16 characters of letters, digits, `-` and `/`
-<a href=#390 id=390 data-nosnippet>390</a>    </span><span class="kw">pub </span>invoice_number: String,
-<a href=#391 id=391 data-nosnippet>391</a>    <span class="doccomment">/// Date of issue
-<a href=#392 id=392 data-nosnippet>392</a>    </span><span class="kw">pub </span>invoice_date: NaiveDate,
-<a href=#393 id=393 data-nosnippet>393</a>    <span class="doccomment">/// Supplier's GSTIN
-<a href=#394 id=394 data-nosnippet>394</a>    </span><span class="kw">pub </span>seller_gstin: Gstin,
-<a href=#395 id=395 data-nosnippet>395</a>    <span class="doccomment">/// Recipient's GSTIN
-<a href=#396 id=396 data-nosnippet>396</a>    </span><span class="kw">pub </span>buyer_gstin: Gstin,
-<a href=#397 id=397 data-nosnippet>397</a>    <span class="doccomment">/// Invoice lines
-<a href=#398 id=398 data-nosnippet>398</a>    </span><span class="kw">pub </span>line_items: Vec&lt;GstLineItem&gt;,
-<a href=#399 id=399 data-nosnippet>399</a>}
-<a href=#400 id=400 data-nosnippet>400</a>
-<a href=#401 id=401 data-nosnippet>401</a><span class="doccomment">/// Unvalidated shape of a [`GstInvoice`], used when deserialising
-<a href=#402 id=402 data-nosnippet>402</a></span><span class="attr">#[derive(Deserialize)]
-<a href=#403 id=403 data-nosnippet>403</a></span><span class="kw">struct </span>RawGstInvoice {
-<a href=#404 id=404 data-nosnippet>404</a>    invoice_number: String,
-<a href=#405 id=405 data-nosnippet>405</a>    invoice_date: NaiveDate,
-<a href=#406 id=406 data-nosnippet>406</a>    seller_gstin: Gstin,
-<a href=#407 id=407 data-nosnippet>407</a>    buyer_gstin: Gstin,
-<a href=#408 id=408 data-nosnippet>408</a>    line_items: Vec&lt;GstLineItem&gt;,
-<a href=#409 id=409 data-nosnippet>409</a>}
-<a href=#410 id=410 data-nosnippet>410</a>
-<a href=#411 id=411 data-nosnippet>411</a><span class="kw">impl </span>TryFrom&lt;RawGstInvoice&gt; <span class="kw">for </span>GstInvoice {
-<a href=#412 id=412 data-nosnippet>412</a>    <span class="kw">type </span>Error = InvoiceError;
-<a href=#413 id=413 data-nosnippet>413</a>
-<a href=#414 id=414 data-nosnippet>414</a>    <span class="kw">fn </span>try_from(raw: RawGstInvoice) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
-<a href=#415 id=415 data-nosnippet>415</a>        <span class="self">Self</span>::new(
-<a href=#416 id=416 data-nosnippet>416</a>            raw.invoice_number,
-<a href=#417 id=417 data-nosnippet>417</a>            raw.invoice_date,
-<a href=#418 id=418 data-nosnippet>418</a>            raw.seller_gstin,
-<a href=#419 id=419 data-nosnippet>419</a>            raw.buyer_gstin,
-<a href=#420 id=420 data-nosnippet>420</a>            raw.line_items,
-<a href=#421 id=421 data-nosnippet>421</a>        )
-<a href=#422 id=422 data-nosnippet>422</a>    }
-<a href=#423 id=423 data-nosnippet>423</a>}
-<a href=#424 id=424 data-nosnippet>424</a>
-<a href=#425 id=425 data-nosnippet>425</a><span class="kw">impl </span>GstInvoice {
-<a href=#426 id=426 data-nosnippet>426</a>    <span class="doccomment">/// Create a validated invoice
-<a href=#427 id=427 data-nosnippet>427</a>    ///
-<a href=#428 id=428 data-nosnippet>428</a>    /// # Errors
-<a href=#429 id=429 data-nosnippet>429</a>    ///
-<a href=#430 id=430 data-nosnippet>430</a>    /// [`InvoiceError::InvalidInvoiceNumber`] or [`InvoiceError::EmptyInvoice`].
-<a href=#431 id=431 data-nosnippet>431</a>    </span><span class="kw">pub fn </span>new(
-<a href=#432 id=432 data-nosnippet>432</a>        invoice_number: <span class="kw">impl </span>Into&lt;String&gt;,
-<a href=#433 id=433 data-nosnippet>433</a>        invoice_date: NaiveDate,
-<a href=#434 id=434 data-nosnippet>434</a>        seller_gstin: Gstin,
-<a href=#435 id=435 data-nosnippet>435</a>        buyer_gstin: Gstin,
-<a href=#436 id=436 data-nosnippet>436</a>        line_items: Vec&lt;GstLineItem&gt;,
-<a href=#437 id=437 data-nosnippet>437</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, InvoiceError&gt; {
-<a href=#438 id=438 data-nosnippet>438</a>        <span class="kw">let </span>invoice_number = invoice_number.into();
-<a href=#439 id=439 data-nosnippet>439</a>        validate_invoice_number(<span class="kw-2">&amp;</span>invoice_number)<span class="question-mark">?</span>;
-<a href=#440 id=440 data-nosnippet>440</a>
-<a href=#441 id=441 data-nosnippet>441</a>        <span class="kw">if </span>line_items.is_empty() {
-<a href=#442 id=442 data-nosnippet>442</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(InvoiceError::EmptyInvoice);
-<a href=#443 id=443 data-nosnippet>443</a>        }
-<a href=#444 id=444 data-nosnippet>444</a>
-<a href=#445 id=445 data-nosnippet>445</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
-<a href=#446 id=446 data-nosnippet>446</a>            invoice_number,
-<a href=#447 id=447 data-nosnippet>447</a>            invoice_date,
-<a href=#448 id=448 data-nosnippet>448</a>            seller_gstin,
-<a href=#449 id=449 data-nosnippet>449</a>            buyer_gstin,
-<a href=#450 id=450 data-nosnippet>450</a>            line_items,
-<a href=#451 id=451 data-nosnippet>451</a>        })
-<a href=#452 id=452 data-nosnippet>452</a>    }
-<a href=#453 id=453 data-nosnippet>453</a>
-<a href=#454 id=454 data-nosnippet>454</a>    <span class="doccomment">/// Whether seller and buyer are registered in different states
-<a href=#455 id=455 data-nosnippet>455</a>    </span><span class="attr">#[must_use]
-<a href=#456 id=456 data-nosnippet>456</a>    </span><span class="kw">pub fn </span>is_inter_state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#457 id=457 data-nosnippet>457</a>        <span class="self">self</span>.seller_gstin.state_code() != <span class="self">self</span>.buyer_gstin.state_code()
-<a href=#458 id=458 data-nosnippet>458</a>    }
-<a href=#459 id=459 data-nosnippet>459</a>
-<a href=#460 id=460 data-nosnippet>460</a>    <span class="doccomment">/// Tax breakdown for each line, in order
-<a href=#461 id=461 data-nosnippet>461</a>    ///
-<a href=#462 id=462 data-nosnippet>462</a>    /// # Errors
-<a href=#463 id=463 data-nosnippet>463</a>    ///
-<a href=#464 id=464 data-nosnippet>464</a>    /// The first error from [`GstLineItem::breakdown`].
-<a href=#465 id=465 data-nosnippet>465</a>    </span><span class="kw">pub fn </span>line_breakdowns(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;GstBreakdown&gt;, InvoiceError&gt; {
-<a href=#466 id=466 data-nosnippet>466</a>        <span class="kw">let </span>is_inter_state = <span class="self">self</span>.is_inter_state();
-<a href=#467 id=467 data-nosnippet>467</a>        <span class="self">self</span>.line_items
-<a href=#468 id=468 data-nosnippet>468</a>            .iter()
-<a href=#469 id=469 data-nosnippet>469</a>            .map(|item| item.breakdown(is_inter_state))
-<a href=#470 id=470 data-nosnippet>470</a>            .collect()
-<a href=#471 id=471 data-nosnippet>471</a>    }
-<a href=#472 id=472 data-nosnippet>472</a>
-<a href=#473 id=473 data-nosnippet>473</a>    <span class="doccomment">/// Tax breakdown summed across all lines
-<a href=#474 id=474 data-nosnippet>474</a>    ///
-<a href=#475 id=475 data-nosnippet>475</a>    /// # Errors
-<a href=#476 id=476 data-nosnippet>476</a>    ///
-<a href=#477 id=477 data-nosnippet>477</a>    /// The first error from [`GstLineItem::breakdown`].
-<a href=#478 id=478 data-nosnippet>478</a>    </span><span class="kw">pub fn </span>breakdown(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;GstBreakdown, InvoiceError&gt; {
-<a href=#479 id=479 data-nosnippet>479</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>.line_breakdowns()<span class="question-mark">?</span>.iter().sum())
-<a href=#480 id=480 data-nosnippet>480</a>    }
-<a href=#481 id=481 data-nosnippet>481</a>}
-<a href=#482 id=482 data-nosnippet>482</a>
-<a href=#483 id=483 data-nosnippet>483</a><span class="doccomment">/// Check an invoice number against Rule 46: unique per financial year (not checked here), at
-<a href=#484 id=484 data-nosnippet>484</a>/// most 16 characters, and only letters, digits, `-` and `/`
-<a href=#485 id=485 data-nosnippet>485</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>validate_invoice_number(invoice_number: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), InvoiceError&gt; {
-<a href=#486 id=486 data-nosnippet>486</a>    invoice_number_error(invoice_number).map_or(<span class="prelude-val">Ok</span>(()), |reason| {
-<a href=#487 id=487 data-nosnippet>487</a>        <span class="prelude-val">Err</span>(InvoiceError::InvalidInvoiceNumber {
-<a href=#488 id=488 data-nosnippet>488</a>            value: invoice_number.to_string(),
-<a href=#489 id=489 data-nosnippet>489</a>            reason,
-<a href=#490 id=490 data-nosnippet>490</a>        })
-<a href=#491 id=491 data-nosnippet>491</a>    })
-<a href=#492 id=492 data-nosnippet>492</a>}
+<a href=#214 id=214 data-nosnippet>214</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>Gstin {
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#216 id=216 data-nosnippet>216</a>        f.write_str(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>)
+<a href=#217 id=217 data-nosnippet>217</a>    }
+<a href=#218 id=218 data-nosnippet>218</a>}
+<a href=#219 id=219 data-nosnippet>219</a>
+<a href=#220 id=220 data-nosnippet>220</a><span class="doccomment">/// A validated two-digit GST state code naming a place of supply, such as `27` for Maharashtra
+<a href=#221 id=221 data-nosnippet>221</a>///
+<a href=#222 id=222 data-nosnippet>222</a>/// Accepts the state and union territory codes `01`-`38`, plus `97` (other territory). Unlike a
+<a href=#223 id=223 data-nosnippet>223</a>/// [`Gstin`], it refuses `99` (centre jurisdiction), which is a registration and never a place of
+<a href=#224 id=224 data-nosnippet>224</a>/// supply. Deserialising goes through [`StateCode::parse`].
+<a href=#225 id=225 data-nosnippet>225</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+<a href=#226 id=226 data-nosnippet>226</a>#[serde(try_from = <span class="string">"String"</span>, into = <span class="string">"String"</span>)]
+<a href=#227 id=227 data-nosnippet>227</a></span><span class="kw">pub struct </span>StateCode(String);
+<a href=#228 id=228 data-nosnippet>228</a>
+<a href=#229 id=229 data-nosnippet>229</a><span class="kw">impl </span>StateCode {
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="doccomment">/// Parse and validate a state code
+<a href=#231 id=231 data-nosnippet>231</a>    ///
+<a href=#232 id=232 data-nosnippet>232</a>    /// # Errors
+<a href=#233 id=233 data-nosnippet>233</a>    ///
+<a href=#234 id=234 data-nosnippet>234</a>    /// [`InvoiceError::InvalidStateCode`] unless the value is two digits naming a state, a union
+<a href=#235 id=235 data-nosnippet>235</a>    /// territory or `97` (other territory).
+<a href=#236 id=236 data-nosnippet>236</a>    </span><span class="kw">pub fn </span>parse(value: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, InvoiceError&gt; {
+<a href=#237 id=237 data-nosnippet>237</a>        <span class="kw">if </span>value.len() == <span class="number">2 </span>&amp;&amp; state_code_number(value.as_bytes()).is_some_and(is_place_of_supply) {
+<a href=#238 id=238 data-nosnippet>238</a>            <span class="prelude-val">Ok</span>(<span class="self">Self</span>(value.to_string()))
+<a href=#239 id=239 data-nosnippet>239</a>        } <span class="kw">else </span>{
+<a href=#240 id=240 data-nosnippet>240</a>            <span class="prelude-val">Err</span>(InvoiceError::InvalidStateCode(value.to_string()))
+<a href=#241 id=241 data-nosnippet>241</a>        }
+<a href=#242 id=242 data-nosnippet>242</a>    }
+<a href=#243 id=243 data-nosnippet>243</a>
+<a href=#244 id=244 data-nosnippet>244</a>    <span class="doccomment">/// The code as a string
+<a href=#245 id=245 data-nosnippet>245</a>    </span><span class="attr">#[must_use]
+<a href=#246 id=246 data-nosnippet>246</a>    </span><span class="kw">pub fn </span>as_str(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
+<a href=#247 id=247 data-nosnippet>247</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0
+<a href=#248 id=248 data-nosnippet>248</a>    </span>}
+<a href=#249 id=249 data-nosnippet>249</a>}
+<a href=#250 id=250 data-nosnippet>250</a>
+<a href=#251 id=251 data-nosnippet>251</a><span class="kw">impl </span>FromStr <span class="kw">for </span>StateCode {
+<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">type </span><span class="prelude-val">Err </span>= InvoiceError;
+<a href=#253 id=253 data-nosnippet>253</a>
+<a href=#254 id=254 data-nosnippet>254</a>    <span class="kw">fn </span>from_str(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Err&gt; {
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="self">Self</span>::parse(s)
+<a href=#256 id=256 data-nosnippet>256</a>    }
+<a href=#257 id=257 data-nosnippet>257</a>}
+<a href=#258 id=258 data-nosnippet>258</a>
+<a href=#259 id=259 data-nosnippet>259</a><span class="kw">impl </span>TryFrom&lt;String&gt; <span class="kw">for </span>StateCode {
+<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">type </span>Error = InvoiceError;
+<a href=#261 id=261 data-nosnippet>261</a>
+<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">fn </span>try_from(value: String) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="self">Self</span>::parse(<span class="kw-2">&amp;</span>value)
+<a href=#264 id=264 data-nosnippet>264</a>    }
+<a href=#265 id=265 data-nosnippet>265</a>}
+<a href=#266 id=266 data-nosnippet>266</a>
+<a href=#267 id=267 data-nosnippet>267</a><span class="kw">impl </span>From&lt;StateCode&gt; <span class="kw">for </span>String {
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">fn </span>from(code: StateCode) -&gt; <span class="self">Self </span>{
+<a href=#269 id=269 data-nosnippet>269</a>        code.<span class="number">0
+<a href=#270 id=270 data-nosnippet>270</a>    </span>}
+<a href=#271 id=271 data-nosnippet>271</a>}
+<a href=#272 id=272 data-nosnippet>272</a>
+<a href=#273 id=273 data-nosnippet>273</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>StateCode {
+<a href=#274 id=274 data-nosnippet>274</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#275 id=275 data-nosnippet>275</a>        f.write_str(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>)
+<a href=#276 id=276 data-nosnippet>276</a>    }
+<a href=#277 id=277 data-nosnippet>277</a>}
+<a href=#278 id=278 data-nosnippet>278</a>
+<a href=#279 id=279 data-nosnippet>279</a><span class="doccomment">/// Who an invoice is issued to
+<a href=#280 id=280 data-nosnippet>280</a>///
+<a href=#281 id=281 data-nosnippet>281</a>/// A registered buyer is identified by its GSTIN, whose state is the place of supply. An
+<a href=#282 id=282 data-nosnippet>282</a>/// unregistered buyer (a B2C supply) has no GSTIN, so the invoice names the place of supply.
+<a href=#283 id=283 data-nosnippet>283</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+<a href=#284 id=284 data-nosnippet>284</a>#[serde(rename_all = <span class="string">"snake_case"</span>)]
+<a href=#285 id=285 data-nosnippet>285</a></span><span class="kw">pub enum </span>Recipient {
+<a href=#286 id=286 data-nosnippet>286</a>    <span class="doccomment">/// A buyer registered under GST
+<a href=#287 id=287 data-nosnippet>287</a>    </span>Registered(Gstin),
+<a href=#288 id=288 data-nosnippet>288</a>    <span class="doccomment">/// A buyer without a GSTIN
+<a href=#289 id=289 data-nosnippet>289</a>    </span>Unregistered {
+<a href=#290 id=290 data-nosnippet>290</a>        <span class="doccomment">/// State the goods or services are supplied to
+<a href=#291 id=291 data-nosnippet>291</a>        </span>place_of_supply: StateCode,
+<a href=#292 id=292 data-nosnippet>292</a>    },
+<a href=#293 id=293 data-nosnippet>293</a>}
+<a href=#294 id=294 data-nosnippet>294</a>
+<a href=#295 id=295 data-nosnippet>295</a><span class="kw">impl </span>Recipient {
+<a href=#296 id=296 data-nosnippet>296</a>    <span class="doccomment">/// An unregistered buyer receiving the supply in `place_of_supply`
+<a href=#297 id=297 data-nosnippet>297</a>    </span><span class="attr">#[must_use]
+<a href=#298 id=298 data-nosnippet>298</a>    </span><span class="kw">pub fn </span>unregistered(place_of_supply: StateCode) -&gt; <span class="self">Self </span>{
+<a href=#299 id=299 data-nosnippet>299</a>        <span class="self">Self</span>::Unregistered { place_of_supply }
+<a href=#300 id=300 data-nosnippet>300</a>    }
+<a href=#301 id=301 data-nosnippet>301</a>
+<a href=#302 id=302 data-nosnippet>302</a>    <span class="doccomment">/// State code of the place of supply
+<a href=#303 id=303 data-nosnippet>303</a>    </span><span class="attr">#[must_use]
+<a href=#304 id=304 data-nosnippet>304</a>    </span><span class="kw">pub fn </span>place_of_supply(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
+<a href=#305 id=305 data-nosnippet>305</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#306 id=306 data-nosnippet>306</a>            <span class="self">Self</span>::Registered(gstin) =&gt; gstin.state_code(),
+<a href=#307 id=307 data-nosnippet>307</a>            <span class="self">Self</span>::Unregistered { place_of_supply } =&gt; place_of_supply.as_str(),
+<a href=#308 id=308 data-nosnippet>308</a>        }
+<a href=#309 id=309 data-nosnippet>309</a>    }
+<a href=#310 id=310 data-nosnippet>310</a>
+<a href=#311 id=311 data-nosnippet>311</a>    <span class="doccomment">/// The buyer's GSTIN, if it is registered
+<a href=#312 id=312 data-nosnippet>312</a>    </span><span class="attr">#[must_use]
+<a href=#313 id=313 data-nosnippet>313</a>    </span><span class="kw">pub fn </span>gstin(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Gstin&gt; {
+<a href=#314 id=314 data-nosnippet>314</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#315 id=315 data-nosnippet>315</a>            <span class="self">Self</span>::Registered(gstin) =&gt; <span class="prelude-val">Some</span>(gstin),
+<a href=#316 id=316 data-nosnippet>316</a>            <span class="self">Self</span>::Unregistered { .. } =&gt; <span class="prelude-val">None</span>,
+<a href=#317 id=317 data-nosnippet>317</a>        }
+<a href=#318 id=318 data-nosnippet>318</a>    }
+<a href=#319 id=319 data-nosnippet>319</a>
+<a href=#320 id=320 data-nosnippet>320</a>    <span class="doccomment">/// Whether the buyer is registered under GST
+<a href=#321 id=321 data-nosnippet>321</a>    </span><span class="attr">#[must_use]
+<a href=#322 id=322 data-nosnippet>322</a>    </span><span class="kw">pub fn </span>is_registered(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#323 id=323 data-nosnippet>323</a>        <span class="macro">matches!</span>(<span class="self">self</span>, <span class="self">Self</span>::Registered(<span class="kw">_</span>))
+<a href=#324 id=324 data-nosnippet>324</a>    }
+<a href=#325 id=325 data-nosnippet>325</a>}
+<a href=#326 id=326 data-nosnippet>326</a>
+<a href=#327 id=327 data-nosnippet>327</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>Recipient {
+<a href=#328 id=328 data-nosnippet>328</a>    <span class="doccomment">/// The GSTIN, or `Unregistered (place of supply NN)`
+<a href=#329 id=329 data-nosnippet>329</a>    </span><span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#330 id=330 data-nosnippet>330</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#331 id=331 data-nosnippet>331</a>            <span class="self">Self</span>::Registered(gstin) =&gt; gstin.fmt(f),
+<a href=#332 id=332 data-nosnippet>332</a>            <span class="self">Self</span>::Unregistered { place_of_supply } =&gt; {
+<a href=#333 id=333 data-nosnippet>333</a>                <span class="macro">write!</span>(f, <span class="string">"Unregistered (place of supply {place_of_supply})"</span>)
+<a href=#334 id=334 data-nosnippet>334</a>            }
+<a href=#335 id=335 data-nosnippet>335</a>        }
+<a href=#336 id=336 data-nosnippet>336</a>    }
+<a href=#337 id=337 data-nosnippet>337</a>}
+<a href=#338 id=338 data-nosnippet>338</a>
+<a href=#339 id=339 data-nosnippet>339</a><span class="kw">impl </span>From&lt;Gstin&gt; <span class="kw">for </span>Recipient {
+<a href=#340 id=340 data-nosnippet>340</a>    <span class="kw">fn </span>from(gstin: Gstin) -&gt; <span class="self">Self </span>{
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="self">Self</span>::Registered(gstin)
+<a href=#342 id=342 data-nosnippet>342</a>    }
+<a href=#343 id=343 data-nosnippet>343</a>}
+<a href=#344 id=344 data-nosnippet>344</a>
+<a href=#345 id=345 data-nosnippet>345</a><span class="doccomment">/// How a supply is reported in GSTR-1
+<a href=#346 id=346 data-nosnippet>346</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+<a href=#347 id=347 data-nosnippet>347</a></span><span class="kw">pub enum </span>SupplyKind {
+<a href=#348 id=348 data-nosnippet>348</a>    <span class="doccomment">/// To a registered buyer (Table 4)
+<a href=#349 id=349 data-nosnippet>349</a>    </span>B2b,
+<a href=#350 id=350 data-nosnippet>350</a>    <span class="doccomment">/// Inter-state to an unregistered buyer, above the B2CL threshold (Table 5)
+<a href=#351 id=351 data-nosnippet>351</a>    </span>B2cl,
+<a href=#352 id=352 data-nosnippet>352</a>    <span class="doccomment">/// Any other supply to an unregistered buyer (Table 7)
+<a href=#353 id=353 data-nosnippet>353</a>    </span>B2cs,
+<a href=#354 id=354 data-nosnippet>354</a>}
+<a href=#355 id=355 data-nosnippet>355</a>
+<a href=#356 id=356 data-nosnippet>356</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>SupplyKind {
+<a href=#357 id=357 data-nosnippet>357</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#358 id=358 data-nosnippet>358</a>        f.write_str(<span class="kw">match </span><span class="self">self </span>{
+<a href=#359 id=359 data-nosnippet>359</a>            <span class="self">Self</span>::B2b =&gt; <span class="string">"B2B"</span>,
+<a href=#360 id=360 data-nosnippet>360</a>            <span class="self">Self</span>::B2cl =&gt; <span class="string">"B2CL"</span>,
+<a href=#361 id=361 data-nosnippet>361</a>            <span class="self">Self</span>::B2cs =&gt; <span class="string">"B2CS"</span>,
+<a href=#362 id=362 data-nosnippet>362</a>        })
+<a href=#363 id=363 data-nosnippet>363</a>    }
+<a href=#364 id=364 data-nosnippet>364</a>}
+<a href=#365 id=365 data-nosnippet>365</a>
+<a href=#366 id=366 data-nosnippet>366</a><span class="doccomment">/// The B2CL threshold, in rupees, for an invoice dated `date`
+<a href=#367 id=367 data-nosnippet>367</a></span><span class="attr">#[must_use]
+<a href=#368 id=368 data-nosnippet>368</a></span><span class="kw">pub fn </span>b2cl_threshold(date: NaiveDate) -&gt; BigDecimal {
+<a href=#369 id=369 data-nosnippet>369</a>    <span class="kw">if </span>date &gt;= b2cl_threshold_revised_from() {
+<a href=#370 id=370 data-nosnippet>370</a>        BigDecimal::from(B2CL_THRESHOLD_RUPEES)
+<a href=#371 id=371 data-nosnippet>371</a>    } <span class="kw">else </span>{
+<a href=#372 id=372 data-nosnippet>372</a>        BigDecimal::from(B2CL_THRESHOLD_BEFORE_REVISION_RUPEES)
+<a href=#373 id=373 data-nosnippet>373</a>    }
+<a href=#374 id=374 data-nosnippet>374</a>}
+<a href=#375 id=375 data-nosnippet>375</a>
+<a href=#376 id=376 data-nosnippet>376</a><span class="doccomment">/// First invoice date the lower [`B2CL_THRESHOLD_RUPEES`] applies to
+<a href=#377 id=377 data-nosnippet>377</a></span><span class="attr">#[must_use]
+<a href=#378 id=378 data-nosnippet>378</a></span><span class="kw">pub fn </span>b2cl_threshold_revised_from() -&gt; NaiveDate {
+<a href=#379 id=379 data-nosnippet>379</a>    <span class="kw">let </span>(year, month, day) = B2CL_THRESHOLD_REVISED_FROM;
+<a href=#380 id=380 data-nosnippet>380</a>    NaiveDate::from_ymd_opt(year, month, day).unwrap_or(NaiveDate::MIN)
+<a href=#381 id=381 data-nosnippet>381</a>}
+<a href=#382 id=382 data-nosnippet>382</a>
+<a href=#383 id=383 data-nosnippet>383</a><span class="doccomment">/// Tax components for an amount, or the sum of them across an invoice
+<a href=#384 id=384 data-nosnippet>384</a></span><span class="attr">#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+<a href=#385 id=385 data-nosnippet>385</a></span><span class="kw">pub struct </span>GstBreakdown {
+<a href=#386 id=386 data-nosnippet>386</a>    <span class="doccomment">/// Taxable value (before GST)
+<a href=#387 id=387 data-nosnippet>387</a>    </span><span class="kw">pub </span>taxable_value: BigDecimal,
+<a href=#388 id=388 data-nosnippet>388</a>    <span class="doccomment">/// Central GST amount
+<a href=#389 id=389 data-nosnippet>389</a>    </span><span class="kw">pub </span>cgst: BigDecimal,
+<a href=#390 id=390 data-nosnippet>390</a>    <span class="doccomment">/// State GST amount
+<a href=#391 id=391 data-nosnippet>391</a>    </span><span class="kw">pub </span>sgst: BigDecimal,
+<a href=#392 id=392 data-nosnippet>392</a>    <span class="doccomment">/// Integrated GST amount
+<a href=#393 id=393 data-nosnippet>393</a>    </span><span class="kw">pub </span>igst: BigDecimal,
+<a href=#394 id=394 data-nosnippet>394</a>    <span class="doccomment">/// Total tax (CGST + SGST + IGST)
+<a href=#395 id=395 data-nosnippet>395</a>    </span><span class="kw">pub </span>total_tax: BigDecimal,
+<a href=#396 id=396 data-nosnippet>396</a>    <span class="doccomment">/// Taxable value plus total tax
+<a href=#397 id=397 data-nosnippet>397</a>    </span><span class="kw">pub </span>total: BigDecimal,
+<a href=#398 id=398 data-nosnippet>398</a>}
+<a href=#399 id=399 data-nosnippet>399</a>
+<a href=#400 id=400 data-nosnippet>400</a><span class="kw">impl </span>From&lt;GstCalculation&gt; <span class="kw">for </span>GstBreakdown {
+<a href=#401 id=401 data-nosnippet>401</a>    <span class="kw">fn </span>from(calculation: GstCalculation) -&gt; <span class="self">Self </span>{
+<a href=#402 id=402 data-nosnippet>402</a>        <span class="self">Self </span>{
+<a href=#403 id=403 data-nosnippet>403</a>            taxable_value: calculation.base_amount,
+<a href=#404 id=404 data-nosnippet>404</a>            cgst: calculation.cgst_amount,
+<a href=#405 id=405 data-nosnippet>405</a>            sgst: calculation.sgst_amount,
+<a href=#406 id=406 data-nosnippet>406</a>            igst: calculation.igst_amount,
+<a href=#407 id=407 data-nosnippet>407</a>            total_tax: calculation.total_gst_amount,
+<a href=#408 id=408 data-nosnippet>408</a>            total: calculation.total_amount,
+<a href=#409 id=409 data-nosnippet>409</a>        }
+<a href=#410 id=410 data-nosnippet>410</a>    }
+<a href=#411 id=411 data-nosnippet>411</a>}
+<a href=#412 id=412 data-nosnippet>412</a>
+<a href=#413 id=413 data-nosnippet>413</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; std::iter::Sum&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>GstBreakdown&gt; <span class="kw">for </span>GstBreakdown {
+<a href=#414 id=414 data-nosnippet>414</a>    <span class="kw">fn </span>sum&lt;I: Iterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>GstBreakdown&gt;&gt;(iter: I) -&gt; <span class="self">Self </span>{
+<a href=#415 id=415 data-nosnippet>415</a>        iter.fold(<span class="self">Self</span>::default(), |<span class="kw-2">mut </span>total, line| {
+<a href=#416 id=416 data-nosnippet>416</a>            total += line;
+<a href=#417 id=417 data-nosnippet>417</a>            total
+<a href=#418 id=418 data-nosnippet>418</a>        })
+<a href=#419 id=419 data-nosnippet>419</a>    }
+<a href=#420 id=420 data-nosnippet>420</a>}
+<a href=#421 id=421 data-nosnippet>421</a>
+<a href=#422 id=422 data-nosnippet>422</a><span class="kw">impl </span>std::ops::AddAssign&lt;<span class="kw-2">&amp;</span>GstBreakdown&gt; <span class="kw">for </span>GstBreakdown {
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="kw">fn </span>add_assign(<span class="kw-2">&amp;mut </span><span class="self">self</span>, other: <span class="kw-2">&amp;</span>GstBreakdown) {
+<a href=#424 id=424 data-nosnippet>424</a>        <span class="self">self</span>.taxable_value += <span class="kw-2">&amp;</span>other.taxable_value;
+<a href=#425 id=425 data-nosnippet>425</a>        <span class="self">self</span>.cgst += <span class="kw-2">&amp;</span>other.cgst;
+<a href=#426 id=426 data-nosnippet>426</a>        <span class="self">self</span>.sgst += <span class="kw-2">&amp;</span>other.sgst;
+<a href=#427 id=427 data-nosnippet>427</a>        <span class="self">self</span>.igst += <span class="kw-2">&amp;</span>other.igst;
+<a href=#428 id=428 data-nosnippet>428</a>        <span class="self">self</span>.total_tax += <span class="kw-2">&amp;</span>other.total_tax;
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="self">self</span>.total += <span class="kw-2">&amp;</span>other.total;
+<a href=#430 id=430 data-nosnippet>430</a>    }
+<a href=#431 id=431 data-nosnippet>431</a>}
+<a href=#432 id=432 data-nosnippet>432</a>
+<a href=#433 id=433 data-nosnippet>433</a><span class="doccomment">/// A line on a GST invoice
+<a href=#434 id=434 data-nosnippet>434</a>///
+<a href=#435 id=435 data-nosnippet>435</a>/// Deserialising goes through [`GstLineItem::new`], so the same rules apply.
+<a href=#436 id=436 data-nosnippet>436</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+<a href=#437 id=437 data-nosnippet>437</a>#[serde(try_from = <span class="string">"RawGstLineItem"</span>)]
+<a href=#438 id=438 data-nosnippet>438</a></span><span class="kw">pub struct </span>GstLineItem {
+<a href=#439 id=439 data-nosnippet>439</a>    <span class="doccomment">/// HSN code (goods) or SAC code (services): 4, 6 or 8 digits
+<a href=#440 id=440 data-nosnippet>440</a>    </span><span class="kw">pub </span>hsn_sac: String,
+<a href=#441 id=441 data-nosnippet>441</a>    <span class="doccomment">/// Item description
+<a href=#442 id=442 data-nosnippet>442</a>    </span><span class="kw">pub </span>description: String,
+<a href=#443 id=443 data-nosnippet>443</a>    <span class="doccomment">/// Quantity supplied
+<a href=#444 id=444 data-nosnippet>444</a>    </span><span class="kw">pub </span>quantity: BigDecimal,
+<a href=#445 id=445 data-nosnippet>445</a>    <span class="doccomment">/// Unit price before GST
+<a href=#446 id=446 data-nosnippet>446</a>    </span><span class="kw">pub </span>unit_price: BigDecimal,
+<a href=#447 id=447 data-nosnippet>447</a>    <span class="doccomment">/// Total GST rate as a percentage (e.g. 18 for 18%)
+<a href=#448 id=448 data-nosnippet>448</a>    </span><span class="kw">pub </span>gst_rate: BigDecimal,
+<a href=#449 id=449 data-nosnippet>449</a>}
+<a href=#450 id=450 data-nosnippet>450</a>
+<a href=#451 id=451 data-nosnippet>451</a><span class="doccomment">/// Unvalidated shape of a [`GstLineItem`], used when deserialising
+<a href=#452 id=452 data-nosnippet>452</a></span><span class="attr">#[derive(Deserialize)]
+<a href=#453 id=453 data-nosnippet>453</a></span><span class="kw">struct </span>RawGstLineItem {
+<a href=#454 id=454 data-nosnippet>454</a>    hsn_sac: String,
+<a href=#455 id=455 data-nosnippet>455</a>    description: String,
+<a href=#456 id=456 data-nosnippet>456</a>    quantity: BigDecimal,
+<a href=#457 id=457 data-nosnippet>457</a>    unit_price: BigDecimal,
+<a href=#458 id=458 data-nosnippet>458</a>    gst_rate: BigDecimal,
+<a href=#459 id=459 data-nosnippet>459</a>}
+<a href=#460 id=460 data-nosnippet>460</a>
+<a href=#461 id=461 data-nosnippet>461</a><span class="kw">impl </span>TryFrom&lt;RawGstLineItem&gt; <span class="kw">for </span>GstLineItem {
+<a href=#462 id=462 data-nosnippet>462</a>    <span class="kw">type </span>Error = InvoiceError;
+<a href=#463 id=463 data-nosnippet>463</a>
+<a href=#464 id=464 data-nosnippet>464</a>    <span class="kw">fn </span>try_from(raw: RawGstLineItem) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
+<a href=#465 id=465 data-nosnippet>465</a>        <span class="self">Self</span>::new(
+<a href=#466 id=466 data-nosnippet>466</a>            raw.hsn_sac,
+<a href=#467 id=467 data-nosnippet>467</a>            raw.description,
+<a href=#468 id=468 data-nosnippet>468</a>            raw.quantity,
+<a href=#469 id=469 data-nosnippet>469</a>            raw.unit_price,
+<a href=#470 id=470 data-nosnippet>470</a>            raw.gst_rate,
+<a href=#471 id=471 data-nosnippet>471</a>        )
+<a href=#472 id=472 data-nosnippet>472</a>    }
+<a href=#473 id=473 data-nosnippet>473</a>}
+<a href=#474 id=474 data-nosnippet>474</a>
+<a href=#475 id=475 data-nosnippet>475</a><span class="kw">impl </span>GstLineItem {
+<a href=#476 id=476 data-nosnippet>476</a>    <span class="doccomment">/// Create a validated line item
+<a href=#477 id=477 data-nosnippet>477</a>    ///
+<a href=#478 id=478 data-nosnippet>478</a>    /// # Errors
+<a href=#479 id=479 data-nosnippet>479</a>    ///
+<a href=#480 id=480 data-nosnippet>480</a>    /// [`InvoiceError::InvalidHsnSac`] for a malformed code, or [`InvoiceError::InvalidLineItem`]
+<a href=#481 id=481 data-nosnippet>481</a>    /// naming the first rule the other fields break.
+<a href=#482 id=482 data-nosnippet>482</a>    </span><span class="kw">pub fn </span>new(
+<a href=#483 id=483 data-nosnippet>483</a>        hsn_sac: <span class="kw">impl </span>Into&lt;String&gt;,
+<a href=#484 id=484 data-nosnippet>484</a>        description: <span class="kw">impl </span>Into&lt;String&gt;,
+<a href=#485 id=485 data-nosnippet>485</a>        quantity: BigDecimal,
+<a href=#486 id=486 data-nosnippet>486</a>        unit_price: BigDecimal,
+<a href=#487 id=487 data-nosnippet>487</a>        gst_rate: BigDecimal,
+<a href=#488 id=488 data-nosnippet>488</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, InvoiceError&gt; {
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="kw">let </span>hsn_sac = hsn_sac.into();
+<a href=#490 id=490 data-nosnippet>490</a>        <span class="kw">if </span>!is_valid_hsn_sac(<span class="kw-2">&amp;</span>hsn_sac) {
+<a href=#491 id=491 data-nosnippet>491</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(InvoiceError::InvalidHsnSac(hsn_sac));
+<a href=#492 id=492 data-nosnippet>492</a>        }
 <a href=#493 id=493 data-nosnippet>493</a>
-<a href=#494 id=494 data-nosnippet>494</a><span class="doccomment">/// The first Rule 46 check an invoice number fails, if any
-<a href=#495 id=495 data-nosnippet>495</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>invoice_number_error(invoice_number: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;InvoiceNumberError&gt; {
-<a href=#496 id=496 data-nosnippet>496</a>    <span class="kw">if </span>invoice_number.is_empty() || invoice_number.len() &gt; INVOICE_NUMBER_MAX_LEN {
-<a href=#497 id=497 data-nosnippet>497</a>        <span class="prelude-val">Some</span>(InvoiceNumberError::Length)
-<a href=#498 id=498 data-nosnippet>498</a>    } <span class="kw">else if </span>!invoice_number
-<a href=#499 id=499 data-nosnippet>499</a>        .chars()
-<a href=#500 id=500 data-nosnippet>500</a>        .all(|c| c.is_ascii_alphanumeric() || c == <span class="string">'-' </span>|| c == <span class="string">'/'</span>)
-<a href=#501 id=501 data-nosnippet>501</a>    {
-<a href=#502 id=502 data-nosnippet>502</a>        <span class="prelude-val">Some</span>(InvoiceNumberError::Characters)
-<a href=#503 id=503 data-nosnippet>503</a>    } <span class="kw">else </span>{
-<a href=#504 id=504 data-nosnippet>504</a>        <span class="prelude-val">None
-<a href=#505 id=505 data-nosnippet>505</a>    </span>}
-<a href=#506 id=506 data-nosnippet>506</a>}
-<a href=#507 id=507 data-nosnippet>507</a>
-<a href=#508 id=508 data-nosnippet>508</a><span class="doccomment">/// Why an invoice number was rejected
-<a href=#509 id=509 data-nosnippet>509</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-<a href=#510 id=510 data-nosnippet>510</a></span><span class="kw">pub enum </span>InvoiceNumberError {
-<a href=#511 id=511 data-nosnippet>511</a>    <span class="doccomment">/// Empty or longer than 16 characters
-<a href=#512 id=512 data-nosnippet>512</a>    </span><span class="attr">#[error(<span class="string">"must be 1-{INVOICE_NUMBER_MAX_LEN} characters"</span>)]
-<a href=#513 id=513 data-nosnippet>513</a>    </span>Length,
-<a href=#514 id=514 data-nosnippet>514</a>    <span class="doccomment">/// Contains something other than letters, digits, `-` and `/`
-<a href=#515 id=515 data-nosnippet>515</a>    </span><span class="attr">#[error(<span class="string">"only letters, digits, '-' and '/' are allowed"</span>)]
-<a href=#516 id=516 data-nosnippet>516</a>    </span>Characters,
-<a href=#517 id=517 data-nosnippet>517</a>}
-<a href=#518 id=518 data-nosnippet>518</a>
-<a href=#519 id=519 data-nosnippet>519</a><span class="doccomment">/// Why a line item was rejected
-<a href=#520 id=520 data-nosnippet>520</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, thiserror::Error)]
-<a href=#521 id=521 data-nosnippet>521</a></span><span class="kw">pub enum </span>LineItemError {
-<a href=#522 id=522 data-nosnippet>522</a>    <span class="doccomment">/// The description is empty or only whitespace
-<a href=#523 id=523 data-nosnippet>523</a>    </span><span class="attr">#[error(<span class="string">"description cannot be empty"</span>)]
-<a href=#524 id=524 data-nosnippet>524</a>    </span>EmptyDescription,
-<a href=#525 id=525 data-nosnippet>525</a>    <span class="doccomment">/// The quantity is zero or negative
-<a href=#526 id=526 data-nosnippet>526</a>    </span><span class="attr">#[error(<span class="string">"quantity must be positive"</span>)]
-<a href=#527 id=527 data-nosnippet>527</a>    </span>NonPositiveQuantity,
-<a href=#528 id=528 data-nosnippet>528</a>    <span class="doccomment">/// The unit price is negative
-<a href=#529 id=529 data-nosnippet>529</a>    </span><span class="attr">#[error(<span class="string">"unit price cannot be negative"</span>)]
-<a href=#530 id=530 data-nosnippet>530</a>    </span>NegativeUnitPrice,
-<a href=#531 id=531 data-nosnippet>531</a>    <span class="doccomment">/// The GST rate is outside 0-100
-<a href=#532 id=532 data-nosnippet>532</a>    </span><span class="attr">#[error(<span class="string">"GST rate must be between 0 and {MAX_GST_RATE}, got {0}"</span>)]
-<a href=#533 id=533 data-nosnippet>533</a>    </span>RateOutOfRange(BigDecimal),
-<a href=#534 id=534 data-nosnippet>534</a>}
-<a href=#535 id=535 data-nosnippet>535</a>
-<a href=#536 id=536 data-nosnippet>536</a><span class="doccomment">/// Invoice-related errors
-<a href=#537 id=537 data-nosnippet>537</a></span><span class="attr">#[derive(Debug, thiserror::Error)]
-<a href=#538 id=538 data-nosnippet>538</a></span><span class="kw">pub enum </span>InvoiceError {
-<a href=#539 id=539 data-nosnippet>539</a>    <span class="doccomment">/// The GSTIN is malformed
-<a href=#540 id=540 data-nosnippet>540</a>    </span><span class="attr">#[error(<span class="string">"invalid GSTIN {value}: {reason}"</span>)]
-<a href=#541 id=541 data-nosnippet>541</a>    </span>InvalidGstin {
-<a href=#542 id=542 data-nosnippet>542</a>        <span class="doccomment">/// The value as given
-<a href=#543 id=543 data-nosnippet>543</a>        </span>value: String,
-<a href=#544 id=544 data-nosnippet>544</a>        <span class="doccomment">/// The first rule it breaks
-<a href=#545 id=545 data-nosnippet>545</a>        </span>reason: GstinError,
-<a href=#546 id=546 data-nosnippet>546</a>    },
-<a href=#547 id=547 data-nosnippet>547</a>    <span class="doccomment">/// The invoice number breaks Rule 46
-<a href=#548 id=548 data-nosnippet>548</a>    </span><span class="attr">#[error(<span class="string">"invalid invoice number {value}: {reason}"</span>)]
-<a href=#549 id=549 data-nosnippet>549</a>    </span>InvalidInvoiceNumber {
-<a href=#550 id=550 data-nosnippet>550</a>        <span class="doccomment">/// The value as given
-<a href=#551 id=551 data-nosnippet>551</a>        </span>value: String,
-<a href=#552 id=552 data-nosnippet>552</a>        <span class="doccomment">/// The first rule it breaks
-<a href=#553 id=553 data-nosnippet>553</a>        </span>reason: InvoiceNumberError,
-<a href=#554 id=554 data-nosnippet>554</a>    },
-<a href=#555 id=555 data-nosnippet>555</a>    <span class="doccomment">/// The HSN/SAC code is not 4, 6 or 8 digits
-<a href=#556 id=556 data-nosnippet>556</a>    </span><span class="attr">#[error(<span class="string">"invalid HSN/SAC code: {0}"</span>)]
-<a href=#557 id=557 data-nosnippet>557</a>    </span>InvalidHsnSac(String),
-<a href=#558 id=558 data-nosnippet>558</a>    <span class="doccomment">/// The HSN/SAC code is well-formed but not in the master data
-<a href=#559 id=559 data-nosnippet>559</a>    </span><span class="attr">#[error(<span class="string">"HSN/SAC code not in the master data: {0}"</span>)]
-<a href=#560 id=560 data-nosnippet>560</a>    </span>UnknownHsnSac(String),
-<a href=#561 id=561 data-nosnippet>561</a>    <span class="doccomment">/// A line item field is invalid
-<a href=#562 id=562 data-nosnippet>562</a>    </span><span class="attr">#[error(<span class="string">"invalid line item: {0}"</span>)]
-<a href=#563 id=563 data-nosnippet>563</a>    </span>InvalidLineItem(LineItemError),
-<a href=#564 id=564 data-nosnippet>564</a>    <span class="doccomment">/// The invoice has no line items
-<a href=#565 id=565 data-nosnippet>565</a>    </span><span class="attr">#[error(<span class="string">"an invoice needs at least one line item"</span>)]
-<a href=#566 id=566 data-nosnippet>566</a>    </span>EmptyInvoice,
-<a href=#567 id=567 data-nosnippet>567</a>    <span class="doccomment">/// A party's details can't be printed on the invoice
-<a href=#568 id=568 data-nosnippet>568</a>    </span><span class="attr">#[error(<span class="string">"invalid {role}: {reason}"</span>)]
-<a href=#569 id=569 data-nosnippet>569</a>    </span>InvalidParty {
-<a href=#570 id=570 data-nosnippet>570</a>        <span class="doccomment">/// Which party was rejected
-<a href=#571 id=571 data-nosnippet>571</a>        </span>role: PartyRole,
-<a href=#572 id=572 data-nosnippet>572</a>        <span class="doccomment">/// The first rule it breaks
-<a href=#573 id=573 data-nosnippet>573</a>        </span>reason: PartyError,
-<a href=#574 id=574 data-nosnippet>574</a>    },
-<a href=#575 id=575 data-nosnippet>575</a>    <span class="doccomment">/// The GST rate is inconsistent
-<a href=#576 id=576 data-nosnippet>576</a>    </span><span class="attr">#[error(transparent)]
-<a href=#577 id=577 data-nosnippet>577</a>    </span>Gst(<span class="attr">#[from] </span>GstError),
-<a href=#578 id=578 data-nosnippet>578</a>}
+<a href=#494 id=494 data-nosnippet>494</a>        <span class="kw">let </span>item = <span class="self">Self </span>{
+<a href=#495 id=495 data-nosnippet>495</a>            hsn_sac,
+<a href=#496 id=496 data-nosnippet>496</a>            description: description.into(),
+<a href=#497 id=497 data-nosnippet>497</a>            quantity,
+<a href=#498 id=498 data-nosnippet>498</a>            unit_price,
+<a href=#499 id=499 data-nosnippet>499</a>            gst_rate,
+<a href=#500 id=500 data-nosnippet>500</a>        };
+<a href=#501 id=501 data-nosnippet>501</a>        item.check().map_err(InvoiceError::InvalidLineItem)<span class="question-mark">?</span>;
+<a href=#502 id=502 data-nosnippet>502</a>        <span class="prelude-val">Ok</span>(item)
+<a href=#503 id=503 data-nosnippet>503</a>    }
+<a href=#504 id=504 data-nosnippet>504</a>
+<a href=#505 id=505 data-nosnippet>505</a>    <span class="doccomment">/// The field rules other than the HSN/SAC shape
+<a href=#506 id=506 data-nosnippet>506</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>check(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), LineItemError&gt; {
+<a href=#507 id=507 data-nosnippet>507</a>        <span class="kw">if </span><span class="self">self</span>.description.trim().is_empty() {
+<a href=#508 id=508 data-nosnippet>508</a>            <span class="prelude-val">Err</span>(LineItemError::EmptyDescription)
+<a href=#509 id=509 data-nosnippet>509</a>        } <span class="kw">else if </span>!<span class="self">self</span>.quantity.is_positive() {
+<a href=#510 id=510 data-nosnippet>510</a>            <span class="prelude-val">Err</span>(LineItemError::NonPositiveQuantity)
+<a href=#511 id=511 data-nosnippet>511</a>        } <span class="kw">else if </span><span class="self">self</span>.unit_price.is_negative() {
+<a href=#512 id=512 data-nosnippet>512</a>            <span class="prelude-val">Err</span>(LineItemError::NegativeUnitPrice)
+<a href=#513 id=513 data-nosnippet>513</a>        } <span class="kw">else if </span><span class="self">self</span>.gst_rate.is_negative() || <span class="self">self</span>.gst_rate &gt; MAX_GST_RATE {
+<a href=#514 id=514 data-nosnippet>514</a>            <span class="prelude-val">Err</span>(LineItemError::RateOutOfRange(<span class="self">self</span>.gst_rate.clone()))
+<a href=#515 id=515 data-nosnippet>515</a>        } <span class="kw">else </span>{
+<a href=#516 id=516 data-nosnippet>516</a>            <span class="prelude-val">Ok</span>(())
+<a href=#517 id=517 data-nosnippet>517</a>        }
+<a href=#518 id=518 data-nosnippet>518</a>    }
+<a href=#519 id=519 data-nosnippet>519</a>
+<a href=#520 id=520 data-nosnippet>520</a>    <span class="doccomment">/// Create a validated line item at the default GST rate for its HSN/SAC code
+<a href=#521 id=521 data-nosnippet>521</a>    ///
+<a href=#522 id=522 data-nosnippet>522</a>    /// The rate comes from [`HsnMaster::global`], falling back from the exact code to its 6- and
+<a href=#523 id=523 data-nosnippet>523</a>    /// 4-digit headings. Use [`GstLineItem::new`] to charge a different rate.
+<a href=#524 id=524 data-nosnippet>524</a>    ///
+<a href=#525 id=525 data-nosnippet>525</a>    /// # Errors
+<a href=#526 id=526 data-nosnippet>526</a>    ///
+<a href=#527 id=527 data-nosnippet>527</a>    /// [`InvoiceError::InvalidHsnSac`] for a malformed code, [`InvoiceError::UnknownHsnSac`] for a
+<a href=#528 id=528 data-nosnippet>528</a>    /// code the master does not know, or any error from [`GstLineItem::new`].
+<a href=#529 id=529 data-nosnippet>529</a>    </span><span class="kw">pub fn </span>with_default_rate(
+<a href=#530 id=530 data-nosnippet>530</a>        hsn_sac: <span class="kw">impl </span>Into&lt;String&gt;,
+<a href=#531 id=531 data-nosnippet>531</a>        description: <span class="kw">impl </span>Into&lt;String&gt;,
+<a href=#532 id=532 data-nosnippet>532</a>        quantity: BigDecimal,
+<a href=#533 id=533 data-nosnippet>533</a>        unit_price: BigDecimal,
+<a href=#534 id=534 data-nosnippet>534</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, InvoiceError&gt; {
+<a href=#535 id=535 data-nosnippet>535</a>        <span class="kw">let </span>hsn_sac = hsn_sac.into();
+<a href=#536 id=536 data-nosnippet>536</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(gst_rate) = HsnMaster::global().default_rate(<span class="kw-2">&amp;</span>hsn_sac) <span class="kw">else </span>{
+<a href=#537 id=537 data-nosnippet>537</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="kw">if </span>is_valid_hsn_sac(<span class="kw-2">&amp;</span>hsn_sac) {
+<a href=#538 id=538 data-nosnippet>538</a>                InvoiceError::UnknownHsnSac(hsn_sac)
+<a href=#539 id=539 data-nosnippet>539</a>            } <span class="kw">else </span>{
+<a href=#540 id=540 data-nosnippet>540</a>                InvoiceError::InvalidHsnSac(hsn_sac)
+<a href=#541 id=541 data-nosnippet>541</a>            });
+<a href=#542 id=542 data-nosnippet>542</a>        };
+<a href=#543 id=543 data-nosnippet>543</a>
+<a href=#544 id=544 data-nosnippet>544</a>        <span class="self">Self</span>::new(hsn_sac, description, quantity, unit_price, gst_rate)
+<a href=#545 id=545 data-nosnippet>545</a>    }
+<a href=#546 id=546 data-nosnippet>546</a>
+<a href=#547 id=547 data-nosnippet>547</a>    <span class="doccomment">/// Taxable value of the line (quantity x unit price), exactly
+<a href=#548 id=548 data-nosnippet>548</a>    ///
+<a href=#549 id=549 data-nosnippet>549</a>    /// This is not rounded; [`GstLineItem::breakdown`] rounds it to paise, so its
+<a href=#550 id=550 data-nosnippet>550</a>    /// `taxable_value` is the amount that is invoiced and posted.
+<a href=#551 id=551 data-nosnippet>551</a>    </span><span class="attr">#[must_use]
+<a href=#552 id=552 data-nosnippet>552</a>    </span><span class="kw">pub fn </span>taxable_value(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; BigDecimal {
+<a href=#553 id=553 data-nosnippet>553</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.quantity * <span class="kw-2">&amp;</span><span class="self">self</span>.unit_price
+<a href=#554 id=554 data-nosnippet>554</a>    }
+<a href=#555 id=555 data-nosnippet>555</a>
+<a href=#556 id=556 data-nosnippet>556</a>    <span class="doccomment">/// Tax breakdown for this line, split as IGST for inter-state supply or CGST + SGST otherwise
+<a href=#557 id=557 data-nosnippet>557</a>    ///
+<a href=#558 id=558 data-nosnippet>558</a>    /// # Errors
+<a href=#559 id=559 data-nosnippet>559</a>    ///
+<a href=#560 id=560 data-nosnippet>560</a>    /// [`InvoiceError::Gst`] if the rate fails [`GstRate::validate`].
+<a href=#561 id=561 data-nosnippet>561</a>    </span><span class="kw">pub fn </span>breakdown(<span class="kw-2">&amp;</span><span class="self">self</span>, is_inter_state: bool) -&gt; <span class="prelude-ty">Result</span>&lt;GstBreakdown, InvoiceError&gt; {
+<a href=#562 id=562 data-nosnippet>562</a>        <span class="kw">let </span>rate = GstRate::for_supply(<span class="self">self</span>.gst_rate.clone(), is_inter_state);
+<a href=#563 id=563 data-nosnippet>563</a>        <span class="prelude-val">Ok</span>(GstCalculation::calculate(<span class="self">self</span>.taxable_value(), rate)<span class="question-mark">?</span>.into())
+<a href=#564 id=564 data-nosnippet>564</a>    }
+<a href=#565 id=565 data-nosnippet>565</a>}
+<a href=#566 id=566 data-nosnippet>566</a>
+<a href=#567 id=567 data-nosnippet>567</a><span class="doccomment">/// A tax invoice under Indian GST, to a registered or an unregistered buyer
+<a href=#568 id=568 data-nosnippet>568</a>///
+<a href=#569 id=569 data-nosnippet>569</a>/// Whether the supply is inter-state (IGST) or intra-state (CGST + SGST) is derived from the
+<a href=#570 id=570 data-nosnippet>570</a>/// state of the seller's GSTIN and the place of supply of the [`Recipient`]. Deserialising goes
+<a href=#571 id=571 data-nosnippet>571</a>/// through [`GstInvoice::new`], so the same rules apply.
+<a href=#572 id=572 data-nosnippet>572</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+<a href=#573 id=573 data-nosnippet>573</a>#[serde(try_from = <span class="string">"RawGstInvoice"</span>)]
+<a href=#574 id=574 data-nosnippet>574</a></span><span class="kw">pub struct </span>GstInvoice {
+<a href=#575 id=575 data-nosnippet>575</a>    <span class="doccomment">/// Invoice number: at most 16 characters of letters, digits, `-` and `/`
+<a href=#576 id=576 data-nosnippet>576</a>    </span><span class="kw">pub </span>invoice_number: String,
+<a href=#577 id=577 data-nosnippet>577</a>    <span class="doccomment">/// Date of issue
+<a href=#578 id=578 data-nosnippet>578</a>    </span><span class="kw">pub </span>invoice_date: NaiveDate,
+<a href=#579 id=579 data-nosnippet>579</a>    <span class="doccomment">/// Supplier's GSTIN
+<a href=#580 id=580 data-nosnippet>580</a>    </span><span class="kw">pub </span>seller_gstin: Gstin,
+<a href=#581 id=581 data-nosnippet>581</a>    <span class="doccomment">/// Recipient: a registered buyer's GSTIN, or an unregistered buyer's place of supply
+<a href=#582 id=582 data-nosnippet>582</a>    </span><span class="kw">pub </span>buyer: Recipient,
+<a href=#583 id=583 data-nosnippet>583</a>    <span class="doccomment">/// Invoice lines
+<a href=#584 id=584 data-nosnippet>584</a>    </span><span class="kw">pub </span>line_items: Vec&lt;GstLineItem&gt;,
+<a href=#585 id=585 data-nosnippet>585</a>}
+<a href=#586 id=586 data-nosnippet>586</a>
+<a href=#587 id=587 data-nosnippet>587</a><span class="doccomment">/// Unvalidated shape of a [`GstInvoice`], used when deserialising
+<a href=#588 id=588 data-nosnippet>588</a></span><span class="attr">#[derive(Deserialize)]
+<a href=#589 id=589 data-nosnippet>589</a></span><span class="kw">struct </span>RawGstInvoice {
+<a href=#590 id=590 data-nosnippet>590</a>    invoice_number: String,
+<a href=#591 id=591 data-nosnippet>591</a>    invoice_date: NaiveDate,
+<a href=#592 id=592 data-nosnippet>592</a>    seller_gstin: Gstin,
+<a href=#593 id=593 data-nosnippet>593</a>    buyer: Recipient,
+<a href=#594 id=594 data-nosnippet>594</a>    line_items: Vec&lt;GstLineItem&gt;,
+<a href=#595 id=595 data-nosnippet>595</a>}
+<a href=#596 id=596 data-nosnippet>596</a>
+<a href=#597 id=597 data-nosnippet>597</a><span class="kw">impl </span>TryFrom&lt;RawGstInvoice&gt; <span class="kw">for </span>GstInvoice {
+<a href=#598 id=598 data-nosnippet>598</a>    <span class="kw">type </span>Error = InvoiceError;
+<a href=#599 id=599 data-nosnippet>599</a>
+<a href=#600 id=600 data-nosnippet>600</a>    <span class="kw">fn </span>try_from(raw: RawGstInvoice) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, <span class="self">Self</span>::Error&gt; {
+<a href=#601 id=601 data-nosnippet>601</a>        <span class="self">Self</span>::new(
+<a href=#602 id=602 data-nosnippet>602</a>            raw.invoice_number,
+<a href=#603 id=603 data-nosnippet>603</a>            raw.invoice_date,
+<a href=#604 id=604 data-nosnippet>604</a>            raw.seller_gstin,
+<a href=#605 id=605 data-nosnippet>605</a>            raw.buyer,
+<a href=#606 id=606 data-nosnippet>606</a>            raw.line_items,
+<a href=#607 id=607 data-nosnippet>607</a>        )
+<a href=#608 id=608 data-nosnippet>608</a>    }
+<a href=#609 id=609 data-nosnippet>609</a>}
+<a href=#610 id=610 data-nosnippet>610</a>
+<a href=#611 id=611 data-nosnippet>611</a><span class="kw">impl </span>GstInvoice {
+<a href=#612 id=612 data-nosnippet>612</a>    <span class="doccomment">/// Create a validated invoice
+<a href=#613 id=613 data-nosnippet>613</a>    ///
+<a href=#614 id=614 data-nosnippet>614</a>    /// `buyer` is a [`Recipient`]; pass a [`Gstin`] for a registered buyer.
+<a href=#615 id=615 data-nosnippet>615</a>    ///
+<a href=#616 id=616 data-nosnippet>616</a>    /// # Errors
+<a href=#617 id=617 data-nosnippet>617</a>    ///
+<a href=#618 id=618 data-nosnippet>618</a>    /// [`InvoiceError::InvalidInvoiceNumber`] or [`InvoiceError::EmptyInvoice`].
+<a href=#619 id=619 data-nosnippet>619</a>    </span><span class="kw">pub fn </span>new(
+<a href=#620 id=620 data-nosnippet>620</a>        invoice_number: <span class="kw">impl </span>Into&lt;String&gt;,
+<a href=#621 id=621 data-nosnippet>621</a>        invoice_date: NaiveDate,
+<a href=#622 id=622 data-nosnippet>622</a>        seller_gstin: Gstin,
+<a href=#623 id=623 data-nosnippet>623</a>        buyer: <span class="kw">impl </span>Into&lt;Recipient&gt;,
+<a href=#624 id=624 data-nosnippet>624</a>        line_items: Vec&lt;GstLineItem&gt;,
+<a href=#625 id=625 data-nosnippet>625</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, InvoiceError&gt; {
+<a href=#626 id=626 data-nosnippet>626</a>        <span class="kw">let </span>invoice_number = invoice_number.into();
+<a href=#627 id=627 data-nosnippet>627</a>        validate_invoice_number(<span class="kw-2">&amp;</span>invoice_number)<span class="question-mark">?</span>;
+<a href=#628 id=628 data-nosnippet>628</a>
+<a href=#629 id=629 data-nosnippet>629</a>        <span class="kw">if </span>line_items.is_empty() {
+<a href=#630 id=630 data-nosnippet>630</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(InvoiceError::EmptyInvoice);
+<a href=#631 id=631 data-nosnippet>631</a>        }
+<a href=#632 id=632 data-nosnippet>632</a>
+<a href=#633 id=633 data-nosnippet>633</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
+<a href=#634 id=634 data-nosnippet>634</a>            invoice_number,
+<a href=#635 id=635 data-nosnippet>635</a>            invoice_date,
+<a href=#636 id=636 data-nosnippet>636</a>            seller_gstin,
+<a href=#637 id=637 data-nosnippet>637</a>            buyer: buyer.into(),
+<a href=#638 id=638 data-nosnippet>638</a>            line_items,
+<a href=#639 id=639 data-nosnippet>639</a>        })
+<a href=#640 id=640 data-nosnippet>640</a>    }
+<a href=#641 id=641 data-nosnippet>641</a>
+<a href=#642 id=642 data-nosnippet>642</a>    <span class="doccomment">/// Whether the place of supply is in a different state from the seller's registration
+<a href=#643 id=643 data-nosnippet>643</a>    </span><span class="attr">#[must_use]
+<a href=#644 id=644 data-nosnippet>644</a>    </span><span class="kw">pub fn </span>is_inter_state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#645 id=645 data-nosnippet>645</a>        <span class="self">self</span>.seller_gstin.state_code() != <span class="self">self</span>.buyer.place_of_supply()
+<a href=#646 id=646 data-nosnippet>646</a>    }
+<a href=#647 id=647 data-nosnippet>647</a>
+<a href=#648 id=648 data-nosnippet>648</a>    <span class="doccomment">/// Tax breakdown for each line, in order
+<a href=#649 id=649 data-nosnippet>649</a>    ///
+<a href=#650 id=650 data-nosnippet>650</a>    /// # Errors
+<a href=#651 id=651 data-nosnippet>651</a>    ///
+<a href=#652 id=652 data-nosnippet>652</a>    /// The first error from [`GstLineItem::breakdown`].
+<a href=#653 id=653 data-nosnippet>653</a>    </span><span class="kw">pub fn </span>line_breakdowns(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;GstBreakdown&gt;, InvoiceError&gt; {
+<a href=#654 id=654 data-nosnippet>654</a>        <span class="kw">let </span>is_inter_state = <span class="self">self</span>.is_inter_state();
+<a href=#655 id=655 data-nosnippet>655</a>        <span class="self">self</span>.line_items
+<a href=#656 id=656 data-nosnippet>656</a>            .iter()
+<a href=#657 id=657 data-nosnippet>657</a>            .map(|item| item.breakdown(is_inter_state))
+<a href=#658 id=658 data-nosnippet>658</a>            .collect()
+<a href=#659 id=659 data-nosnippet>659</a>    }
+<a href=#660 id=660 data-nosnippet>660</a>
+<a href=#661 id=661 data-nosnippet>661</a>    <span class="doccomment">/// Tax breakdown summed across all lines
+<a href=#662 id=662 data-nosnippet>662</a>    ///
+<a href=#663 id=663 data-nosnippet>663</a>    /// # Errors
+<a href=#664 id=664 data-nosnippet>664</a>    ///
+<a href=#665 id=665 data-nosnippet>665</a>    /// The first error from [`GstLineItem::breakdown`].
+<a href=#666 id=666 data-nosnippet>666</a>    </span><span class="kw">pub fn </span>breakdown(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;GstBreakdown, InvoiceError&gt; {
+<a href=#667 id=667 data-nosnippet>667</a>        <span class="prelude-val">Ok</span>(<span class="self">self</span>.line_breakdowns()<span class="question-mark">?</span>.iter().sum())
+<a href=#668 id=668 data-nosnippet>668</a>    }
+<a href=#669 id=669 data-nosnippet>669</a>
+<a href=#670 id=670 data-nosnippet>670</a>    <span class="doccomment">/// How the invoice is reported in GSTR-1
+<a href=#671 id=671 data-nosnippet>671</a>    ///
+<a href=#672 id=672 data-nosnippet>672</a>    /// A supply to a registered buyer is B2B. A supply to an unregistered buyer is B2CL when it is
+<a href=#673 id=673 data-nosnippet>673</a>    /// inter-state and its value, tax included, is more than [`b2cl_threshold`] for its date;
+<a href=#674 id=674 data-nosnippet>674</a>    /// otherwise it is B2CS.
+<a href=#675 id=675 data-nosnippet>675</a>    ///
+<a href=#676 id=676 data-nosnippet>676</a>    /// # Errors
+<a href=#677 id=677 data-nosnippet>677</a>    ///
+<a href=#678 id=678 data-nosnippet>678</a>    /// The first error from [`GstLineItem::breakdown`].
+<a href=#679 id=679 data-nosnippet>679</a>    </span><span class="kw">pub fn </span>supply_kind(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;SupplyKind, InvoiceError&gt; {
+<a href=#680 id=680 data-nosnippet>680</a>        <span class="prelude-val">Ok</span>(supply_kind_for(<span class="self">self</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.breakdown()<span class="question-mark">?</span>.total))
+<a href=#681 id=681 data-nosnippet>681</a>    }
+<a href=#682 id=682 data-nosnippet>682</a>}
+<a href=#683 id=683 data-nosnippet>683</a>
+<a href=#684 id=684 data-nosnippet>684</a><span class="doccomment">/// [`GstInvoice::supply_kind`] for an invoice whose value, tax included, is already known
+<a href=#685 id=685 data-nosnippet>685</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>supply_kind_for(invoice: <span class="kw-2">&amp;</span>GstInvoice, invoice_value: <span class="kw-2">&amp;</span>BigDecimal) -&gt; SupplyKind {
+<a href=#686 id=686 data-nosnippet>686</a>    <span class="kw">if </span>invoice.buyer.is_registered() {
+<a href=#687 id=687 data-nosnippet>687</a>        SupplyKind::B2b
+<a href=#688 id=688 data-nosnippet>688</a>    } <span class="kw">else if </span>invoice.is_inter_state() &amp;&amp; <span class="kw-2">*</span>invoice_value &gt; b2cl_threshold(invoice.invoice_date) {
+<a href=#689 id=689 data-nosnippet>689</a>        SupplyKind::B2cl
+<a href=#690 id=690 data-nosnippet>690</a>    } <span class="kw">else </span>{
+<a href=#691 id=691 data-nosnippet>691</a>        SupplyKind::B2cs
+<a href=#692 id=692 data-nosnippet>692</a>    }
+<a href=#693 id=693 data-nosnippet>693</a>}
+<a href=#694 id=694 data-nosnippet>694</a>
+<a href=#695 id=695 data-nosnippet>695</a><span class="doccomment">/// Check an invoice number against Rule 46: unique per financial year (not checked here), at
+<a href=#696 id=696 data-nosnippet>696</a>/// most 16 characters, and only letters, digits, `-` and `/`
+<a href=#697 id=697 data-nosnippet>697</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>validate_invoice_number(invoice_number: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), InvoiceError&gt; {
+<a href=#698 id=698 data-nosnippet>698</a>    invoice_number_error(invoice_number).map_or(<span class="prelude-val">Ok</span>(()), |reason| {
+<a href=#699 id=699 data-nosnippet>699</a>        <span class="prelude-val">Err</span>(InvoiceError::InvalidInvoiceNumber {
+<a href=#700 id=700 data-nosnippet>700</a>            value: invoice_number.to_string(),
+<a href=#701 id=701 data-nosnippet>701</a>            reason,
+<a href=#702 id=702 data-nosnippet>702</a>        })
+<a href=#703 id=703 data-nosnippet>703</a>    })
+<a href=#704 id=704 data-nosnippet>704</a>}
+<a href=#705 id=705 data-nosnippet>705</a>
+<a href=#706 id=706 data-nosnippet>706</a><span class="doccomment">/// The first Rule 46 check an invoice number fails, if any
+<a href=#707 id=707 data-nosnippet>707</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>invoice_number_error(invoice_number: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;InvoiceNumberError&gt; {
+<a href=#708 id=708 data-nosnippet>708</a>    <span class="kw">if </span>invoice_number.is_empty() || invoice_number.len() &gt; INVOICE_NUMBER_MAX_LEN {
+<a href=#709 id=709 data-nosnippet>709</a>        <span class="prelude-val">Some</span>(InvoiceNumberError::Length)
+<a href=#710 id=710 data-nosnippet>710</a>    } <span class="kw">else if </span>!invoice_number
+<a href=#711 id=711 data-nosnippet>711</a>        .chars()
+<a href=#712 id=712 data-nosnippet>712</a>        .all(|c| c.is_ascii_alphanumeric() || c == <span class="string">'-' </span>|| c == <span class="string">'/'</span>)
+<a href=#713 id=713 data-nosnippet>713</a>    {
+<a href=#714 id=714 data-nosnippet>714</a>        <span class="prelude-val">Some</span>(InvoiceNumberError::Characters)
+<a href=#715 id=715 data-nosnippet>715</a>    } <span class="kw">else </span>{
+<a href=#716 id=716 data-nosnippet>716</a>        <span class="prelude-val">None
+<a href=#717 id=717 data-nosnippet>717</a>    </span>}
+<a href=#718 id=718 data-nosnippet>718</a>}
+<a href=#719 id=719 data-nosnippet>719</a>
+<a href=#720 id=720 data-nosnippet>720</a><span class="doccomment">/// Why an invoice number was rejected
+<a href=#721 id=721 data-nosnippet>721</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+<a href=#722 id=722 data-nosnippet>722</a></span><span class="kw">pub enum </span>InvoiceNumberError {
+<a href=#723 id=723 data-nosnippet>723</a>    <span class="doccomment">/// Empty or longer than 16 characters
+<a href=#724 id=724 data-nosnippet>724</a>    </span><span class="attr">#[error(<span class="string">"must be 1-{INVOICE_NUMBER_MAX_LEN} characters"</span>)]
+<a href=#725 id=725 data-nosnippet>725</a>    </span>Length,
+<a href=#726 id=726 data-nosnippet>726</a>    <span class="doccomment">/// Contains something other than letters, digits, `-` and `/`
+<a href=#727 id=727 data-nosnippet>727</a>    </span><span class="attr">#[error(<span class="string">"only letters, digits, '-' and '/' are allowed"</span>)]
+<a href=#728 id=728 data-nosnippet>728</a>    </span>Characters,
+<a href=#729 id=729 data-nosnippet>729</a>}
+<a href=#730 id=730 data-nosnippet>730</a>
+<a href=#731 id=731 data-nosnippet>731</a><span class="doccomment">/// Why a line item was rejected
+<a href=#732 id=732 data-nosnippet>732</a></span><span class="attr">#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+<a href=#733 id=733 data-nosnippet>733</a></span><span class="kw">pub enum </span>LineItemError {
+<a href=#734 id=734 data-nosnippet>734</a>    <span class="doccomment">/// The description is empty or only whitespace
+<a href=#735 id=735 data-nosnippet>735</a>    </span><span class="attr">#[error(<span class="string">"description cannot be empty"</span>)]
+<a href=#736 id=736 data-nosnippet>736</a>    </span>EmptyDescription,
+<a href=#737 id=737 data-nosnippet>737</a>    <span class="doccomment">/// The quantity is zero or negative
+<a href=#738 id=738 data-nosnippet>738</a>    </span><span class="attr">#[error(<span class="string">"quantity must be positive"</span>)]
+<a href=#739 id=739 data-nosnippet>739</a>    </span>NonPositiveQuantity,
+<a href=#740 id=740 data-nosnippet>740</a>    <span class="doccomment">/// The unit price is negative
+<a href=#741 id=741 data-nosnippet>741</a>    </span><span class="attr">#[error(<span class="string">"unit price cannot be negative"</span>)]
+<a href=#742 id=742 data-nosnippet>742</a>    </span>NegativeUnitPrice,
+<a href=#743 id=743 data-nosnippet>743</a>    <span class="doccomment">/// The GST rate is outside 0-100
+<a href=#744 id=744 data-nosnippet>744</a>    </span><span class="attr">#[error(<span class="string">"GST rate must be between 0 and {MAX_GST_RATE}, got {0}"</span>)]
+<a href=#745 id=745 data-nosnippet>745</a>    </span>RateOutOfRange(BigDecimal),
+<a href=#746 id=746 data-nosnippet>746</a>}
+<a href=#747 id=747 data-nosnippet>747</a>
+<a href=#748 id=748 data-nosnippet>748</a><span class="doccomment">/// Invoice-related errors
+<a href=#749 id=749 data-nosnippet>749</a></span><span class="attr">#[derive(Debug, thiserror::Error)]
+<a href=#750 id=750 data-nosnippet>750</a></span><span class="kw">pub enum </span>InvoiceError {
+<a href=#751 id=751 data-nosnippet>751</a>    <span class="doccomment">/// The GSTIN is malformed
+<a href=#752 id=752 data-nosnippet>752</a>    </span><span class="attr">#[error(<span class="string">"invalid GSTIN {value}: {reason}"</span>)]
+<a href=#753 id=753 data-nosnippet>753</a>    </span>InvalidGstin {
+<a href=#754 id=754 data-nosnippet>754</a>        <span class="doccomment">/// The value as given
+<a href=#755 id=755 data-nosnippet>755</a>        </span>value: String,
+<a href=#756 id=756 data-nosnippet>756</a>        <span class="doccomment">/// The first rule it breaks
+<a href=#757 id=757 data-nosnippet>757</a>        </span>reason: GstinError,
+<a href=#758 id=758 data-nosnippet>758</a>    },
+<a href=#759 id=759 data-nosnippet>759</a>    <span class="doccomment">/// The invoice number breaks Rule 46
+<a href=#760 id=760 data-nosnippet>760</a>    </span><span class="attr">#[error(<span class="string">"invalid invoice number {value}: {reason}"</span>)]
+<a href=#761 id=761 data-nosnippet>761</a>    </span>InvalidInvoiceNumber {
+<a href=#762 id=762 data-nosnippet>762</a>        <span class="doccomment">/// The value as given
+<a href=#763 id=763 data-nosnippet>763</a>        </span>value: String,
+<a href=#764 id=764 data-nosnippet>764</a>        <span class="doccomment">/// The first rule it breaks
+<a href=#765 id=765 data-nosnippet>765</a>        </span>reason: InvoiceNumberError,
+<a href=#766 id=766 data-nosnippet>766</a>    },
+<a href=#767 id=767 data-nosnippet>767</a>    <span class="doccomment">/// The place of supply is not a known two-digit state code
+<a href=#768 id=768 data-nosnippet>768</a>    </span><span class="attr">#[error(<span class="string">"invalid state code: {0}"</span>)]
+<a href=#769 id=769 data-nosnippet>769</a>    </span>InvalidStateCode(String),
+<a href=#770 id=770 data-nosnippet>770</a>    <span class="doccomment">/// The HSN/SAC code is not 4, 6 or 8 digits
+<a href=#771 id=771 data-nosnippet>771</a>    </span><span class="attr">#[error(<span class="string">"invalid HSN/SAC code: {0}"</span>)]
+<a href=#772 id=772 data-nosnippet>772</a>    </span>InvalidHsnSac(String),
+<a href=#773 id=773 data-nosnippet>773</a>    <span class="doccomment">/// The HSN/SAC code is well-formed but not in the master data
+<a href=#774 id=774 data-nosnippet>774</a>    </span><span class="attr">#[error(<span class="string">"HSN/SAC code not in the master data: {0}"</span>)]
+<a href=#775 id=775 data-nosnippet>775</a>    </span>UnknownHsnSac(String),
+<a href=#776 id=776 data-nosnippet>776</a>    <span class="doccomment">/// A line item field is invalid
+<a href=#777 id=777 data-nosnippet>777</a>    </span><span class="attr">#[error(<span class="string">"invalid line item: {0}"</span>)]
+<a href=#778 id=778 data-nosnippet>778</a>    </span>InvalidLineItem(LineItemError),
+<a href=#779 id=779 data-nosnippet>779</a>    <span class="doccomment">/// The invoice has no line items
+<a href=#780 id=780 data-nosnippet>780</a>    </span><span class="attr">#[error(<span class="string">"an invoice needs at least one line item"</span>)]
+<a href=#781 id=781 data-nosnippet>781</a>    </span>EmptyInvoice,
+<a href=#782 id=782 data-nosnippet>782</a>    <span class="doccomment">/// A party's details can't be printed on the invoice
+<a href=#783 id=783 data-nosnippet>783</a>    </span><span class="attr">#[error(<span class="string">"invalid {role}: {reason}"</span>)]
+<a href=#784 id=784 data-nosnippet>784</a>    </span>InvalidParty {
+<a href=#785 id=785 data-nosnippet>785</a>        <span class="doccomment">/// Which party was rejected
+<a href=#786 id=786 data-nosnippet>786</a>        </span>role: PartyRole,
+<a href=#787 id=787 data-nosnippet>787</a>        <span class="doccomment">/// The first rule it breaks
+<a href=#788 id=788 data-nosnippet>788</a>        </span>reason: PartyError,
+<a href=#789 id=789 data-nosnippet>789</a>    },
+<a href=#790 id=790 data-nosnippet>790</a>    <span class="doccomment">/// The GST rate is inconsistent
+<a href=#791 id=791 data-nosnippet>791</a>    </span><span class="attr">#[error(transparent)]
+<a href=#792 id=792 data-nosnippet>792</a>    </span>Gst(<span class="attr">#[from] </span>GstError),
+<a href=#793 id=793 data-nosnippet>793</a>}
 </code></pre></div></section></main></body></html>

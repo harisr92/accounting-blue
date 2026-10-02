@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["GOODS_UQC","OUTWARD_INVOICES_DOC_TYPE","SERVICES_UQC"],"enum":["B2bInvoiceType","Gstr1Error"],"struct":["B2bInvoice","B2bItem","B2bParty","DocIssue","DocSeries","DocSummary","Gstr1Return","HsnRow","HsnSummary","ItemDetail"]};
+window.SIDEBAR_ITEMS = {"constant":["GOODS_UQC","OUTWARD_INVOICES_DOC_TYPE","SERVICES_UQC"],"enum":["B2bInvoiceType","Gstr1Error"],"struct":["B2bInvoice","B2bItem","B2bParty","B2clInvoice","B2clItem","B2clItemDetail","B2clPlace","DocIssue","DocSeries","DocSummary","Gstr1Return","HsnRow","HsnSummary","ItemDetail"]};
