@@ -103,7 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "INV/2024-25/00001".to_string(),
         date,
         inter_state.seller_gstin.clone(),
-        inter_state.buyer_gstin.clone(),
+        inter_state.buyer.clone(),
         inter_state.line_items.clone(),
     );
     if let Err(e) = too_long {
@@ -169,7 +169,7 @@ fn print_invoice(title: &str, invoice: &GstInvoice) -> Result<(), Box<dyn std::e
     println!("  Invoice No: {}", invoice.invoice_number);
     println!("  Date:       {}", invoice.invoice_date);
     println!("  Seller:     {}", invoice.seller_gstin);
-    println!("  Buyer:      {}", invoice.buyer_gstin);
+    println!("  Buyer:      {}", invoice.buyer);
     println!("  Lines:");
     for (item, line) in invoice.line_items.iter().zip(invoice.line_breakdowns()?) {
         println!(

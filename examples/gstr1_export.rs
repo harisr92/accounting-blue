@@ -1,7 +1,7 @@
-//! GSTR-1 example: aggregate a month of B2B invoices into the return of outward supplies and
-//! export it as JSON in the GST portal's offline-tool schema
+//! GSTR-1 example: aggregate a month of B2B and B2CL invoices into the return of outward
+//! supplies and export it as JSON in the GST portal's offline-tool schema
 
-use accounting_core::invoice::{GstInvoice, GstLineItem, Gstin, HsnMaster};
+use accounting_core::invoice::{GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode};
 use accounting_core::returns::{Gstr1Return, ReturnPeriod};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -13,6 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let seller = Gstin::parse("27AAPFU0939F1ZV")?; // Maharashtra
     let local_buyer = Gstin::parse("27AAPFU0939F2ZU")?; // Maharashtra
     let remote_buyer = Gstin::parse("29AAPFU0939F1ZR")?; // Karnataka
+    let retail_buyer = Recipient::unregistered(StateCode::parse("07")?); // Delhi, no GSTIN
     let date = |day| NaiveDate::from_ymd_opt(2024, 11, day).ok_or("invalid date");
     let line = |hsn: &str, description: &str, quantity: u32, price: &str, rate: u32| {
         GstLineItem::new(
@@ -50,6 +51,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             local_buyer,
             vec![line("998314", "IT consulting", 4, "1500", 18)?],
         )?,
+        // Inter-state to an unregistered buyer, over the ₹1 lakh threshold: B2CL
+        GstInvoice::new(
+            "INV/24-25/104",
+            date(28)?,
+            seller.clone(),
+            retail_buyer,
+            vec![line("847130", "Laptop", 1, "95000", 18)?],
+        )?,
     ];
 
     let period = ReturnPeriod::new(2024, 11)?;
@@ -72,7 +81,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
     }
-    println!("  📦 HSN summary rows: {}", gstr1.hsn.b2b.len());
+    for place in &gstr1.b2cl {
+        println!(
+            "  🛒 Unregistered buyers in state {}: {} B2CL invoice(s)",
+            place.place_of_supply,
+            place.invoices.len()
+        );
+    }
+    println!(
+        "  📦 HSN summary rows: {} B2B, {} B2C",
+        gstr1.hsn.b2b.len(),
+        gstr1.hsn.b2c.len()
+    );
 
     println!("\n📤 Portal JSON:\n{}", gstr1.to_json()?);
     Ok(())
