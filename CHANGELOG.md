@@ -50,7 +50,7 @@
   - `Gstr1Return::to_json` writes the GST portal's offline-tool schema: short keys (`gstin`, `fp`, `ctin`, `inum`, `idt`, `val`, `pos`, `itms`, `itm_det`, `txval`, `iamt`, `camt`, `samt`, `csamt`, ...), dates as `dd-mm-yyyy`, and amounts as JSON numbers rounded to paise.
   - `ReturnPeriod` is a month from 2017 onwards, written `MMYYYY`.
   - `Gstr1Error` is the error type, and it converts into `accounting_core::Error::Gstr1`.
-  - Not covered yet: B2CS, exports, credit and debit notes, and amendments.
+  - Not covered yet: supplies through an e-commerce operator, exports, credit and debit notes, and amendments.
   - New example: `cargo run --example gstr1_export`.
 - Invoices to unregistered buyers, and B2CL in GSTR-1:
   - `Recipient` names who an invoice is issued to: `Registered(Gstin)`, or `Unregistered { place_of_supply: StateCode }` for a B2C supply. `GstInvoice::new` takes `impl Into<Recipient>`, so passing a `Gstin` still works.
@@ -59,7 +59,10 @@
   - `GstInvoice::supply_kind` classifies an invoice as `SupplyKind::B2b`, `B2cl` or `B2cs`. A supply is B2CL when it goes to an unregistered buyer, is inter-state, and has a value (tax included) above `b2cl_threshold(date)`. That threshold is ₹1,00,000 (`B2CL_THRESHOLD_RUPEES`) from 1 August 2024 (`b2cl_threshold_revised_from`), and ₹2,50,000 before that.
   - `InvoiceParty::unregistered(name, address)` builds a buyer without a GSTIN. Its print model leaves out `gstin`, and the PDF prints `GSTIN: Unregistered`. The PDF also leaves out the default "E-Invoice Ready" footer note for such a buyer, because e-invoicing applies only to B2B. A custom `footer_note` is still printed.
   - GSTR-1 gets Table 5 (`b2cl`): one `B2clPlace` per place of supply, holding `B2clInvoice`s with IGST-only `B2clItem`s (`rt`, `txval`, `iamt`, `csamt`). Their HSN rows go to the new `hsn.hsn_b2c` tab (`HsnSummary::b2c`), and they join the one Table 13 series.
-  - `Gstr1Return::build` refuses a B2CS invoice with the new `Gstr1Error::UnsupportedSupply { invoice_number, kind }` instead of dropping it.
+- B2CS in GSTR-1 and walk-in buyers:
+  - GSTR-1 gets Table 7 (`b2cs`): one `B2csRow` per place of supply and rate, summing every B2CS line. Each row carries `sply_ty` (`SupplyType::Intra` or `Inter`), `typ` `OE` (`B2csType::OtherThanEcommerce`), `pos`, `rt` and `txval`, plus `camt` and `samt` for an intra-state row or `iamt` for an inter-state one, and `csamt`. B2CS lines join B2CL lines in `hsn.hsn_b2c`, and their invoices join the one Table 13 series.
+  - GSTR-1 gets Table 8 (`nil`) for B2C invoices: the 0% lines of B2CL and B2CS invoices leave Tables 5 and 7 and are summed into one `NilRow` per `NilSupplyType` (`INTRB2C`, `INTRAB2C`) as `nil_amt`, with `expt_amt` and `ngsup_amt` at 0 because line items cannot mark a supply exempt or non-GST yet. The lines stay in `hsn_b2c`, and a B2CL invoice keeps its whole value as `val` but lists only its taxable rates; one with no taxable line is left out of `b2cl`. 0% lines on B2B invoices are still reported in `b2b`.
+  - Rule 46: an unregistered buyer's name and address are required on an invoice whose taxable value is ₹50,000 (`UNREGISTERED_DETAILS_THRESHOLD_RUPEES`) or more, and optional below it. `InvoiceParty::walk_in()` is a buyer with neither (`InvoiceParty::has_name` tells), and the PDF prints it as "Walk-in customer". From the threshold, a missing name gives `PartyError::EmptyName` and a missing address the new `PartyError::MissingAddress`.
 - `Gstin` implements `PartialOrd` and `Ord`.
 - `HsnSacKind::of_code` tells goods from services by chapter: SAC codes start with `99`.
 ### Fixed
@@ -87,7 +90,8 @@
 - `InvoiceError` has a new `InvalidParty { role, reason }` variant, returned when an invoice is printed with parties that don't match it. An exhaustive `match` on `InvoiceError` needs an arm for it.
 - `GstInvoice::buyer_gstin: Gstin` is replaced by `GstInvoice::buyer: Recipient`. Read the GSTIN with `invoice.buyer.gstin()` (an `Option`) and the state with `invoice.buyer.place_of_supply()`. In JSON, `"buyer_gstin": "29..."` becomes `"buyer": {"registered": "29..."}` or `"buyer": {"unregistered": {"place_of_supply": "07"}}`.
 - `InvoiceParty::gstin` is now `Option<Gstin>`. `PartyError` has the new variants `MissingGstin` and `UnexpectedGstin`, and `InvoiceError` has the new variant `InvalidStateCode`. An exhaustive `match` needs arms for them.
-- `Gstr1Return` has a new `b2cl` field, `HsnSummary` has a new `b2c` field, and `Gstr1Error` has a new `UnsupportedSupply` variant. An empty `hsn_b2b` tab is now left out of the JSON.
+- `Gstr1Return` has new `b2cl`, `b2cs` and `nil` fields, and `HsnSummary` has a new `b2c` field. An empty `hsn_b2b` tab is now left out of the JSON.
+- `PartyError` has a new `MissingAddress` variant, and `InvoiceParties::check_against` now also returns the error from `GstInvoice::breakdown`, since the Rule 46 check needs the taxable value. An unregistered buyer with an empty name is now accepted below ₹50,000 of taxable value.
 - `GstCalculation` and `GstBreakdown` amounts now serialise with 2 decimal places (`"90.00"`, not `"90"`), so a consumer that compares the serialised strings sees different output.
 - `GstCalculation::reverse_calculate` rounds a given total with fractions of a paisa to paise, so its `total_amount` is the rounded total.
 
