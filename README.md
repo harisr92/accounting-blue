@@ -264,6 +264,7 @@ The library supports Indian GST with:
 - **Reverse calculations**: From total amount to base amount
 - **Multi-item invoices**: Complex invoices with different rates
 - **Unregistered buyers**: invoices to a `Recipient::Unregistered { place_of_supply }`, taxed by the place of supply
+- **Exempt and non-GST supplies**: `GstLineItem::exempt` and `GstLineItem::non_gst` lines carry no GST, are reported in GSTR-1 Table 8, and an invoice of only such lines prints as a "Bill of Supply"
 
 ```rust,ignore
 use accounting_core::invoice::{GstInvoice, Recipient, StateCode, SupplyKind};
@@ -296,7 +297,7 @@ The standard font has no `₹` glyph, so amounts are labelled `Rs.` by default. 
 
 ### GSTR-1
 
-`Gstr1Return::build` aggregates a filer's invoices for one month into GSTR-1. It fills Table 4A (B2B supplies by buyer GSTIN, one item per rate), Table 5 (B2CL: inter-state supplies over ₹1 lakh to unregistered buyers, by place of supply), Table 7 (B2CS: all other supplies to unregistered buyers, summed by place of supply and rate), Table 8 (the nil-rated lines of B2CL and B2CS invoices), Table 12 (the HSN/SAC summary by code and rate) and Table 13 (documents issued). `to_json` writes the portal's offline-tool schema, with amounts as numbers rounded to paise.
+`Gstr1Return::build` aggregates a filer's invoices for one month into GSTR-1. It fills Table 4A (B2B supplies by buyer GSTIN, one item per rate), Table 5 (B2CL: inter-state supplies over ₹1 lakh to unregistered buyers, by place of supply), Table 7 (B2CS: all other supplies to unregistered buyers, summed by place of supply and rate), Table 8 (nil-rated, exempt and non-GST lines, for registered and unregistered buyers), Table 12 (the HSN/SAC summary by code and rate) and Table 13 (documents issued). `to_json` writes the portal's offline-tool schema, with amounts as numbers rounded to paise.
 
 ```rust,ignore
 use accounting_core::invoice::HsnMaster;

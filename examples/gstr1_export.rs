@@ -69,8 +69,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             walk_in_local,
             vec![
                 line("1905", "Biscuits", 40, "12.50", 5)?,
-                // Nil-rated: reported in Table 8, not Table 7
+                // Nil-rated, exempt and non-GST: reported in Table 8, not Table 7
                 line("4901", "Printed manuals", 2, "150", 0)?,
+                GstLineItem::exempt(
+                    "0401",
+                    "Fresh milk",
+                    BigDecimal::from(10),
+                    BigDecimal::from(60),
+                )?,
+                GstLineItem::non_gst("2710", "Petrol", BigDecimal::from(5), BigDecimal::from(100))?,
             ],
         )?,
         GstInvoice::new(
@@ -116,7 +123,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
     for row in &gstr1.nil.rows {
-        println!("  🆓 Nil-rated {:?}: {}", row.supply_type, row.nil_rated);
+        println!(
+            "  🆓 Table 8 {:?}: nil-rated {}, exempt {}, non-GST {}",
+            row.supply_type, row.nil_rated, row.exempt, row.non_gst
+        );
     }
     println!(
         "  📦 HSN summary rows: {} B2B, {} B2C",
