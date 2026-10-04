@@ -13,6 +13,9 @@ use printpdf::Op;
 /// What the GSTIN line of an unregistered buyer says
 const UNREGISTERED_GSTIN_LINE: &str = "GSTIN: Unregistered";
 
+/// Printed in place of the name of a buyer who gave none (allowed below the Rule 46 threshold)
+const WALK_IN_BUYER_LABEL: &str = "Walk-in customer";
+
 const MARGIN: f32 = 12.0;
 const LEFT: f32 = MARGIN;
 const RIGHT: f32 = PAGE_WIDTH - MARGIN;
@@ -278,7 +281,8 @@ impl<'a> Layout<'a> {
         (title.into_iter().chain(detail_ops).collect(), bottom)
     }
 
-    /// "Bill To" and the buyer's name, address and GSTIN
+    /// "Bill To" and the buyer's name, or [`WALK_IN_BUYER_LABEL`] when it has none, address and
+    /// GSTIN
     fn buyer(&self, y: f32) -> Block {
         let buyer = &self.print.buyer;
         let width = RIGHT - LEFT;
@@ -290,7 +294,12 @@ impl<'a> Layout<'a> {
             Align::Left,
             "BILL TO",
         );
-        let name = self.fit(&self.fonts.bold, PARTY_SIZE, &buyer.name, width);
+        let shown_name = if buyer.has_name() {
+            buyer.name.as_str()
+        } else {
+            WALK_IN_BUYER_LABEL
+        };
+        let name = self.fit(&self.fonts.bold, PARTY_SIZE, shown_name, width);
         let name_ops = text(
             &self.fonts.bold,
             PARTY_SIZE,
