@@ -4,8 +4,9 @@
 //! sections of GSTR-1 this crate can fill: Table 4A (B2B supplies, grouped by buyer GSTIN with
 //! one item per rate), Table 5 (B2CL: large inter-state supplies to unregistered buyers,
 //! grouped by place of supply), Table 7 (B2CS: every other supply to unregistered buyers,
-//! summed per place of supply and rate), Table 8 (nil-rated B2CL and B2CS lines, by supply type),
-//! Table 12 (the HSN/SAC summary, grouped by code and rate) and Table 13 (documents issued).
+//! summed per place of supply and rate), Table 8 (nil-rated, exempt and non-GST lines, by
+//! supply type), Table 12 (the HSN/SAC summary, grouped by code and rate) and Table 13
+//! (documents issued).
 //! The builder is pure; [`Gstr1Return::to_json`] writes the result in the GST portal's
 //! offline-tool schema, with its short keys and amounts as JSON numbers rounded to paise, ready
 //! to upload.
@@ -13,18 +14,21 @@
 //! Table 12 is split into the two tabs the portal has used since 2025: rows for B2B supplies go
 //! under `hsn.hsn_b2b`, and rows for B2CL and B2CS supplies under `hsn.hsn_b2c`. Which table an
 //! invoice belongs to is [`GstInvoice::supply_kind`]. Table 7 reports only taxable supplies other
-//! than through an e-commerce operator (`typ` `OE`). A 0% line on a B2CL or B2CS invoice goes to
-//! Table 8 as a nil-rated supply, not to Table 5 or 7, and stays in the HSN summary; a B2CL
-//! invoice whose lines are all 0% appears only in Table 8. Line items carry no exempt or non-GST
-//! flag, so Table 8 reports every 0% line as nil-rated.
+//! than through an e-commerce operator (`typ` `OE`).
+//!
+//! A line that charges no GST ([`GstLineItem::charges_gst`]) goes to Table 8, never to Table
+//! 4A, 5 or 7, and stays in the HSN summary at rate 0. Its [`SupplyTreatment`] picks the
+//! column: a taxable line at 0% is nil-rated, the others are exempt or non-GST. A B2B or B2CL
+//! invoice keeps its whole value but lists only its taxed rates, and one with no taxed line
+//! appears only in Table 8.
 
 use super::period::ReturnPeriod;
 use crate::invoice::print::PRINT_DATE_FORMAT;
 use crate::invoice::types::supply_kind_for;
 use crate::invoice::validation::compliance_errors;
 use crate::invoice::{
-    ComplianceIssue, GstBreakdown, GstInvoice, Gstin, HsnMaster, HsnSacKind, InvoiceError,
-    SupplyKind,
+    ComplianceIssue, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster, HsnSacKind,
+    InvoiceError, SupplyKind, SupplyTreatment,
 };
 use crate::tax::round_to_paise;
 use bigdecimal::{BigDecimal, ToPrimitive, Zero};
@@ -65,7 +69,7 @@ pub struct Gstr1Return {
     /// Table 7: other supplies to unregistered buyers, one row per place of supply and rate
     #[serde(rename = "b2cs", skip_serializing_if = "Vec::is_empty")]
     pub b2cs: Vec<B2csRow>,
-    /// Table 8: nil-rated supplies to unregistered buyers, by supply type
+    /// Table 8: nil-rated, exempt and non-GST supplies, by supply type
     #[serde(rename = "nil", skip_serializing_if = "NilSupplies::is_empty")]
     pub nil: NilSupplies,
     /// Table 12: HSN/SAC summary
@@ -341,20 +345,47 @@ pub struct NilRow {
     /// Inter- or intra-state, to registered or unregistered buyers
     #[serde(rename = "sply_ty")]
     pub supply_type: NilSupplyType,
-    /// Value of nil-rated supplies: every 0% line
+    /// Value of nil-rated supplies: taxable lines at 0%
     #[serde(rename = "nil_amt", serialize_with = "portal_amount")]
     pub nil_rated: BigDecimal,
-    /// Value of exempt supplies, which line items cannot express yet
+    /// Value of exempt supplies
     #[serde(rename = "expt_amt", serialize_with = "portal_amount")]
     pub exempt: BigDecimal,
-    /// Value of non-GST supplies, which line items cannot express yet
+    /// Value of non-GST supplies
     #[serde(rename = "ngsup_amt", serialize_with = "portal_amount")]
     pub non_gst: BigDecimal,
 }
 
-/// Supply type of a Table 8 row; only supplies to unregistered buyers are reported so far
+impl NilRow {
+    /// A row of the supply type with every column at 0
+    fn empty(supply_type: NilSupplyType) -> Self {
+        Self {
+            supply_type,
+            nil_rated: BigDecimal::zero(),
+            exempt: BigDecimal::zero(),
+            non_gst: BigDecimal::zero(),
+        }
+    }
+
+    /// The column a line of this treatment is added to
+    fn column_mut(&mut self, treatment: SupplyTreatment) -> &mut BigDecimal {
+        match treatment {
+            SupplyTreatment::Taxable => &mut self.nil_rated,
+            SupplyTreatment::Exempt => &mut self.exempt,
+            SupplyTreatment::NonGst => &mut self.non_gst,
+        }
+    }
+}
+
+/// Supply type of a Table 8 row
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub enum NilSupplyType {
+    /// Inter-state, to registered buyers
+    #[serde(rename = "INTRB2B")]
+    InterB2b,
+    /// Intra-state, to registered buyers
+    #[serde(rename = "INTRAB2B")]
+    IntraB2b,
     /// Inter-state, to unregistered buyers
     #[serde(rename = "INTRB2C")]
     InterB2c,
@@ -612,7 +643,7 @@ impl Gstr1Return {
             b2b: b2b_section(&b2b),
             b2cl: b2cl_section(&b2cl),
             b2cs: b2cs_section(&b2cs),
-            nil: nil_section(&b2c),
+            nil: nil_section(&priced),
             hsn: HsnSummary {
                 b2b: hsn_rows(&b2b, master),
                 b2c: hsn_rows(&b2c, master),
@@ -711,10 +742,12 @@ fn of_kind<'p, 'a>(
 }
 
 /// Table 4A: invoices grouped by buyer GSTIN, keeping their order within each buyer
+///
+/// An invoice with no taxed line is left out: its lines are all in Table 8.
 fn b2b_section(priced: &[&PricedInvoice]) -> Vec<B2bParty> {
     priced
         .iter()
-        .filter_map(|p| Some((p.invoice.buyer.gstin()?, b2b_invoice(p))))
+        .filter_map(|p| Some((p.invoice.buyer.gstin()?, b2b_invoice(p)?)))
         .fold(
             BTreeMap::<&Gstin, Vec<B2bInvoice>>::new(),
             |mut parties, (buyer_gstin, invoice)| {
@@ -730,23 +763,25 @@ fn b2b_section(priced: &[&PricedInvoice]) -> Vec<B2bParty> {
         .collect()
 }
 
-fn b2b_invoice(p: &PricedInvoice) -> B2bInvoice {
-    B2bInvoice {
+/// One Table 4A invoice with an item per taxed rate, or `None` when no line charges GST; its
+/// value stays the whole invoice's
+fn b2b_invoice(p: &PricedInvoice) -> Option<B2bInvoice> {
+    let items: Vec<_> = taxable_rates(p)
+        .enumerate()
+        .map(|(i, (rate, breakdown))| B2bItem {
+            number: i + 1,
+            detail: ItemDetail::new(rate, &breakdown),
+        })
+        .collect();
+    (!items.is_empty()).then(|| B2bInvoice {
         invoice_number: p.invoice.invoice_number.clone(),
         invoice_date: p.invoice.invoice_date,
         invoice_value: p.total.total.clone(),
         place_of_supply: p.invoice.buyer.place_of_supply().to_string(),
         reverse_charge: false,
         invoice_type: B2bInvoiceType::Regular,
-        items: by_rate(p)
-            .into_iter()
-            .enumerate()
-            .map(|(i, (rate, breakdown))| B2bItem {
-                number: i + 1,
-                detail: ItemDetail::new(rate, &breakdown),
-            })
-            .collect(),
-    }
+        items,
+    })
 }
 
 /// Table 5: invoices grouped by place of supply, keeping their order within each place
@@ -771,8 +806,8 @@ fn b2cl_section(priced: &[&PricedInvoice]) -> Vec<B2clPlace> {
         .collect()
 }
 
-/// One Table 5 invoice with an item per taxable rate, or `None` when every line is at 0%; its
-/// value stays the whole invoice's, nil-rated lines included
+/// One Table 5 invoice with an item per taxed rate, or `None` when no line charges GST; its
+/// value stays the whole invoice's, untaxed lines included
 fn b2cl_invoice(p: &PricedInvoice) -> Option<B2clInvoice> {
     let items: Vec<_> = taxable_rates(p)
         .enumerate()
@@ -789,7 +824,7 @@ fn b2cl_invoice(p: &PricedInvoice) -> Option<B2clInvoice> {
     })
 }
 
-/// Table 7: every taxable line summed per place of supply and rate; 0% lines go to Table 8
+/// Table 7: every taxed line summed per place of supply and rate; untaxed lines go to Table 8
 ///
 /// The filer is the seller of every invoice, so one place of supply is either always inside its
 /// state or always outside it, and the supply type is the same for every line of a row.
@@ -817,50 +852,65 @@ fn b2cs_section(priced: &[&PricedInvoice]) -> Vec<B2csRow> {
         .collect()
 }
 
-/// Table 8: the 0% lines of B2CL and B2CS invoices, summed by inter- or intra-state
-fn nil_section(priced: &[&PricedInvoice]) -> NilSupplies {
-    let totals = priced
+/// Table 8: every line that charges no GST, summed per supply type into the column of its
+/// treatment
+fn nil_section(priced: &[PricedInvoice]) -> NilSupplies {
+    let rows = priced
         .iter()
-        .filter_map(|p| {
-            let zero = by_rate(p).remove(&BigDecimal::zero())?;
-            let supply_type = if p.invoice.is_inter_state() {
-                NilSupplyType::InterB2c
-            } else {
-                NilSupplyType::IntraB2c
-            };
-            Some((supply_type, zero.taxable_value))
+        .flat_map(|p| {
+            let supply_type = nil_supply_type(p.invoice);
+            p.invoice
+                .line_items
+                .iter()
+                .zip(&p.lines)
+                .filter(|(item, _)| !item.charges_gst())
+                .map(move |(item, b)| (supply_type, item.treatment, &b.taxable_value))
         })
-        .fold(BTreeMap::new(), |mut totals, (supply_type, value)| {
-            *totals.entry(supply_type).or_insert_with(BigDecimal::zero) += value;
-            totals
-        });
+        .fold(
+            BTreeMap::new(),
+            |mut rows, (supply_type, treatment, value)| {
+                *rows
+                    .entry(supply_type)
+                    .or_insert_with(|| NilRow::empty(supply_type))
+                    .column_mut(treatment) += value;
+                rows
+            },
+        );
     NilSupplies {
-        rows: totals
-            .into_iter()
-            .map(|(supply_type, nil_rated)| NilRow {
-                supply_type,
-                nil_rated,
-                exempt: BigDecimal::zero(),
-                non_gst: BigDecimal::zero(),
-            })
-            .collect(),
+        rows: rows.into_values().collect(),
     }
 }
 
-/// An invoice's breakdowns per rate above 0%: what Tables 5 and 7 report, Table 8 taking the rest
-fn taxable_rates(p: &PricedInvoice) -> impl Iterator<Item = (BigDecimal, GstBreakdown)> {
-    by_rate(p).into_iter().filter(|(rate, _)| !rate.is_zero())
+/// The Table 8 row an invoice's untaxed lines belong to
+fn nil_supply_type(invoice: &GstInvoice) -> NilSupplyType {
+    match (invoice.buyer.is_registered(), invoice.is_inter_state()) {
+        (true, true) => NilSupplyType::InterB2b,
+        (true, false) => NilSupplyType::IntraB2b,
+        (false, true) => NilSupplyType::InterB2c,
+        (false, false) => NilSupplyType::IntraB2c,
+    }
 }
 
-/// An invoice's line breakdowns summed per rate, so that 18 and 18.00 are one rate
-fn by_rate(p: &PricedInvoice) -> BTreeMap<BigDecimal, GstBreakdown> {
-    p.invoice.line_items.iter().zip(&p.lines).fold(
-        BTreeMap::new(),
-        |mut rates, (item, breakdown)| {
+/// An invoice's breakdowns per rate over the lines that charge GST: what Tables 4A, 5 and 7
+/// report, Table 8 taking the rest (the same split [`nil_section`] makes)
+fn taxable_rates(p: &PricedInvoice) -> impl Iterator<Item = (BigDecimal, GstBreakdown)> {
+    by_rate_where(p, GstLineItem::charges_gst).into_iter()
+}
+
+/// The breakdowns of the lines `keep` accepts, summed per rate so that 18 and 18.00 are one rate
+fn by_rate_where(
+    p: &PricedInvoice,
+    keep: impl Fn(&GstLineItem) -> bool,
+) -> BTreeMap<BigDecimal, GstBreakdown> {
+    p.invoice
+        .line_items
+        .iter()
+        .zip(&p.lines)
+        .filter(|(item, _)| keep(item))
+        .fold(BTreeMap::new(), |mut rates, (item, breakdown)| {
             *rates.entry(item.gst_rate.normalized()).or_default() += breakdown;
             rates
-        },
-    )
+        })
 }
 
 /// The lines of every invoice with one HSN/SAC code and rate, before numbering
