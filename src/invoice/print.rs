@@ -5,14 +5,21 @@
 //! [`GstInvoice`] and the [`InvoiceParties`] that issue and receive it, and serialises to JSON as
 //! is. The PDF renderer (behind the `pdf` feature) only lays this model out on the page.
 
-use super::types::{GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError};
+use super::types::{GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError, SupplyTreatment};
 use crate::utils::formatting::{amount_in_words, format_inr};
 use bigdecimal::{BigDecimal, Zero};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// Title printed at the top of a B2B GST invoice
+/// Title printed at the top of an invoice with at least one taxable line, nil-rated included
 pub const TAX_INVOICE_TITLE: &str = "Tax Invoice";
+/// Title printed instead when every line is exempt or non-GST (Rule 49 of the CGST Rules); an
+/// invoice of only nil-rated lines stays a [`TAX_INVOICE_TITLE`]
+pub const BILL_OF_SUPPLY_TITLE: &str = "Bill of Supply";
+/// Printed in the GST rate column of an exempt line
+pub const EXEMPT_RATE_LABEL: &str = "Exempt";
+/// Printed in the GST rate column of a non-GST line
+pub const NON_GST_RATE_LABEL: &str = "Non-GST";
 /// Date format printed on the invoice: day-month-year, as usual in India
 pub const PRINT_DATE_FORMAT: &str = "%d-%m-%Y";
 /// Taxable value, in rupees, from which an unregistered buyer's name and address must be on the
@@ -243,7 +250,7 @@ pub struct PrintRow {
     pub rate: String,
     /// Quantity times rate
     pub taxable_value: String,
-    /// GST rate, e.g. `18%`
+    /// GST rate, e.g. `18%`, or [`EXEMPT_RATE_LABEL`] / [`NON_GST_RATE_LABEL`]
     pub gst_rate: String,
     /// GST charged on the line
     pub tax: String,
@@ -263,7 +270,7 @@ pub struct TaxLine {
 /// Everything a printed tax invoice shows, formatted
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InvoicePrint {
-    /// Document title
+    /// Document title: [`TAX_INVOICE_TITLE`] or [`BILL_OF_SUPPLY_TITLE`]
     pub title: String,
     /// Invoice number
     pub invoice_number: String,
@@ -356,7 +363,7 @@ impl InvoicePrint {
             .collect();
 
         Ok(Self {
-            title: TAX_INVOICE_TITLE.to_string(),
+            title: title(invoice).to_string(),
             invoice_number: invoice.invoice_number.clone(),
             invoice_date: invoice.invoice_date.format(PRINT_DATE_FORMAT).to_string(),
             place_of_supply: invoice.buyer.place_of_supply().to_string(),
@@ -373,6 +380,28 @@ impl InvoicePrint {
     }
 }
 
+/// [`TAX_INVOICE_TITLE`], or [`BILL_OF_SUPPLY_TITLE`] when no line is taxable, even at 0%
+fn title(invoice: &GstInvoice) -> &'static str {
+    if invoice
+        .line_items
+        .iter()
+        .any(|item| item.treatment.is_taxable())
+    {
+        TAX_INVOICE_TITLE
+    } else {
+        BILL_OF_SUPPLY_TITLE
+    }
+}
+
+/// The GST rate column: the rate for a taxable line, otherwise what the line is
+fn rate_label(item: &GstLineItem) -> String {
+    match item.treatment {
+        SupplyTreatment::Taxable => format!("{}%", plain_number(&item.gst_rate)),
+        SupplyTreatment::Exempt => EXEMPT_RATE_LABEL.to_string(),
+        SupplyTreatment::NonGst => NON_GST_RATE_LABEL.to_string(),
+    }
+}
+
 /// Format one line item with its tax breakdown
 fn print_row(serial: usize, item: &GstLineItem, breakdown: &GstBreakdown) -> PrintRow {
     PrintRow {
@@ -382,7 +411,7 @@ fn print_row(serial: usize, item: &GstLineItem, breakdown: &GstBreakdown) -> Pri
         quantity: plain_number(&item.quantity),
         rate: format_inr(&item.unit_price),
         taxable_value: format_inr(&breakdown.taxable_value),
-        gst_rate: format!("{}%", plain_number(&item.gst_rate)),
+        gst_rate: rate_label(item),
         tax: format_inr(&breakdown.total_tax),
         amount: format_inr(&breakdown.total),
     }

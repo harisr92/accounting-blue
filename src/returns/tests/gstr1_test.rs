@@ -154,7 +154,7 @@ fn test_lines_are_grouped_by_rate_within_an_invoice() {
 }
 
 #[test]
-fn test_zero_rated_supply_reports_rate_zero_and_no_tax() {
+fn test_zero_rated_b2b_supply_goes_to_table_8_not_table_4a() {
     let gstr1 = build(&[invoice(
         "INV-001",
         day(1),
@@ -163,17 +163,17 @@ fn test_zero_rated_supply_reports_rate_zero_and_no_tax() {
     )])
     .unwrap();
 
-    let inv = &gstr1.b2b[0].invoices[0];
-    assert_eq!(inv.invoice_value, dec("1000"));
-    assert_eq!(inv.items[0].detail.rate, dec("0"));
-    assert_eq!(inv.items[0].detail.igst, dec("0"));
+    // No line charges GST, so the invoice is only in Table 8, as inter-state B2B nil-rated
+    assert!(gstr1.b2b.is_empty());
+    let nil = &gstr1.nil.rows;
+    assert_eq!(nil.len(), 1);
+    assert_eq!(nil[0].supply_type, NilSupplyType::InterB2b);
+    assert_eq!(nil[0].nil_rated, dec("1000"));
 
     let value = to_value(&gstr1);
-    assert_eq!(
-        value["b2b"][0]["inv"][0]["itms"][0]["itm_det"]["rt"],
-        json!(0.0)
-    );
+    assert!(value.get("b2b").is_none());
     assert_eq!(value["hsn"]["hsn_b2b"][0]["txval"], json!(1000.0));
+    assert_eq!(value["hsn"]["hsn_b2b"][0]["rt"], json!(0.0));
 }
 
 #[test]
@@ -891,13 +891,13 @@ fn test_nil_json_uses_portal_keys() {
 }
 
 #[test]
-fn test_return_without_nil_rated_b2c_lines_has_no_nil_section() {
+fn test_return_without_untaxed_lines_has_no_nil_section() {
     let gstr1 = build(&[
         invoice(
             "INV-001",
             day(5),
             BUYER_SAME_STATE,
-            vec![line("4901", "1", "100", "0")],
+            vec![line("4901", "1", "100", "5")],
         ),
         b2c_invoice(
             "INV-002",
@@ -959,4 +959,79 @@ fn test_b2cl_zero_rated_lines_go_to_table_8_not_table_5() {
     let hsn: Vec<_> = gstr1.hsn.b2c.iter().map(|r| r.hsn_sac.as_str()).collect();
     assert_eq!(hsn, ["4901", "998314"]);
     assert_eq!(gstr1.doc_issue.documents[0].series[0].total, 3);
+}
+
+fn exempt(quantity: &str, price: &str) -> GstLineItem {
+    GstLineItem::exempt("4901", "Item", dec(quantity), dec(price)).unwrap()
+}
+
+fn non_gst(quantity: &str, price: &str) -> GstLineItem {
+    GstLineItem::non_gst("2710", "Item", dec(quantity), dec(price)).unwrap()
+}
+
+#[test]
+fn test_table_8_splits_nil_exempt_and_non_gst_for_every_supply_type() {
+    let gstr1 = build(&[
+        // Registered, inter-state: nil-rated and exempt beside a taxed line
+        invoice(
+            "INV-001",
+            day(2),
+            BUYER_OTHER_STATE,
+            vec![
+                line("998314", "1", "1000", "18"),
+                line("4901", "1", "100", "0"),
+                exempt("2", "50"),
+            ],
+        ),
+        // Registered, intra-state: non-GST only
+        invoice(
+            "INV-002",
+            day(3),
+            BUYER_SAME_STATE,
+            vec![non_gst("10", "95")],
+        ),
+        // Unregistered, inter-state, over the B2CL threshold: exempt only
+        b2c_invoice("INV-003", day(4), "29", vec![exempt("1", "150000")]),
+        // Unregistered, intra-state: all three
+        b2c_invoice(
+            "INV-004",
+            day(5),
+            "27",
+            vec![
+                line("4901", "1", "40", "0"),
+                exempt("1", "30"),
+                non_gst("1", "20"),
+            ],
+        ),
+    ])
+    .unwrap();
+
+    assert_eq!(
+        to_value(&gstr1)["nil"],
+        json!({ "inv": [
+            { "sply_ty": "INTRB2B", "nil_amt": 100.0, "expt_amt": 100.0, "ngsup_amt": 0.0 },
+            { "sply_ty": "INTRAB2B", "nil_amt": 0.0, "expt_amt": 0.0, "ngsup_amt": 950.0 },
+            { "sply_ty": "INTRB2C", "nil_amt": 0.0, "expt_amt": 150000.0, "ngsup_amt": 0.0 },
+            { "sply_ty": "INTRAB2C", "nil_amt": 40.0, "expt_amt": 30.0, "ngsup_amt": 20.0 }
+        ] })
+    );
+
+    // Only INV-001 charges GST: it lists only its 18% item but keeps its whole value
+    assert_eq!(gstr1.b2b.len(), 1);
+    let inv = &gstr1.b2b[0].invoices[0];
+    assert_eq!(inv.invoice_number, "INV-001");
+    assert_eq!(inv.invoice_value, dec("1380"));
+    let rates: Vec<_> = inv.items.iter().map(|i| i.detail.rate.clone()).collect();
+    assert_eq!(rates, [dec("18")]);
+    assert!(gstr1.b2cl.is_empty());
+    assert!(gstr1.b2cs.is_empty());
+
+    // Every untaxed line stays in the HSN summary at rate 0, and every invoice is a document
+    assert!(gstr1
+        .hsn
+        .b2b
+        .iter()
+        .any(|r| r.hsn_sac == "2710" && r.rate == dec("0")));
+    assert!(gstr1.hsn.b2c.iter().any(|r| r.hsn_sac == "4901"));
+    assert_eq!(gstr1.doc_issue.documents[0].series[0].total, 4);
 }

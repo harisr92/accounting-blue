@@ -100,16 +100,10 @@ fn test_five_invoices_become_one_gstr1_return() {
         .iter()
         .map(|p| p["ctin"].clone())
         .collect();
-    assert_eq!(
-        buyers,
-        [
-            json!(DELHI_BUYER),
-            json!(MAHARASHTRA_BUYER),
-            json!(KARNATAKA_BUYER)
-        ]
-    );
+    // INV-005 to Delhi charges no GST, so it is only in Table 8
+    assert_eq!(buyers, [json!(MAHARASHTRA_BUYER), json!(KARNATAKA_BUYER)]);
 
-    let invoice_numbers: Vec<_> = value["b2b"][1]["inv"]
+    let invoice_numbers: Vec<_> = value["b2b"][0]["inv"]
         .as_array()
         .unwrap()
         .iter()
@@ -123,14 +117,14 @@ fn test_invoice_values_and_tax_columns() {
     let value = gstr1_json();
 
     // Intra-state: 15000 at 18% as CGST + SGST
-    let maharashtra = &value["b2b"][1]["inv"][0];
+    let maharashtra = &value["b2b"][0]["inv"][0];
     assert_eq!(maharashtra["val"], json!(17700.0));
     assert_eq!(maharashtra["pos"], json!("27"));
     assert_eq!(maharashtra["itms"][0]["itm_det"]["camt"], json!(1350.0));
     assert_eq!(maharashtra["itms"][0]["itm_det"]["samt"], json!(1350.0));
 
     // Inter-state with two rates: 1250 at 5% and 110000 at 18%, as IGST
-    let karnataka = &value["b2b"][2]["inv"][0];
+    let karnataka = &value["b2b"][1]["inv"][0];
     assert_eq!(karnataka["val"], json!(131112.5));
     assert_eq!(karnataka["pos"], json!("29"));
     let items = karnataka["itms"].as_array().unwrap();
@@ -140,11 +134,13 @@ fn test_invoice_values_and_tax_columns() {
     assert_eq!(items[1]["itm_det"]["rt"], json!(18.0));
     assert_eq!(items[1]["itm_det"]["iamt"], json!(19800.0));
 
-    // Zero-rated
-    let delhi = &value["b2b"][0]["inv"][0];
-    assert_eq!(delhi["val"], json!(1500.0));
-    assert_eq!(delhi["itms"][0]["itm_det"]["rt"], json!(0.0));
-    assert_eq!(delhi["itms"][0]["itm_det"]["iamt"], json!(0.0));
+    // Nil-rated, inter-state to a registered buyer: Table 8, not Table 4A
+    assert_eq!(
+        value["nil"],
+        json!({ "inv": [
+            { "sply_ty": "INTRB2B", "nil_amt": 1500.0, "expt_amt": 0.0, "ngsup_amt": 0.0 }
+        ] })
+    );
 }
 
 #[test]
@@ -158,12 +154,14 @@ fn test_hsn_summary_and_documents_agree_with_the_invoices() {
         .collect();
     let rows = value["hsn"]["hsn_b2b"].as_array().unwrap();
 
-    // 998314@18, 1905@5, 4901@0, 8471@18, 847130@18
+    // 998314@18, 1905@5, 4901@0, 8471@18, 847130@18: the HSN summary keeps the nil-rated line
     assert_eq!(rows.len(), 5);
     let invoice_total = sum(invoices.iter().map(|inv| inv["val"].as_f64().unwrap()));
+    let nil_total = value["nil"]["inv"][0]["nil_amt"].as_f64().unwrap();
     let hsn_total = sum(rows.iter().map(|row| row["val"].as_f64().unwrap()));
-    assert_eq!(invoice_total, 204_592.5);
-    assert_eq!(hsn_total, invoice_total);
+    assert_eq!(invoice_total, 203_092.5);
+    assert_eq!(hsn_total, 204_592.5);
+    assert_eq!(hsn_total, sum([invoice_total, nil_total].into_iter()));
 
     let consulting = rows
         .iter()
@@ -225,7 +223,7 @@ fn test_large_inter_state_sales_to_unregistered_buyers_are_reported_as_b2cl() {
     let gstr1 = Gstr1Return::build(&seller, period, &invoices, HsnMaster::global()).unwrap();
     let value: Value = serde_json::from_str(&gstr1.to_json().unwrap()).unwrap();
 
-    assert_eq!(value["b2b"].as_array().unwrap().len(), 3);
+    assert_eq!(value["b2b"].as_array().unwrap().len(), 2);
     assert_eq!(value["b2cl"][0]["pos"], json!("29"));
     assert_eq!(value["b2cl"][0]["inv"][0]["val"], json!(129800.0));
     assert_eq!(
@@ -269,7 +267,7 @@ fn test_small_sales_to_unregistered_buyers_are_reported_as_b2cs() {
     let gstr1 = Gstr1Return::build(&seller, period, &invoices, HsnMaster::global()).unwrap();
     let value: Value = serde_json::from_str(&gstr1.to_json().unwrap()).unwrap();
 
-    assert_eq!(value["b2b"].as_array().unwrap().len(), 3);
+    assert_eq!(value["b2b"].as_array().unwrap().len(), 2);
     assert!(value.get("b2cl").is_none());
     assert_eq!(
         value["b2cs"],

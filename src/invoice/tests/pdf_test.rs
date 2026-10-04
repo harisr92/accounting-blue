@@ -363,3 +363,32 @@ fn test_walk_in_buyer_renders_with_a_placeholder_name() {
         assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
     }
 }
+
+#[test]
+fn test_bill_of_supply_renders_its_title_and_exempt_rates() {
+    let exempt = GstLineItem::exempt(
+        "4901",
+        "Printed books",
+        BigDecimal::from(3),
+        "250".parse().unwrap(),
+    )
+    .unwrap();
+    let invoice = GstInvoice::new(
+        "INV/2025-26/045",
+        NaiveDate::from_ymd_opt(2025, 6, 30).unwrap(),
+        gstin(SELLER),
+        gstin(BUYER),
+        vec![exempt],
+    )
+    .unwrap();
+    let pdf = invoice.to_pdf(&parties(), &PdfOptions::default()).unwrap();
+
+    let page = &pages(&pdf)[0];
+    for expected in ["Bill of Supply", "Exempt", "Printed books"] {
+        assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
+    }
+    assert!(
+        !page.contains("Tax Invoice"),
+        "no Tax Invoice title expected in:\n{page}"
+    );
+}

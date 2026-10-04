@@ -3,7 +3,7 @@
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use super::print::{PartyError, PartyRole};
 use crate::tax::gst::{GstCalculation, GstError, GstRate};
-use bigdecimal::{BigDecimal, Signed};
+use bigdecimal::{BigDecimal, Signed, Zero};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -430,9 +430,46 @@ impl std::ops::AddAssign<&GstBreakdown> for GstBreakdown {
     }
 }
 
+/// Whether GST applies to a line, which decides where GSTR-1 reports it
+///
+/// A taxable line at 0% is a nil-rated supply. Exempt and non-GST lines always carry a rate of
+/// 0; [`GstLineItem::exempt`] and [`GstLineItem::non_gst`] build them.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum SupplyTreatment {
+    /// GST applies at the line's rate; at 0% the supply is nil-rated
+    #[default]
+    Taxable,
+    /// Exempt from GST by notification
+    Exempt,
+    /// Outside GST altogether, such as petrol or alcohol for human consumption
+    NonGst,
+}
+
+impl SupplyTreatment {
+    /// Whether GST applies, even at 0%
+    #[must_use]
+    pub fn is_taxable(self) -> bool {
+        self == Self::Taxable
+    }
+}
+
+impl fmt::Display for SupplyTreatment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Taxable => "taxable",
+            Self::Exempt => "exempt",
+            Self::NonGst => "non-GST",
+        })
+    }
+}
+
 /// A line on a GST invoice
 ///
-/// Deserialising goes through [`GstLineItem::new`], so the same rules apply.
+/// Deserialising goes through the same validation as [`GstLineItem::new`]; a missing
+/// `treatment` reads as [`SupplyTreatment::Taxable`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawGstLineItem")]
 pub struct GstLineItem {
@@ -444,8 +481,10 @@ pub struct GstLineItem {
     pub quantity: BigDecimal,
     /// Unit price before GST
     pub unit_price: BigDecimal,
-    /// Total GST rate as a percentage (e.g. 18 for 18%)
+    /// Total GST rate as a percentage (e.g. 18 for 18%); 0 for exempt and non-GST lines
     pub gst_rate: BigDecimal,
+    /// Whether GST applies to the line
+    pub treatment: SupplyTreatment,
 }
 
 /// Unvalidated shape of a [`GstLineItem`], used when deserialising
@@ -456,24 +495,27 @@ struct RawGstLineItem {
     quantity: BigDecimal,
     unit_price: BigDecimal,
     gst_rate: BigDecimal,
+    #[serde(default)]
+    treatment: SupplyTreatment,
 }
 
 impl TryFrom<RawGstLineItem> for GstLineItem {
     type Error = InvoiceError;
 
     fn try_from(raw: RawGstLineItem) -> Result<Self, Self::Error> {
-        Self::new(
+        Self::build(
             raw.hsn_sac,
             raw.description,
             raw.quantity,
             raw.unit_price,
             raw.gst_rate,
+            raw.treatment,
         )
     }
 }
 
 impl GstLineItem {
-    /// Create a validated line item
+    /// Create a validated taxable line item; at a rate of 0 it is a nil-rated supply
     ///
     /// # Errors
     ///
@@ -486,6 +528,56 @@ impl GstLineItem {
         unit_price: BigDecimal,
         gst_rate: BigDecimal,
     ) -> Result<Self, InvoiceError> {
+        let treatment = SupplyTreatment::Taxable;
+        Self::build(
+            hsn_sac,
+            description,
+            quantity,
+            unit_price,
+            gst_rate,
+            treatment,
+        )
+    }
+
+    /// Create a validated line item for a supply exempt from GST, at a rate of 0
+    ///
+    /// # Errors
+    ///
+    /// As [`GstLineItem::new`].
+    pub fn exempt(
+        hsn_sac: impl Into<String>,
+        description: impl Into<String>,
+        quantity: BigDecimal,
+        unit_price: BigDecimal,
+    ) -> Result<Self, InvoiceError> {
+        let (rate, treatment) = (BigDecimal::zero(), SupplyTreatment::Exempt);
+        Self::build(hsn_sac, description, quantity, unit_price, rate, treatment)
+    }
+
+    /// Create a validated line item for a supply outside GST, at a rate of 0
+    ///
+    /// # Errors
+    ///
+    /// As [`GstLineItem::new`].
+    pub fn non_gst(
+        hsn_sac: impl Into<String>,
+        description: impl Into<String>,
+        quantity: BigDecimal,
+        unit_price: BigDecimal,
+    ) -> Result<Self, InvoiceError> {
+        let (rate, treatment) = (BigDecimal::zero(), SupplyTreatment::NonGst);
+        Self::build(hsn_sac, description, quantity, unit_price, rate, treatment)
+    }
+
+    /// Validate and assemble a line item of any treatment
+    fn build(
+        hsn_sac: impl Into<String>,
+        description: impl Into<String>,
+        quantity: BigDecimal,
+        unit_price: BigDecimal,
+        gst_rate: BigDecimal,
+        treatment: SupplyTreatment,
+    ) -> Result<Self, InvoiceError> {
         let hsn_sac = hsn_sac.into();
         if !is_valid_hsn_sac(&hsn_sac) {
             return Err(InvoiceError::InvalidHsnSac(hsn_sac));
@@ -497,9 +589,16 @@ impl GstLineItem {
             quantity,
             unit_price,
             gst_rate,
+            treatment,
         };
         item.check().map_err(InvoiceError::InvalidLineItem)?;
         Ok(item)
+    }
+
+    /// Whether the line charges GST: taxable at a rate above 0
+    #[must_use]
+    pub fn charges_gst(&self) -> bool {
+        self.treatment.is_taxable() && !self.gst_rate.is_zero()
     }
 
     /// The field rules other than the HSN/SAC shape
@@ -512,6 +611,11 @@ impl GstLineItem {
             Err(LineItemError::NegativeUnitPrice)
         } else if self.gst_rate.is_negative() || self.gst_rate > MAX_GST_RATE {
             Err(LineItemError::RateOutOfRange(self.gst_rate.clone()))
+        } else if !self.treatment.is_taxable() && !self.gst_rate.is_zero() {
+            Err(LineItemError::RateOnUntaxedSupply {
+                treatment: self.treatment,
+                rate: self.gst_rate.clone(),
+            })
         } else {
             Ok(())
         }
@@ -743,6 +847,14 @@ pub enum LineItemError {
     /// The GST rate is outside 0-100
     #[error("GST rate must be between 0 and {MAX_GST_RATE}, got {0}")]
     RateOutOfRange(BigDecimal),
+    /// An exempt or non-GST line carries a rate other than 0
+    #[error("{treatment} lines must have a GST rate of 0, got {rate}")]
+    RateOnUntaxedSupply {
+        /// The line's treatment
+        treatment: SupplyTreatment,
+        /// The rate it carries
+        rate: BigDecimal,
+    },
 }
 
 /// Invoice-related errors

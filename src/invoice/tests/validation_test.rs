@@ -405,3 +405,25 @@ fn test_unregistered_buyer_never_matches_the_seller() {
     .unwrap();
     assert!(check(&invoice).issues().is_empty());
 }
+
+#[test]
+fn test_exempt_line_is_not_a_rate_mismatch() {
+    let exempt =
+        GstLineItem::exempt("998314", "Line", BigDecimal::from(2), BigDecimal::from(500)).unwrap();
+    assert!(check(&invoice(BUYER_SAME_STATE, vec![exempt]))
+        .issues()
+        .is_empty());
+
+    let non_gst =
+        GstLineItem::non_gst("998314", "Line", BigDecimal::from(2), BigDecimal::from(500)).unwrap();
+    assert!(check(&invoice(BUYER_SAME_STATE, vec![non_gst]))
+        .issues()
+        .is_empty());
+
+    // Taxable at 0% on an 18% code is still worth a warning
+    let nil = check(&invoice(BUYER_SAME_STATE, vec![item("998314", 0)]));
+    assert!(matches!(
+        nil.issues(),
+        [ComplianceIssue::RateDiffersFromHsnDefault { .. }]
+    ));
+}

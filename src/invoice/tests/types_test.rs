@@ -355,3 +355,83 @@ fn test_unregistered_invoice_round_trips_through_serde() {
     bad["buyer"]["unregistered"]["place_of_supply"] = "40".into();
     assert!(serde_json::from_value::<GstInvoice>(bad).is_err());
 }
+
+fn untaxed(treatment: SupplyTreatment) -> GstLineItem {
+    let build = match treatment {
+        SupplyTreatment::Exempt => GstLineItem::exempt,
+        _ => GstLineItem::non_gst,
+    };
+    build(
+        "4901",
+        "Printed books",
+        BigDecimal::from(2),
+        BigDecimal::from(150),
+    )
+    .unwrap()
+}
+
+#[test]
+fn test_exempt_and_non_gst_lines_carry_rate_zero() {
+    for treatment in [SupplyTreatment::Exempt, SupplyTreatment::NonGst] {
+        let line = untaxed(treatment);
+        assert_eq!(line.treatment, treatment);
+        assert_eq!(line.gst_rate, BigDecimal::from(0));
+        assert!(!line.treatment.is_taxable());
+        assert!(!line.charges_gst());
+        assert_eq!(line.breakdown(true).unwrap().total_tax, BigDecimal::from(0));
+    }
+
+    assert_eq!(item(18).treatment, SupplyTreatment::Taxable);
+    assert!(item(18).charges_gst());
+    // Nil-rated: taxable, but charges nothing
+    assert!(!item(0).charges_gst());
+    assert!(item(0).treatment.is_taxable());
+}
+
+#[test]
+fn test_untaxed_line_with_a_rate_is_rejected() {
+    let json = serde_json::json!({
+        "hsn_sac": "4901", "description": "Printed books", "quantity": "1",
+        "unit_price": "100", "gst_rate": "18", "treatment": "exempt"
+    });
+    let error = serde_json::from_value::<GstLineItem>(json).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("exempt lines must have a GST rate of 0, got 18"),
+        "{error}"
+    );
+
+    let mut line = untaxed(SupplyTreatment::NonGst);
+    line.gst_rate = BigDecimal::from(5);
+    assert!(matches!(
+        line.check(),
+        Err(LineItemError::RateOnUntaxedSupply {
+            treatment: SupplyTreatment::NonGst,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn test_line_item_json_without_treatment_is_taxable() {
+    let json = serde_json::json!({
+        "hsn_sac": "998314", "description": "IT consulting", "quantity": "1",
+        "unit_price": "100", "gst_rate": "18"
+    });
+    let line: GstLineItem = serde_json::from_value(json).unwrap();
+    assert_eq!(line.treatment, SupplyTreatment::Taxable);
+
+    let exempt = untaxed(SupplyTreatment::Exempt);
+    let value = serde_json::to_value(&exempt).unwrap();
+    assert_eq!(value["treatment"], "exempt");
+    assert_eq!(
+        serde_json::from_value::<GstLineItem>(value).unwrap(),
+        exempt
+    );
+    assert_eq!(
+        serde_json::to_value(SupplyTreatment::NonGst).unwrap(),
+        "non_gst"
+    );
+    assert_eq!(SupplyTreatment::NonGst.to_string(), "non-GST");
+}

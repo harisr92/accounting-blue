@@ -229,7 +229,7 @@ pub use invoice::{
     validate_invoice, ComplianceIssue, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster,
     HsnSacEntry, HsnSacKind, InvoiceAccounts, InvoiceError, InvoiceParties, InvoiceParty,
     InvoicePrint, InvoiceValidationReport, PostingError, PostingLeg, Recipient, Severity,
-    StateCode, SupplyKind,
+    StateCode, SupplyKind, SupplyTreatment,
 };
 #[cfg(feature = "pdf")]
 pub use invoice::{PdfError, PdfFont, PdfOptions};
