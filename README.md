@@ -297,17 +297,17 @@ The standard font has no `₹` glyph, so amounts are labelled `Rs.` by default. 
 
 ### GSTR-1
 
-`Gstr1Return::build` aggregates a filer's invoices for one month into GSTR-1. It fills Table 4A (B2B supplies by buyer GSTIN, one item per rate), Table 5 (B2CL: inter-state supplies over ₹1 lakh to unregistered buyers, by place of supply), Table 7 (B2CS: all other supplies to unregistered buyers, summed by place of supply and rate), Table 8 (nil-rated, exempt and non-GST lines, for registered and unregistered buyers), Table 12 (the HSN/SAC summary by code and rate) and Table 13 (documents issued). `to_json` writes the portal's offline-tool schema, with amounts as numbers rounded to paise.
+`Gstr1Return::build` aggregates a filer's invoices for one month into GSTR-1. It fills Table 4A (B2B supplies by buyer GSTIN, one item per rate), Table 5 (B2CL: inter-state supplies over ₹1 lakh to unregistered buyers, by place of supply), Table 7 (B2CS: all other supplies to unregistered buyers, summed by place of supply and rate), Table 8 (nil-rated, exempt and non-GST lines, for registered and unregistered buyers), Table 9B (credit notes: `cdnr` for registered buyers, `cdnur` against B2CL invoices), Table 12 (the HSN/SAC summary by code and rate) and Table 13 (documents issued). A credit note against a B2CS invoice is subtracted from Table 7, and every credit note is subtracted from Tables 8 and 12. `to_json` writes the portal's offline-tool schema, with amounts as numbers rounded to paise.
 
 ```rust,ignore
 use accounting_core::invoice::HsnMaster;
 use accounting_core::returns::{Gstr1Return, ReturnPeriod};
 
-let gstr1 = Gstr1Return::build(&seller_gstin, ReturnPeriod::new(2024, 11)?, &invoices, HsnMaster::global())?;
+let gstr1 = Gstr1Return::build(&seller_gstin, ReturnPeriod::new(2024, 11)?, &invoices, &credit_notes, HsnMaster::global())?;
 std::fs::write("gstr1.json", gstr1.to_json()?)?;
 ```
 
-Every invoice must be issued by the filer, dated in the period, carry a unique number and pass the error-severity compliance checks; otherwise `build` returns a `Gstr1Error`. Supplies through an e-commerce operator, exports, credit and debit notes and amendments are not covered yet.
+Every invoice and credit note must be issued by the filer, dated in the period, carry a unique number and pass the error-severity compliance checks; otherwise `build` returns a `Gstr1Error`. Supplies through an e-commerce operator, exports, debit notes and amendments are not covered yet.
 
 ## Financial Reports
 

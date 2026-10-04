@@ -1,4 +1,5 @@
 use crate::invoice::hsn_lookup::HsnMaster;
+use crate::invoice::note::CreditNote;
 use crate::invoice::types::{GstInvoice, GstLineItem, Gstin, Recipient, StateCode};
 use crate::invoice::types::{InvoiceNumberError, LineItemError};
 use crate::invoice::validation::*;
@@ -426,4 +427,116 @@ fn test_exempt_line_is_not_a_rate_mismatch() {
         nil.issues(),
         [ComplianceIssue::RateDiffersFromHsnDefault { .. }]
     ));
+}
+
+fn credit_note(on: NaiveDate) -> CreditNote {
+    CreditNote::new(&clean_invoice(), "CN-001", on, vec![item("998314", 18)]).unwrap()
+}
+
+#[test]
+fn test_clean_credit_note_is_compliant() {
+    let report = validate_credit_note(&credit_note(date(20)), date(30), HsnMaster::global());
+    assert!(report.issues().is_empty());
+}
+
+#[test]
+fn test_credit_note_meets_the_invoice_rules() {
+    let mut note = credit_note(date(20));
+    note.note_number = "CN 001".to_string();
+    note.line_items.push(item("7010", 5));
+
+    let report = validate_credit_note(&note, date(18), HsnMaster::global());
+    let errors: Vec<_> = report.errors().cloned().collect();
+    assert!(matches!(
+        errors.as_slice(),
+        [
+            ComplianceIssue::InvalidInvoiceNumber { .. },
+            ComplianceIssue::FutureDate { .. }
+        ]
+    ));
+    assert!(matches!(
+        report.warnings().collect::<Vec<_>>().as_slice(),
+        [ComplianceIssue::RateDiffersFromHsnDefault { line: 1, .. }]
+    ));
+}
+
+#[test]
+fn test_credit_note_dated_before_its_invoice_is_an_error() {
+    // The fields are public, so a note can be moved before its invoice after construction
+    let mut note = credit_note(date(20));
+    note.note_date = date(10);
+
+    let report = validate_credit_note(&note, date(30), HsnMaster::global());
+    assert_eq!(
+        report.issues(),
+        [ComplianceIssue::NoteBeforeOriginal {
+            note_date: date(10),
+            original_date: date(15),
+        }]
+    );
+}
+
+#[test]
+fn test_credit_note_after_the_section_34_deadline_is_an_error() {
+    // The invoice is of FY 2025-26, so the deadline is 30 November 2026
+    let deadline = NaiveDate::from_ymd_opt(2026, 11, 30).unwrap();
+    let late = NaiveDate::from_ymd_opt(2026, 12, 1).unwrap();
+
+    let on_time = validate_credit_note(&credit_note(deadline), deadline, HsnMaster::global());
+    assert!(on_time.is_compliant());
+
+    let report = validate_credit_note(&credit_note(late), late, HsnMaster::global());
+    assert_eq!(
+        report.issues(),
+        [ComplianceIssue::CreditNoteTooLate {
+            note_date: late,
+            deadline,
+        }]
+    );
+    assert_eq!(report.issues()[0].severity(), Severity::Error);
+}
+
+#[test]
+fn test_credit_note_rates_are_compared_as_of_its_original_invoice() {
+    let mut original = clean_invoice();
+    original.invoice_date = HsnMaster::global().effective_from().pred_opt().unwrap();
+    let note = CreditNote::new(&original, "CN-001", date(20), vec![item("7010", 5)]).unwrap();
+
+    let report = validate_credit_note(&note, date(30), HsnMaster::global());
+    assert!(report.issues().is_empty());
+}
+
+#[test]
+fn test_credit_note_edited_past_its_invoice_value_is_an_error() {
+    // The invoice is 2 x 500 of each of two codes at 18%: 2,360 with tax
+    let mut note = credit_note(date(20));
+    note.line_items[0].quantity = BigDecimal::from(5);
+
+    let report = validate_credit_note(&note, date(30), HsnMaster::global());
+    assert_eq!(
+        report.issues(),
+        [ComplianceIssue::CreditExceedsInvoice {
+            credited: BigDecimal::from_str("2950.00").unwrap(),
+            invoice_value: BigDecimal::from_str("2360.00").unwrap(),
+        }]
+    );
+    assert_eq!(report.issues()[0].severity(), Severity::Error);
+}
+
+#[test]
+fn test_credit_note_edited_to_a_buyer_its_original_kind_cannot_have_is_an_error() {
+    // A B2B original can't have gone to an unregistered buyer; GSTR-1 would drop it from Table 9B
+    let mut note = credit_note(date(20));
+    let buyer = Recipient::unregistered(StateCode::parse("27").unwrap());
+    note.buyer = buyer.clone();
+
+    let report = validate_credit_note(&note, date(30), HsnMaster::global());
+    assert_eq!(
+        report.issues(),
+        [ComplianceIssue::OriginalKindMismatch {
+            kind: crate::invoice::types::SupplyKind::B2b,
+            buyer,
+        }]
+    );
+    assert_eq!(report.issues()[0].severity(), Severity::Error);
 }

@@ -1,12 +1,13 @@
 //! GSTR-1: the return of outward supplies
 //!
-//! [`Gstr1Return::build`] aggregates a filer's invoices for one [`ReturnPeriod`] into the
+//! [`Gstr1Return::build`] aggregates a filer's invoices and credit notes for one [`ReturnPeriod`]
+//! into the
 //! sections of GSTR-1 this crate can fill: Table 4A (B2B supplies, grouped by buyer GSTIN with
 //! one item per rate), Table 5 (B2CL: large inter-state supplies to unregistered buyers,
 //! grouped by place of supply), Table 7 (B2CS: every other supply to unregistered buyers,
 //! summed per place of supply and rate), Table 8 (nil-rated, exempt and non-GST lines, by
-//! supply type), Table 12 (the HSN/SAC summary, grouped by code and rate) and Table 13
-//! (documents issued).
+//! supply type), Table 9B (credit notes, see [`super::cdn`]), Table 12 (the HSN/SAC summary,
+//! grouped by code and rate) and Table 13 (documents issued).
 //! The builder is pure; [`Gstr1Return::to_json`] writes the result in the GST portal's
 //! offline-tool schema, with its short keys and amounts as JSON numbers rounded to paise, ready
 //! to upload.
@@ -21,14 +22,21 @@
 //! column: a taxable line at 0% is nil-rated, the others are exempt or non-GST. A B2B or B2CL
 //! invoice keeps its whole value but lists only its taxed rates, and one with no taxed line
 //! appears only in Table 8.
+//!
+//! A [`CreditNote`] is reported under the supply kind of the invoice it corrects. Against a B2B
+//! or B2CL invoice it goes to Table 9B; against a B2CS invoice it is subtracted from the Table 7
+//! row for its place of supply and rate, which may then be negative. Either way its lines are
+//! subtracted from Table 8 and from the HSN summary tab of its supply kind, and Table 13 lists the
+//! notes as a series of their own.
 
+use super::cdn::{cdnr_section, cdnur_section, CdnrParty, CdnurNote};
 use super::period::ReturnPeriod;
 use crate::invoice::print::PRINT_DATE_FORMAT;
 use crate::invoice::types::supply_kind_for;
-use crate::invoice::validation::compliance_errors;
+use crate::invoice::validation::{compliance_errors, credit_note_errors};
 use crate::invoice::{
-    ComplianceIssue, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster, HsnSacKind,
-    InvoiceError, SupplyKind, SupplyTreatment,
+    ComplianceIssue, CreditNote, GstBreakdown, GstDocument, GstInvoice, GstLineItem, Gstin,
+    HsnMaster, HsnSacKind, InvoiceError, SupplyKind, SupplyTreatment,
 };
 use crate::tax::round_to_paise;
 use bigdecimal::{BigDecimal, ToPrimitive, Zero};
@@ -51,6 +59,12 @@ pub const OUTWARD_INVOICES_DOC_TYPE: &str = "Invoices for outward supply";
 /// Table 13 serial number for invoices for outward supply
 const OUTWARD_INVOICES_DOC_NUM: usize = 1;
 
+/// Table 13 name for credit notes
+pub const CREDIT_NOTES_DOC_TYPE: &str = "Credit Note";
+
+/// Table 13 serial number for credit notes
+const CREDIT_NOTES_DOC_NUM: usize = 5;
+
 /// A GSTR-1 return for one filer and period
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Gstr1Return {
@@ -72,6 +86,12 @@ pub struct Gstr1Return {
     /// Table 8: nil-rated, exempt and non-GST supplies, by supply type
     #[serde(rename = "nil", skip_serializing_if = "NilSupplies::is_empty")]
     pub nil: NilSupplies,
+    /// Table 9B: credit notes to registered buyers, one entry per buyer GSTIN
+    #[serde(rename = "cdnr", skip_serializing_if = "Vec::is_empty")]
+    pub cdnr: Vec<CdnrParty>,
+    /// Table 9B: credit notes against B2CL invoices to unregistered buyers
+    #[serde(rename = "cdnur", skip_serializing_if = "Vec::is_empty")]
+    pub cdnur: Vec<CdnurNote>,
     /// Table 12: HSN/SAC summary
     #[serde(rename = "hsn", skip_serializing_if = "HsnSummary::is_empty")]
     pub hsn: HsnSummary,
@@ -160,7 +180,7 @@ pub struct ItemDetail {
 }
 
 impl ItemDetail {
-    fn new(rate: BigDecimal, breakdown: &GstBreakdown) -> Self {
+    pub(super) fn new(rate: BigDecimal, breakdown: &GstBreakdown) -> Self {
         Self {
             rate,
             taxable_value: breakdown.taxable_value.clone(),
@@ -229,7 +249,7 @@ pub struct B2clItemDetail {
 }
 
 impl B2clItemDetail {
-    fn new(rate: BigDecimal, breakdown: &GstBreakdown) -> Self {
+    pub(super) fn new(rate: BigDecimal, breakdown: &GstBreakdown) -> Self {
         Self {
             rate,
             taxable_value: breakdown.taxable_value.clone(),
@@ -547,6 +567,14 @@ pub enum Gstr1Error {
         /// The error-severity issues found
         issues: Vec<ComplianceIssue>,
     },
+    /// A credit note can't go in the return
+    #[error("credit note {note_number} {reason}")]
+    InvalidCreditNote {
+        /// The note number
+        note_number: String,
+        /// The first rule it breaks
+        reason: DocumentProblem,
+    },
     /// An invoice's tax could not be computed
     #[error(transparent)]
     Invoice(#[from] InvoiceError),
@@ -555,36 +583,112 @@ pub enum Gstr1Error {
     Json(#[from] serde_json::Error),
 }
 
-/// An invoice with the tax breakdown of each of its lines, their sum and its supply kind,
-/// computed once
-struct PricedInvoice<'a> {
-    invoice: &'a GstInvoice,
-    lines: Vec<GstBreakdown>,
-    total: GstBreakdown,
-    kind: SupplyKind,
+impl Gstr1Error {
+    /// The error for the invoice numbered `invoice_number` that has `problem`
+    fn for_invoice(invoice_number: String, problem: DocumentProblem) -> Self {
+        match problem {
+            DocumentProblem::SellerMismatch(seller) => Self::SellerMismatch {
+                invoice_number,
+                seller,
+            },
+            DocumentProblem::OutsidePeriod { date, period } => Self::OutsidePeriod {
+                invoice_number,
+                date,
+                period,
+            },
+            DocumentProblem::DuplicateNumber => Self::DuplicateInvoiceNumber(invoice_number),
+            DocumentProblem::NotCompliant(issues) => Self::NotCompliant {
+                invoice_number,
+                issues,
+            },
+        }
+    }
 }
 
-impl<'a> PricedInvoice<'a> {
+/// Why an invoice or credit note can't go in the return
+#[derive(Debug, thiserror::Error)]
+pub enum DocumentProblem {
+    /// It was issued by someone other than the filer
+    #[error("was issued by {0}, not the filer")]
+    SellerMismatch(Gstin),
+    /// It is dated outside the return period
+    #[error("dated {date} is outside the period {period}")]
+    OutsidePeriod {
+        /// Its date
+        date: NaiveDate,
+        /// The period being filed
+        period: ReturnPeriod,
+    },
+    /// Another document of its kind has the same number, compared case-insensitively
+    #[error("appears more than once")]
+    DuplicateNumber,
+    /// It breaks an error-severity compliance rule; carries the issues
+    #[error("is not compliant: {} error(s)", .0.len())]
+    NotCompliant(Vec<ComplianceIssue>),
+}
+
+/// A document with the tax breakdown of each of its lines, their sum and the supply kind it is
+/// reported under, computed once
+///
+/// The amounts are signed by their effect on the period's supplies: a credit note's are negative,
+/// so summing invoices and notes together nets them.
+pub(super) struct PricedDocument<'a> {
+    pub(super) document: &'a dyn GstDocument,
+    pub(super) lines: Vec<GstBreakdown>,
+    pub(super) total: GstBreakdown,
+    pub(super) kind: SupplyKind,
+    reduces_supply: bool,
+}
+
+impl<'a> PricedDocument<'a> {
     /// Price an invoice's lines and classify it by supply kind
-    fn new(invoice: &'a GstInvoice) -> Result<Self, InvoiceError> {
+    fn invoice(invoice: &'a GstInvoice) -> Result<Self, InvoiceError> {
         let lines = invoice.line_breakdowns()?;
         let total: GstBreakdown = lines.iter().sum();
         Ok(Self {
-            invoice,
+            document: invoice,
             kind: supply_kind_for(invoice, &total.total),
             lines,
             total,
+            reduces_supply: false,
         })
+    }
+
+    /// Price a credit note's lines as negative amounts, under the supply kind of its invoice
+    fn credit_note(note: &'a CreditNote) -> Result<Self, InvoiceError> {
+        let lines: Vec<_> = note
+            .line_breakdowns()?
+            .iter()
+            .map(GstBreakdown::negated)
+            .collect();
+        Ok(Self {
+            document: note,
+            total: lines.iter().sum(),
+            lines,
+            kind: note.original.kind,
+            reduces_supply: true,
+        })
+    }
+
+    /// A line's quantity, signed like its amounts
+    fn quantity(&self, item: &GstLineItem) -> BigDecimal {
+        if self.reduces_supply {
+            -&item.quantity
+        } else {
+            item.quantity.clone()
+        }
     }
 }
 
 impl Gstr1Return {
-    /// Aggregate a filer's invoices for a period into GSTR-1
+    /// Aggregate a filer's invoices and credit notes for a period into GSTR-1
     ///
     /// Every invoice must be issued by `filer`, dated in `period`, carry a number no other
     /// invoice has (ignoring case), pass the error-severity rules of
     /// [`validate_invoice`](crate::invoice::validate_invoice) as of its own date.
-    /// [`GstInvoice::supply_kind`] picks its table. `master` supplies the HSN/SAC summary's
+    /// [`GstInvoice::supply_kind`] picks its table. Every credit note meets the same rules, with
+    /// [`validate_credit_note`](crate::invoice::validate_credit_note), its number unique among the
+    /// notes; the supply kind of its invoice picks its table. `master` supplies the HSN/SAC summary's
     /// descriptions, usually [`HsnMaster::global`]. Output is ordered by buyer GSTIN or place of
     /// supply, then invoice date and number, then rate, whatever the input order.
     ///
@@ -592,7 +696,8 @@ impl Gstr1Return {
     ///
     /// [`Gstr1Error::SellerMismatch`], [`Gstr1Error::OutsidePeriod`],
     /// [`Gstr1Error::DuplicateInvoiceNumber`] or [`Gstr1Error::NotCompliant`] for the first
-    /// invoice that fails, or [`Gstr1Error::Invoice`] if a line's tax can't be computed.
+    /// invoice that fails, [`Gstr1Error::InvalidCreditNote`] for the first credit note that fails,
+    /// or [`Gstr1Error::Invoice`] if a line's tax can't be computed.
     ///
     /// # Example
     ///
@@ -610,7 +715,7 @@ impl Gstr1Return {
     ///     seller.clone(), Gstin::parse("29AAPFU0939F1ZR")?, vec![item])?;
     ///
     /// let period = ReturnPeriod::new(2024, 11)?;
-    /// let gstr1 = Gstr1Return::build(&seller, period, &[invoice], HsnMaster::global())?;
+    /// let gstr1 = Gstr1Return::build(&seller, period, &[invoice], &[], HsnMaster::global())?;
     /// assert_eq!(gstr1.b2b[0].invoices[0].invoice_value, BigDecimal::from(1180));
     ///
     /// let json = gstr1.to_json()?;
@@ -623,33 +728,63 @@ impl Gstr1Return {
         filer: &Gstin,
         period: ReturnPeriod,
         invoices: &[GstInvoice],
+        credit_notes: &[CreditNote],
         master: &HsnMaster,
     ) -> Result<Self, Gstr1Error> {
-        check_invoices(filer, period, invoices)?;
+        check_documents(filer, period, invoices, |invoice| {
+            compliance_errors(invoice, invoice.invoice_date)
+        })
+        .map_err(|(number, problem)| Gstr1Error::for_invoice(number, problem))?;
+        check_documents(filer, period, credit_notes, |note| {
+            credit_note_errors(note, note.note_date)
+        })
+        .map_err(|(note_number, reason)| Gstr1Error::InvalidCreditNote {
+            note_number,
+            reason,
+        })?;
 
-        let mut priced = invoices
-            .iter()
-            .map(PricedInvoice::new)
-            .collect::<Result<Vec<_>, _>>()?;
-        priced.sort_by(|a, b| invoice_order(a.invoice, b.invoice));
-        let b2b = of_kind(&priced, SupplyKind::B2b);
-        let b2cl = of_kind(&priced, SupplyKind::B2cl);
-        let b2cs = of_kind(&priced, SupplyKind::B2cs);
-        let b2c: Vec<_> = b2cl.iter().chain(&b2cs).copied().collect();
+        let invoices = priced(invoices, PricedDocument::invoice)?;
+        let notes = priced(credit_notes, PricedDocument::credit_note)?;
+        Ok(Self::from_priced(filer, period, &invoices, &notes, master))
+    }
 
-        Ok(Self {
+    /// Lay the checked, priced and ordered documents out in the return's tables
+    fn from_priced(
+        filer: &Gstin,
+        period: ReturnPeriod,
+        invoices: &[PricedDocument],
+        notes: &[PricedDocument],
+        master: &HsnMaster,
+    ) -> Self {
+        let all = || invoices.iter().chain(notes);
+        let b2c_kinds = [SupplyKind::B2cl, SupplyKind::B2cs];
+        Self {
             filer_gstin: filer.clone(),
             period,
-            b2b: b2b_section(&b2b),
-            b2cl: b2cl_section(&b2cl),
-            b2cs: b2cs_section(&b2cs),
-            nil: nil_section(&priced),
+            b2b: b2b_section(&of_kind(invoices, &[SupplyKind::B2b])),
+            b2cl: b2cl_section(&of_kind(invoices, &[SupplyKind::B2cl])),
+            b2cs: b2cs_section(&of_kind(all(), &[SupplyKind::B2cs])),
+            nil: nil_section(all()),
+            cdnr: cdnr_section(&of_kind(notes, &[SupplyKind::B2b])),
+            cdnur: cdnur_section(&of_kind(notes, &[SupplyKind::B2cl])),
             hsn: HsnSummary {
-                b2b: hsn_rows(&b2b, master),
-                b2c: hsn_rows(&b2c, master),
+                b2b: hsn_rows(&of_kind(all(), &[SupplyKind::B2b]), master),
+                b2c: hsn_rows(&of_kind(all(), &b2c_kinds), master),
             },
-            doc_issue: doc_issue_section(&priced),
-        })
+            doc_issue: DocIssue {
+                documents: [
+                    doc_summary(
+                        OUTWARD_INVOICES_DOC_NUM,
+                        OUTWARD_INVOICES_DOC_TYPE,
+                        invoices,
+                    ),
+                    doc_summary(CREDIT_NOTES_DOC_NUM, CREDIT_NOTES_DOC_TYPE, notes),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
+            },
+        }
     }
 
     /// The return as pretty-printed JSON in the portal's offline-tool schema
@@ -662,12 +797,12 @@ impl Gstr1Return {
     }
 }
 
-/// Invoices by date, then number with its trailing digits compared as a number, so that
+/// Documents by date, then number with its trailing digits compared as a number, so that
 /// `INV-9` comes before `INV-10`
-fn invoice_order(a: &GstInvoice, b: &GstInvoice) -> Ordering {
-    (a.invoice_date, number_key(&a.invoice_number))
-        .cmp(&(b.invoice_date, number_key(&b.invoice_number)))
-        .then_with(|| a.invoice_number.cmp(&b.invoice_number))
+fn document_order(a: &dyn GstDocument, b: &dyn GstDocument) -> Ordering {
+    (a.date(), number_key(a.number()))
+        .cmp(&(b.date(), number_key(b.number())))
+        .then_with(|| a.number().cmp(b.number()))
 }
 
 /// An invoice number as its prefix and its trailing digits, the digits keyed by their
@@ -681,91 +816,100 @@ fn number_key(number: &str) -> (&str, usize, &str) {
     (prefix, digits.len(), digits)
 }
 
-/// Check every invoice, and that no two share a number
-fn check_invoices(
+/// Check every document, and that no two share a number ignoring case; the first failure comes
+/// back with the number of the document that failed
+fn check_documents<D: GstDocument>(
     filer: &Gstin,
     period: ReturnPeriod,
-    invoices: &[GstInvoice],
-) -> Result<(), Gstr1Error> {
-    invoices
+    documents: &[D],
+    errors: impl Fn(&D) -> Vec<ComplianceIssue>,
+) -> Result<(), (String, DocumentProblem)> {
+    documents
         .iter()
-        .try_fold(HashSet::new(), |mut seen, invoice| {
-            check_invoice(filer, period, invoice)?;
-            if seen.insert(invoice.invoice_number.to_ascii_uppercase()) {
-                Ok(seen)
-            } else {
-                Err(Gstr1Error::DuplicateInvoiceNumber(
-                    invoice.invoice_number.clone(),
-                ))
+        .try_fold(HashSet::new(), |mut seen, document| {
+            let problem = document_problem(filer, period, document, &errors).or_else(|| {
+                (!seen.insert(document.number().to_ascii_uppercase()))
+                    .then_some(DocumentProblem::DuplicateNumber)
+            });
+            match problem {
+                Some(problem) => Err((document.number().to_string(), problem)),
+                None => Ok(seen),
             }
         })
         .map(drop)
 }
 
-/// The rules one invoice must meet on its own
-fn check_invoice(
+/// The first rule one document breaks on its own, if any
+fn document_problem<D: GstDocument>(
     filer: &Gstin,
     period: ReturnPeriod,
-    invoice: &GstInvoice,
-) -> Result<(), Gstr1Error> {
-    let invoice_number = || invoice.invoice_number.clone();
-    if invoice.seller_gstin != *filer {
-        return Err(Gstr1Error::SellerMismatch {
-            invoice_number: invoice_number(),
-            seller: invoice.seller_gstin.clone(),
-        });
+    document: &D,
+    errors: impl Fn(&D) -> Vec<ComplianceIssue>,
+) -> Option<DocumentProblem> {
+    if document.seller_gstin() != filer {
+        return Some(DocumentProblem::SellerMismatch(
+            document.seller_gstin().clone(),
+        ));
     }
-    if !period.contains(invoice.invoice_date) {
-        return Err(Gstr1Error::OutsidePeriod {
-            invoice_number: invoice_number(),
-            date: invoice.invoice_date,
+    if !period.contains(document.date()) {
+        return Some(DocumentProblem::OutsidePeriod {
+            date: document.date(),
             period,
         });
     }
-    let issues = compliance_errors(invoice, invoice.invoice_date);
-    if issues.is_empty() {
-        Ok(())
-    } else {
-        Err(Gstr1Error::NotCompliant {
-            invoice_number: invoice_number(),
-            issues,
-        })
-    }
+    let issues = errors(document);
+    (!issues.is_empty()).then_some(DocumentProblem::NotCompliant(issues))
 }
 
-/// The priced invoices of one supply kind, keeping their order
-fn of_kind<'p, 'a>(
-    priced: &'p [PricedInvoice<'a>],
-    kind: SupplyKind,
-) -> Vec<&'p PricedInvoice<'a>> {
-    priced.iter().filter(|p| p.kind == kind).collect()
+/// Every document priced with `price`, by date then number
+fn priced<'a, D>(
+    documents: &'a [D],
+    price: impl Fn(&'a D) -> Result<PricedDocument<'a>, InvoiceError>,
+) -> Result<Vec<PricedDocument<'a>>, InvoiceError> {
+    let mut priced = documents.iter().map(price).collect::<Result<Vec<_>, _>>()?;
+    priced.sort_by(|a, b| document_order(a.document, b.document));
+    Ok(priced)
+}
+
+/// The priced documents of the given supply kinds, keeping their order
+fn of_kind<'p, 'a: 'p>(
+    priced: impl IntoIterator<Item = &'p PricedDocument<'a>>,
+    kinds: &[SupplyKind],
+) -> Vec<&'p PricedDocument<'a>> {
+    priced
+        .into_iter()
+        .filter(|p| kinds.contains(&p.kind))
+        .collect()
+}
+
+/// Values grouped under their keys, in key order, keeping their order within each key
+pub(super) fn grouped<K: Ord, V>(pairs: impl Iterator<Item = (K, V)>) -> BTreeMap<K, Vec<V>> {
+    pairs.fold(BTreeMap::new(), |mut groups, (key, value)| {
+        groups.entry(key).or_insert_with(Vec::new).push(value);
+        groups
+    })
 }
 
 /// Table 4A: invoices grouped by buyer GSTIN, keeping their order within each buyer
 ///
 /// An invoice with no taxed line is left out: its lines are all in Table 8.
-fn b2b_section(priced: &[&PricedInvoice]) -> Vec<B2bParty> {
-    priced
-        .iter()
-        .filter_map(|p| Some((p.invoice.buyer.gstin()?, b2b_invoice(p)?)))
-        .fold(
-            BTreeMap::<&Gstin, Vec<B2bInvoice>>::new(),
-            |mut parties, (buyer_gstin, invoice)| {
-                parties.entry(buyer_gstin).or_default().push(invoice);
-                parties
-            },
-        )
-        .into_iter()
-        .map(|(buyer_gstin, invoices)| B2bParty {
-            buyer_gstin: buyer_gstin.clone(),
-            invoices,
-        })
-        .collect()
+fn b2b_section(priced: &[&PricedDocument]) -> Vec<B2bParty> {
+    grouped(
+        priced
+            .iter()
+            .filter_map(|p| Some((p.document.buyer().gstin()?, b2b_invoice(p)?))),
+    )
+    .into_iter()
+    .map(|(buyer_gstin, invoices)| B2bParty {
+        buyer_gstin: buyer_gstin.clone(),
+        invoices,
+    })
+    .collect()
 }
 
 /// One Table 4A invoice with an item per taxed rate, or `None` when no line charges GST; its
 /// value stays the whole invoice's
-fn b2b_invoice(p: &PricedInvoice) -> Option<B2bInvoice> {
+fn b2b_invoice(p: &PricedDocument) -> Option<B2bInvoice> {
     let items: Vec<_> = taxable_rates(p)
         .enumerate()
         .map(|(i, (rate, breakdown))| B2bItem {
@@ -774,10 +918,10 @@ fn b2b_invoice(p: &PricedInvoice) -> Option<B2bInvoice> {
         })
         .collect();
     (!items.is_empty()).then(|| B2bInvoice {
-        invoice_number: p.invoice.invoice_number.clone(),
-        invoice_date: p.invoice.invoice_date,
+        invoice_number: p.document.number().to_string(),
+        invoice_date: p.document.date(),
         invoice_value: p.total.total.clone(),
-        place_of_supply: p.invoice.buyer.place_of_supply().to_string(),
+        place_of_supply: p.document.buyer().place_of_supply().to_string(),
         reverse_charge: false,
         invoice_type: B2bInvoiceType::Regular,
         items,
@@ -787,28 +931,23 @@ fn b2b_invoice(p: &PricedInvoice) -> Option<B2bInvoice> {
 /// Table 5: invoices grouped by place of supply, keeping their order within each place
 ///
 /// An invoice with no taxable line is left out: its 0% lines are all in Table 8.
-fn b2cl_section(priced: &[&PricedInvoice]) -> Vec<B2clPlace> {
-    priced
-        .iter()
-        .filter_map(|p| Some((p.invoice.buyer.place_of_supply(), b2cl_invoice(p)?)))
-        .fold(
-            BTreeMap::<&str, Vec<B2clInvoice>>::new(),
-            |mut places, (place_of_supply, invoice)| {
-                places.entry(place_of_supply).or_default().push(invoice);
-                places
-            },
-        )
-        .into_iter()
-        .map(|(place_of_supply, invoices)| B2clPlace {
-            place_of_supply: place_of_supply.to_string(),
-            invoices,
-        })
-        .collect()
+fn b2cl_section(priced: &[&PricedDocument]) -> Vec<B2clPlace> {
+    grouped(
+        priced
+            .iter()
+            .filter_map(|p| Some((p.document.buyer().place_of_supply(), b2cl_invoice(p)?))),
+    )
+    .into_iter()
+    .map(|(place_of_supply, invoices)| B2clPlace {
+        place_of_supply: place_of_supply.to_string(),
+        invoices,
+    })
+    .collect()
 }
 
 /// One Table 5 invoice with an item per taxed rate, or `None` when no line charges GST; its
 /// value stays the whole invoice's, untaxed lines included
-fn b2cl_invoice(p: &PricedInvoice) -> Option<B2clInvoice> {
+fn b2cl_invoice(p: &PricedDocument) -> Option<B2clInvoice> {
     let items: Vec<_> = taxable_rates(p)
         .enumerate()
         .map(|(i, (rate, breakdown))| B2clItem {
@@ -817,8 +956,8 @@ fn b2cl_invoice(p: &PricedInvoice) -> Option<B2clInvoice> {
         })
         .collect();
     (!items.is_empty()).then(|| B2clInvoice {
-        invoice_number: p.invoice.invoice_number.clone(),
-        invoice_date: p.invoice.invoice_date,
+        invoice_number: p.document.number().to_string(),
+        invoice_date: p.document.date(),
         invoice_value: p.total.total.clone(),
         items,
     })
@@ -828,13 +967,13 @@ fn b2cl_invoice(p: &PricedInvoice) -> Option<B2clInvoice> {
 ///
 /// The filer is the seller of every invoice, so one place of supply is either always inside its
 /// state or always outside it, and the supply type is the same for every line of a row.
-fn b2cs_section(priced: &[&PricedInvoice]) -> Vec<B2csRow> {
+fn b2cs_section(priced: &[&PricedDocument]) -> Vec<B2csRow> {
     priced
         .iter()
         .flat_map(|p| {
             let key = (
-                p.invoice.buyer.place_of_supply(),
-                p.invoice.is_inter_state(),
+                p.document.buyer().place_of_supply(),
+                p.document.is_inter_state(),
             );
             taxable_rates(p).map(move |(rate, b)| (key, rate, b))
         })
@@ -854,13 +993,12 @@ fn b2cs_section(priced: &[&PricedInvoice]) -> Vec<B2csRow> {
 
 /// Table 8: every line that charges no GST, summed per supply type into the column of its
 /// treatment
-fn nil_section(priced: &[PricedInvoice]) -> NilSupplies {
+fn nil_section<'p, 'a: 'p>(priced: impl Iterator<Item = &'p PricedDocument<'a>>) -> NilSupplies {
     let rows = priced
-        .iter()
         .flat_map(|p| {
-            let supply_type = nil_supply_type(p.invoice);
-            p.invoice
-                .line_items
+            let supply_type = nil_supply_type(p.document);
+            p.document
+                .line_items()
                 .iter()
                 .zip(&p.lines)
                 .filter(|(item, _)| !item.charges_gst())
@@ -882,8 +1020,8 @@ fn nil_section(priced: &[PricedInvoice]) -> NilSupplies {
 }
 
 /// The Table 8 row an invoice's untaxed lines belong to
-fn nil_supply_type(invoice: &GstInvoice) -> NilSupplyType {
-    match (invoice.buyer.is_registered(), invoice.is_inter_state()) {
+fn nil_supply_type(document: &dyn GstDocument) -> NilSupplyType {
+    match (document.buyer().is_registered(), document.is_inter_state()) {
         (true, true) => NilSupplyType::InterB2b,
         (true, false) => NilSupplyType::IntraB2b,
         (false, true) => NilSupplyType::InterB2c,
@@ -893,17 +1031,19 @@ fn nil_supply_type(invoice: &GstInvoice) -> NilSupplyType {
 
 /// An invoice's breakdowns per rate over the lines that charge GST: what Tables 4A, 5 and 7
 /// report, Table 8 taking the rest (the same split [`nil_section`] makes)
-fn taxable_rates(p: &PricedInvoice) -> impl Iterator<Item = (BigDecimal, GstBreakdown)> {
+pub(super) fn taxable_rates(
+    p: &PricedDocument,
+) -> impl Iterator<Item = (BigDecimal, GstBreakdown)> {
     by_rate_where(p, GstLineItem::charges_gst).into_iter()
 }
 
 /// The breakdowns of the lines `keep` accepts, summed per rate so that 18 and 18.00 are one rate
 fn by_rate_where(
-    p: &PricedInvoice,
+    p: &PricedDocument,
     keep: impl Fn(&GstLineItem) -> bool,
 ) -> BTreeMap<BigDecimal, GstBreakdown> {
-    p.invoice
-        .line_items
+    p.document
+        .line_items()
         .iter()
         .zip(&p.lines)
         .filter(|(item, _)| keep(item))
@@ -922,18 +1062,24 @@ struct HsnTotals {
 }
 
 /// One tab of Table 12: every line of `priced` grouped by HSN/SAC code and rate
-fn hsn_rows(priced: &[&PricedInvoice], master: &HsnMaster) -> Vec<HsnRow> {
+fn hsn_rows(priced: &[&PricedDocument], master: &HsnMaster) -> Vec<HsnRow> {
     let totals = priced
         .iter()
-        .flat_map(|p| p.invoice.line_items.iter().zip(&p.lines))
-        .fold(BTreeMap::new(), |mut rows, (item, breakdown)| {
+        .flat_map(|p| {
+            p.document
+                .line_items()
+                .iter()
+                .zip(&p.lines)
+                .map(|(item, breakdown)| (item, breakdown, p.quantity(item)))
+        })
+        .fold(BTreeMap::new(), |mut rows, (item, breakdown, quantity)| {
             let totals: &mut HsnTotals = rows
                 .entry((item.hsn_sac.clone(), item.gst_rate.normalized()))
                 .or_default();
             if totals.first_description.is_empty() {
                 totals.first_description.clone_from(&item.description);
             }
-            totals.quantity += &item.quantity;
+            totals.quantity += quantity;
             totals.breakdown += breakdown;
             rows
         });
@@ -976,29 +1122,29 @@ fn hsn_row(
     }
 }
 
-/// Table 13: the invoices as one series, from the first to the last by date then number
-fn doc_issue_section(priced: &[PricedInvoice]) -> DocIssue {
-    let (Some(first), Some(last)) = (priced.first(), priced.last()) else {
-        return DocIssue::default();
-    };
-    DocIssue {
-        documents: vec![DocSummary {
-            doc_num: OUTWARD_INVOICES_DOC_NUM,
-            doc_type: OUTWARD_INVOICES_DOC_TYPE.to_string(),
-            series: vec![DocSeries {
-                number: 1,
-                from: first.invoice.invoice_number.clone(),
-                to: last.invoice.invoice_number.clone(),
-                total: priced.len(),
-                cancelled: 0,
-                net_issued: priced.len(),
-            }],
+/// One kind of document in Table 13: the documents as one series, from the first to the last by
+/// date then number, or `None` when none were issued
+fn doc_summary(doc_num: usize, doc_type: &str, priced: &[PricedDocument]) -> Option<DocSummary> {
+    let (first, last) = (priced.first()?, priced.last()?);
+    Some(DocSummary {
+        doc_num,
+        doc_type: doc_type.to_string(),
+        series: vec![DocSeries {
+            number: 1,
+            from: first.document.number().to_string(),
+            to: last.document.number().to_string(),
+            total: priced.len(),
+            cancelled: 0,
+            net_issued: priced.len(),
         }],
-    }
+    })
 }
 
 /// An amount rounded to paise, written as a JSON number
-fn portal_amount<S: Serializer>(amount: &BigDecimal, serializer: S) -> Result<S::Ok, S::Error> {
+pub(super) fn portal_amount<S: Serializer>(
+    amount: &BigDecimal,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
     portal_number(&round_to_paise(amount), serializer)
 }
 
@@ -1015,7 +1161,10 @@ fn portal_optional_amount<S: Serializer>(
 }
 
 /// A decimal written as a JSON number
-fn portal_number<S: Serializer>(value: &BigDecimal, serializer: S) -> Result<S::Ok, S::Error> {
+pub(super) fn portal_number<S: Serializer>(
+    value: &BigDecimal,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
     let number = value
         .to_f64()
         .filter(|number| number.is_finite())
@@ -1024,11 +1173,14 @@ fn portal_number<S: Serializer>(value: &BigDecimal, serializer: S) -> Result<S::
 }
 
 /// A date written `dd-mm-yyyy`
-fn portal_date<S: Serializer>(date: &NaiveDate, serializer: S) -> Result<S::Ok, S::Error> {
+pub(super) fn portal_date<S: Serializer>(
+    date: &NaiveDate,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
     serializer.collect_str(&date.format(PRINT_DATE_FORMAT))
 }
 
 /// A flag written `Y` or `N`
-fn yes_no<S: Serializer>(flag: &bool, serializer: S) -> Result<S::Ok, S::Error> {
+pub(super) fn yes_no<S: Serializer>(flag: &bool, serializer: S) -> Result<S::Ok, S::Error> {
     serializer.serialize_str(if *flag { "Y" } else { "N" })
 }

@@ -23,6 +23,11 @@
 //! total in words. With the `pdf` feature, `GstInvoice::to_pdf` renders that view as an A4 PDF
 //! (see the `pdf` module).
 //!
+//! [`CreditNote::new`] builds a credit note against an invoice, to reduce its value or tax after a
+//! return, a discount or over-billing. [`validate_credit_note`] checks it, including the Section
+//! 34(2) deadline, and [`CreditNote::to_entries`] posts it as the reverse of an invoice. Invoices
+//! and notes share their tax arithmetic through [`GstDocument`].
+//!
 //! The tax arithmetic comes from [`crate::tax::gst`]. The invoice types are also re-exported at the
 //! crate root. Validation failures are typed: [`InvoiceError`] carries a [`GstinError`],
 //! [`InvoiceNumberError`] or [`LineItemError`] saying which rule was broken.
@@ -60,6 +65,7 @@
 //! ```
 
 pub mod hsn_lookup;
+pub mod note;
 #[cfg(feature = "pdf")]
 pub mod pdf;
 pub mod posting;
@@ -68,6 +74,7 @@ pub mod types;
 pub mod validation;
 
 pub use hsn_lookup::{HsnMaster, HsnSacEntry, HsnSacKind};
+pub use note::{credit_note_deadline, CreditNote, OriginalInvoice};
 #[cfg(feature = "pdf")]
 pub use pdf::{
     render_pdf, FontFace, PdfError, PdfFont, PdfOptions, DEFAULT_CURRENCY_LABEL,
@@ -80,11 +87,14 @@ pub use print::{
     TAX_INVOICE_TITLE, UNREGISTERED_DETAILS_THRESHOLD_RUPEES,
 };
 pub use types::{
-    b2cl_threshold, b2cl_threshold_revised_from, GstBreakdown, GstInvoice, GstLineItem, Gstin,
-    GstinError, InvoiceError, InvoiceNumberError, LineItemError, Recipient, StateCode, SupplyKind,
-    SupplyTreatment, B2CL_THRESHOLD_BEFORE_REVISION_RUPEES, B2CL_THRESHOLD_RUPEES,
+    b2cl_threshold, b2cl_threshold_revised_from, GstBreakdown, GstDocument, GstInvoice,
+    GstLineItem, Gstin, GstinError, InvoiceError, InvoiceNumberError, LineItemError, Recipient,
+    StateCode, SupplyKind, SupplyTreatment, B2CL_THRESHOLD_BEFORE_REVISION_RUPEES,
+    B2CL_THRESHOLD_RUPEES,
 };
-pub use validation::{validate_invoice, ComplianceIssue, InvoiceValidationReport, Severity};
+pub use validation::{
+    validate_credit_note, validate_invoice, ComplianceIssue, InvoiceValidationReport, Severity,
+};
 
 #[cfg(test)]
 mod tests;

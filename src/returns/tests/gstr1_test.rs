@@ -1,5 +1,7 @@
 use crate::invoice::validation::ComplianceIssue;
-use crate::invoice::{GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode, SupplyKind};
+use crate::invoice::{
+    CreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode, SupplyKind,
+};
 use crate::returns::gstr1::*;
 use crate::returns::period::ReturnPeriod;
 use bigdecimal::BigDecimal;
@@ -36,7 +38,7 @@ fn invoice(number: &str, date: NaiveDate, buyer: &str, lines: Vec<GstLineItem>) 
 }
 
 fn build(invoices: &[GstInvoice]) -> Result<Gstr1Return, Gstr1Error> {
-    Gstr1Return::build(&gstin(SELLER), period(), invoices, HsnMaster::global())
+    Gstr1Return::build(&gstin(SELLER), period(), invoices, &[], HsnMaster::global())
 }
 
 fn to_value(gstr1: &Gstr1Return) -> Value {
@@ -1034,4 +1036,238 @@ fn test_table_8_splits_nil_exempt_and_non_gst_for_every_supply_type() {
         .any(|r| r.hsn_sac == "2710" && r.rate == dec("0")));
     assert!(gstr1.hsn.b2c.iter().any(|r| r.hsn_sac == "4901"));
     assert_eq!(gstr1.doc_issue.documents[0].series[0].total, 4);
+}
+
+fn credit(
+    invoice: &GstInvoice,
+    number: &str,
+    date: NaiveDate,
+    lines: Vec<GstLineItem>,
+) -> CreditNote {
+    CreditNote::new(invoice, number, date, lines).unwrap()
+}
+
+fn build_with_notes(
+    invoices: &[GstInvoice],
+    notes: &[CreditNote],
+) -> Result<Gstr1Return, Gstr1Error> {
+    Gstr1Return::build(
+        &gstin(SELLER),
+        period(),
+        invoices,
+        notes,
+        HsnMaster::global(),
+    )
+}
+
+#[test]
+fn test_credit_note_on_a_b2cs_invoice_is_subtracted_from_its_table_7_row() {
+    let sale = b2c_invoice(
+        "INV-001",
+        day(5),
+        "27",
+        vec![line("998314", "10", "100", "18")],
+    );
+    let note = credit(
+        &sale,
+        "CN-001",
+        day(20),
+        vec![line("998314", "3", "100", "18")],
+    );
+
+    let gstr1 = build_with_notes(&[sale], &[note]).unwrap();
+
+    assert_eq!(gstr1.b2cs.len(), 1);
+    let row = &gstr1.b2cs[0];
+    assert_eq!(row.taxable_value, dec("700"));
+    assert_eq!(row.cgst, Some(dec("63")));
+    assert_eq!(row.sgst, Some(dec("63")));
+}
+
+#[test]
+fn test_credit_note_on_an_earlier_b2cs_invoice_gives_a_negative_row() {
+    let october_sale = b2c_invoice(
+        "INV-099",
+        NaiveDate::from_ymd_opt(2024, 10, 28).unwrap(),
+        "27",
+        vec![line("998314", "10", "100", "18")],
+    );
+    let note = credit(
+        &october_sale,
+        "CN-001",
+        day(4),
+        vec![line("998314", "3", "100", "18")],
+    );
+
+    let gstr1 = build_with_notes(&[], &[note]).unwrap();
+    let value = to_value(&gstr1);
+
+    assert_eq!(
+        value["b2cs"],
+        json!([{
+            "sply_ty": "INTRA", "rt": 18.0, "typ": "OE", "pos": "27",
+            "txval": -300.0, "camt": -27.0, "samt": -27.0, "csamt": 0.0
+        }])
+    );
+    assert_eq!(value["hsn"]["hsn_b2c"][0]["txval"], json!(-300.0));
+}
+
+#[test]
+fn test_credit_notes_are_subtracted_from_the_hsn_summary() {
+    let sale = invoice(
+        "INV-001",
+        day(5),
+        BUYER_SAME_STATE,
+        vec![line("7010", "10", "100", "18")],
+    );
+    let note = credit(
+        &sale,
+        "CN-001",
+        day(20),
+        vec![line("7010", "2", "100", "18")],
+    );
+
+    let gstr1 = build_with_notes(&[sale], &[note]).unwrap();
+
+    let row = &gstr1.hsn.b2b[0];
+    assert_eq!(gstr1.hsn.b2b.len(), 1);
+    assert_eq!(row.quantity, dec("8"));
+    assert_eq!(row.taxable_value, dec("800"));
+    assert_eq!(row.cgst, dec("72"));
+    assert_eq!(row.total_value, dec("944"));
+    assert!(gstr1.hsn.b2c.is_empty());
+}
+
+#[test]
+fn test_untaxed_lines_of_a_credit_note_are_subtracted_from_table_8() {
+    let exempt = |price| GstLineItem::exempt("998314", "Item", dec("1"), dec(price)).unwrap();
+    let sale = invoice("INV-001", day(5), BUYER_OTHER_STATE, vec![exempt("500")]);
+    let note = credit(&sale, "CN-001", day(20), vec![exempt("200")]);
+
+    let value = to_value(&build_with_notes(&[sale], &[note]).unwrap());
+
+    assert_eq!(
+        value["nil"]["inv"],
+        json!([{ "sply_ty": "INTRB2B", "nil_amt": 0.0, "expt_amt": 300.0, "ngsup_amt": 0.0 }])
+    );
+}
+
+#[test]
+fn test_credit_notes_are_a_series_of_their_own_in_table_13() {
+    let sale = invoice(
+        "INV-001",
+        day(5),
+        BUYER_SAME_STATE,
+        vec![line("998314", "10", "100", "18")],
+    );
+    let notes = [
+        credit(
+            &sale,
+            "CN-10",
+            day(25),
+            vec![line("998314", "1", "100", "18")],
+        ),
+        credit(
+            &sale,
+            "CN-9",
+            day(20),
+            vec![line("998314", "1", "100", "18")],
+        ),
+    ];
+
+    let gstr1 = build_with_notes(&[sale], &notes).unwrap();
+
+    let documents = &gstr1.doc_issue.documents;
+    assert_eq!(documents.len(), 2);
+    assert_eq!(documents[1].doc_num, 5);
+    assert_eq!(documents[1].doc_type, CREDIT_NOTES_DOC_TYPE);
+    let series = &documents[1].series[0];
+    assert_eq!(
+        (series.from.as_str(), series.to.as_str()),
+        ("CN-9", "CN-10")
+    );
+    assert_eq!((series.total, series.net_issued), (2, 2));
+}
+
+#[test]
+fn test_credit_note_only_return_has_no_invoice_series() {
+    let october_sale = invoice(
+        "INV-099",
+        NaiveDate::from_ymd_opt(2024, 10, 28).unwrap(),
+        BUYER_SAME_STATE,
+        vec![line("998314", "1", "100", "18")],
+    );
+    let note = credit(
+        &october_sale,
+        "CN-001",
+        day(4),
+        october_sale.line_items.clone(),
+    );
+
+    let gstr1 = build_with_notes(&[], &[note]).unwrap();
+
+    assert!(gstr1.b2b.is_empty());
+    assert_eq!(gstr1.cdnr[0].notes[0].note_number, "CN-001");
+    let documents = &gstr1.doc_issue.documents;
+    assert_eq!(documents.len(), 1);
+    assert_eq!(documents[0].doc_type, CREDIT_NOTES_DOC_TYPE);
+}
+
+#[test]
+fn test_invalid_credit_notes_are_rejected() {
+    let sale = invoice(
+        "INV-001",
+        day(5),
+        BUYER_SAME_STATE,
+        vec![line("998314", "1", "100", "18")],
+    );
+    let note = |number: &str, date| credit(&sale, number, date, sale.line_items.clone());
+    let reason = |notes: &[CreditNote]| match build_with_notes(std::slice::from_ref(&sale), notes) {
+        Err(Gstr1Error::InvalidCreditNote {
+            note_number,
+            reason,
+        }) => (note_number, reason),
+        other => panic!("expected InvalidCreditNote, got {other:?}"),
+    };
+
+    let (number, problem) = reason(&[note(
+        "CN-001",
+        NaiveDate::from_ymd_opt(2024, 12, 1).unwrap(),
+    )]);
+    assert_eq!(number, "CN-001");
+    assert!(matches!(problem, DocumentProblem::OutsidePeriod { .. }));
+
+    let (number, problem) = reason(&[note("CN-001", day(6)), note("cn-001", day(7))]);
+    assert_eq!(number, "cn-001");
+    assert!(matches!(problem, DocumentProblem::DuplicateNumber));
+
+    let mut foreign = note("CN-002", day(6));
+    foreign.seller_gstin = gstin(BUYER_OTHER_STATE);
+    foreign.buyer = gstin(BUYER_SAME_STATE).into();
+    let (_, problem) = reason(&[foreign]);
+    assert!(
+        matches!(problem, DocumentProblem::SellerMismatch(seller) if seller == gstin(BUYER_OTHER_STATE))
+    );
+
+    let mut early = note("CN-003", day(6));
+    early.note_date = day(4);
+    let (_, problem) = reason(&[early]);
+    assert!(matches!(
+        problem,
+        DocumentProblem::NotCompliant(issues)
+            if matches!(issues.as_slice(), [ComplianceIssue::NoteBeforeOriginal { .. }])
+    ));
+}
+
+#[test]
+fn test_a_credit_note_may_share_a_number_with_an_invoice() {
+    let sale = invoice(
+        "DOC-001",
+        day(5),
+        BUYER_SAME_STATE,
+        vec![line("998314", "1", "100", "18")],
+    );
+    let note = credit(&sale, "DOC-001", day(6), sale.line_items.clone());
+
+    assert!(build_with_notes(&[sale], &[note]).is_ok());
 }
