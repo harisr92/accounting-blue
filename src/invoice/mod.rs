@@ -76,12 +76,13 @@ pub use pdf::{
 pub use posting::{posting_legs, InvoiceAccounts, PostingError, PostingLeg};
 pub use print::{
     paginate_rows, InvoiceParties, InvoiceParty, InvoicePrint, PartyError, PartyRole, PrintRow,
-    RowCapacity, TaxLine, UNREGISTERED_DETAILS_THRESHOLD_RUPEES,
+    RowCapacity, TaxLine, BILL_OF_SUPPLY_TITLE, EXEMPT_RATE_LABEL, NON_GST_RATE_LABEL,
+    TAX_INVOICE_TITLE, UNREGISTERED_DETAILS_THRESHOLD_RUPEES,
 };
 pub use types::{
     b2cl_threshold, b2cl_threshold_revised_from, GstBreakdown, GstInvoice, GstLineItem, Gstin,
     GstinError, InvoiceError, InvoiceNumberError, LineItemError, Recipient, StateCode, SupplyKind,
-    B2CL_THRESHOLD_BEFORE_REVISION_RUPEES, B2CL_THRESHOLD_RUPEES,
+    SupplyTreatment, B2CL_THRESHOLD_BEFORE_REVISION_RUPEES, B2CL_THRESHOLD_RUPEES,
 };
 pub use validation::{validate_invoice, ComplianceIssue, InvoiceValidationReport, Severity};
 

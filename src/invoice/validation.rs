@@ -302,8 +302,8 @@ fn parties_rule(invoice: &GstInvoice, _as_of: NaiveDate) -> Vec<ComplianceIssue>
 ///
 /// A rate is only compared when the master has the line's exact code: a fallback heading's rate
 /// may not apply to every tariff item under it. It is also not compared on a line that already
-/// breaks a field rule, or on an invoice dated before [`HsnMaster::effective_from`], when the
-/// schedule didn't apply yet.
+/// breaks a field rule, on an exempt or non-GST line (whose rate is 0 by definition), or on an
+/// invoice dated before [`HsnMaster::effective_from`], when the schedule didn't apply yet.
 fn hsn_master_rule(invoice: &GstInvoice, master: &HsnMaster) -> Vec<ComplianceIssue> {
     let schedule_applies = invoice.invoice_date >= master.effective_from();
     per_line(invoice, |line, item| {
@@ -316,7 +316,10 @@ fn hsn_master_rule(invoice: &GstInvoice, master: &HsnMaster) -> Vec<ComplianceIs
                 code: item.hsn_sac.clone(),
             });
         };
-        let compare_rate = schedule_applies && entry.code == item.hsn_sac && item.check().is_ok();
+        let compare_rate = schedule_applies
+            && item.treatment.is_taxable()
+            && entry.code == item.hsn_sac
+            && item.check().is_ok();
         (compare_rate && entry.gst_rate != item.gst_rate).then(|| {
             ComplianceIssue::RateDiffersFromHsnDefault {
                 line,

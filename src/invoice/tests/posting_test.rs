@@ -233,3 +233,35 @@ fn test_unregistered_inter_state_invoice_posts_igst() {
         ]
     );
 }
+
+#[test]
+fn test_exempt_invoice_posts_sales_without_tax_legs() {
+    let item = GstLineItem::exempt(
+        "4901",
+        "Printed books",
+        BigDecimal::from(4),
+        BigDecimal::from(250),
+    )
+    .unwrap();
+    let invoice = GstInvoice::new(
+        "INV-EX-001",
+        NaiveDate::from_ymd_opt(2024, 11, 15).unwrap(),
+        Gstin::parse(SELLER).unwrap(),
+        Gstin::parse(BUYER_OTHER_STATE).unwrap(),
+        vec![item],
+    )
+    .unwrap();
+
+    let entries = invoice.to_entries(&accounts()).unwrap();
+    let posted: Vec<_> = entries
+        .iter()
+        .map(|e| (e.account_id.as_str(), e.entry_type, e.amount.clone()))
+        .collect();
+    assert_eq!(
+        posted,
+        vec![
+            ("ar", EntryType::Debit, BigDecimal::from(1000)),
+            ("sales", EntryType::Credit, BigDecimal::from(1000)),
+        ]
+    );
+}

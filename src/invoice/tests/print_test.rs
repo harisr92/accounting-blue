@@ -1,5 +1,7 @@
 use crate::invoice::print::*;
-use crate::invoice::types::{GstInvoice, GstLineItem, Gstin, InvoiceError, Recipient, StateCode};
+use crate::invoice::types::{
+    GstInvoice, GstLineItem, Gstin, InvoiceError, Recipient, StateCode, SupplyTreatment,
+};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 
@@ -9,6 +11,18 @@ const BUYER_OTHER_STATE: &str = "29AAPFU0939F1ZR";
 
 fn gstin(value: &str) -> Gstin {
     Gstin::parse(value).unwrap()
+}
+
+/// `quantity` units of printed books at 150 each, taxable at `rate`
+fn item_at(quantity: &str, rate: u32) -> GstLineItem {
+    GstLineItem::new(
+        "4901",
+        "Printed books",
+        quantity.parse().unwrap(),
+        "150".parse().unwrap(),
+        BigDecimal::from(rate),
+    )
+    .unwrap()
 }
 
 /// `quantity` units of IT consulting at 1,500.50 each, charged at 18%
@@ -341,4 +355,59 @@ fn test_registered_buyer_and_seller_still_need_a_name() {
             reason: PartyError::EmptyName,
         })
     ));
+}
+
+fn book(treatment: SupplyTreatment) -> GstLineItem {
+    let build = match treatment {
+        SupplyTreatment::Exempt => GstLineItem::exempt,
+        _ => GstLineItem::non_gst,
+    };
+    build(
+        "4901",
+        "Printed books",
+        "2".parse().unwrap(),
+        "150".parse().unwrap(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn test_invoice_of_only_exempt_and_non_gst_lines_is_a_bill_of_supply() {
+    let lines = vec![book(SupplyTreatment::Exempt), book(SupplyTreatment::NonGst)];
+    let invoice = invoice(BUYER_SAME_STATE, lines);
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap();
+
+    assert_eq!(print.title, BILL_OF_SUPPLY_TITLE);
+    let rates: Vec<_> = print.rows.iter().map(|r| r.gst_rate.as_str()).collect();
+    assert_eq!(rates, [EXEMPT_RATE_LABEL, NON_GST_RATE_LABEL]);
+    assert!(print.tax_lines.is_empty());
+}
+
+#[test]
+fn test_nil_rated_invoice_stays_a_tax_invoice() {
+    let print = |lines| {
+        let invoice = invoice(BUYER_SAME_STATE, lines);
+        InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap()
+    };
+
+    let nil_only = print(vec![item_at("1", 0)]);
+    assert_eq!(nil_only.title, TAX_INVOICE_TITLE);
+    assert_eq!(nil_only.rows[0].gst_rate, "0%");
+    assert!(nil_only.tax_lines.is_empty());
+
+    let nil_and_exempt = print(vec![item_at("1", 0), book(SupplyTreatment::Exempt)]);
+    assert_eq!(nil_and_exempt.title, TAX_INVOICE_TITLE);
+}
+
+#[test]
+fn test_invoice_with_any_taxed_line_stays_a_tax_invoice() {
+    let invoice = invoice(
+        BUYER_SAME_STATE,
+        vec![book(SupplyTreatment::Exempt), item("1")],
+    );
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap();
+
+    assert_eq!(print.title, TAX_INVOICE_TITLE);
+    let rates: Vec<_> = print.rows.iter().map(|r| r.gst_rate.as_str()).collect();
+    assert_eq!(rates, ["Exempt", "18%"]);
 }
