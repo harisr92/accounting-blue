@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ComplianceIssue","Severity"],"fn":["validate_invoice"],"struct":["InvoiceValidationReport"]};
+window.SIDEBAR_ITEMS = {"enum":["ComplianceIssue","Severity"],"fn":["validate_credit_note","validate_invoice"],"struct":["InvoiceValidationReport"]};
