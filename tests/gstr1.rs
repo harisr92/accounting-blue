@@ -245,21 +245,53 @@ fn test_large_inter_state_sales_to_unregistered_buyers_are_reported_as_b2cl() {
 }
 
 #[test]
-fn test_small_sales_to_unregistered_buyers_are_not_reported_yet() {
-    let small = retail_invoice(
+fn test_small_sales_to_unregistered_buyers_are_reported_as_b2cs() {
+    let mut invoices = november_invoices();
+    // Inter-state but small, and intra-state of any value: both B2CS
+    invoices.push(retail_invoice(
         "INV-006",
         29,
         "29",
         vec![line("1905", "Biscuits", 10, "12.50", 5)],
-    );
+    ));
+    invoices.push(retail_invoice(
+        "INV-007",
+        30,
+        "27",
+        vec![line("847130", "Laptop", 3, "55000", 18)],
+    ));
+    for invoice in &invoices[5..] {
+        assert_eq!(invoice.supply_kind().unwrap(), SupplyKind::B2cs);
+    }
+
     let seller = Gstin::parse(SELLER).unwrap();
     let period = ReturnPeriod::new(2024, 11).unwrap();
-    let result = Gstr1Return::build(&seller, period, &[small], HsnMaster::global());
-    assert!(matches!(
-        result,
-        Err(Gstr1Error::UnsupportedSupply {
-            kind: SupplyKind::B2cs,
-            ..
-        })
-    ));
+    let gstr1 = Gstr1Return::build(&seller, period, &invoices, HsnMaster::global()).unwrap();
+    let value: Value = serde_json::from_str(&gstr1.to_json().unwrap()).unwrap();
+
+    assert_eq!(value["b2b"].as_array().unwrap().len(), 3);
+    assert!(value.get("b2cl").is_none());
+    assert_eq!(
+        value["b2cs"],
+        json!([
+            {
+                "sply_ty": "INTRA", "rt": 18.0, "typ": "OE", "pos": "27",
+                "txval": 165000.0, "camt": 14850.0, "samt": 14850.0, "csamt": 0.0
+            },
+            {
+                "sply_ty": "INTER", "rt": 5.0, "typ": "OE", "pos": "29",
+                "txval": 125.0, "iamt": 6.25, "csamt": 0.0
+            }
+        ])
+    );
+    assert_eq!(value["hsn"]["hsn_b2b"].as_array().unwrap().len(), 5);
+    assert_eq!(value["hsn"]["hsn_b2c"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        value["doc_issue"]["doc_det"][0]["docs"][0]["to"],
+        json!("INV-007")
+    );
+    assert_eq!(
+        value["doc_issue"]["doc_det"][0]["docs"][0]["totnum"],
+        json!(7)
+    );
 }

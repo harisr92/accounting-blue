@@ -1,4 +1,4 @@
-//! GSTR-1 example: aggregate a month of B2B and B2CL invoices into the return of outward
+//! GSTR-1 example: aggregate a month of B2B, B2CL and B2CS invoices into the return of outward
 //! supplies and export it as JSON in the GST portal's offline-tool schema
 
 use accounting_core::invoice::{GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode};
@@ -14,6 +14,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let local_buyer = Gstin::parse("27AAPFU0939F2ZU")?; // Maharashtra
     let remote_buyer = Gstin::parse("29AAPFU0939F1ZR")?; // Karnataka
     let retail_buyer = Recipient::unregistered(StateCode::parse("07")?); // Delhi, no GSTIN
+    let walk_in_local = Recipient::unregistered(StateCode::parse("27")?); // Maharashtra
+    let walk_in_remote = Recipient::unregistered(StateCode::parse("29")?); // Karnataka
     let date = |day| NaiveDate::from_ymd_opt(2024, 11, day).ok_or("invalid date");
     let line = |hsn: &str, description: &str, quantity: u32, price: &str, rate: u32| {
         GstLineItem::new(
@@ -59,6 +61,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             retail_buyer,
             vec![line("847130", "Laptop", 1, "95000", 18)?],
         )?,
+        // Walk-in sales to unregistered buyers: intra-state, and inter-state under ₹1 lakh: B2CS
+        GstInvoice::new(
+            "INV/24-25/105",
+            date(29)?,
+            seller.clone(),
+            walk_in_local,
+            vec![
+                line("1905", "Biscuits", 40, "12.50", 5)?,
+                // Nil-rated: reported in Table 8, not Table 7
+                line("4901", "Printed manuals", 2, "150", 0)?,
+            ],
+        )?,
+        GstInvoice::new(
+            "INV/24-25/106",
+            date(30)?,
+            seller.clone(),
+            walk_in_remote,
+            vec![line("998314", "IT consulting", 2, "1500", 18)?],
+        )?,
     ];
 
     let period = ReturnPeriod::new(2024, 11)?;
@@ -87,6 +108,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             place.place_of_supply,
             place.invoices.len()
         );
+    }
+    for row in &gstr1.b2cs {
+        println!(
+            "  🧺 B2CS {:?} to state {} at {}%: taxable {}",
+            row.supply_type, row.place_of_supply, row.rate, row.taxable_value
+        );
+    }
+    for row in &gstr1.nil.rows {
+        println!("  🆓 Nil-rated {:?}: {}", row.supply_type, row.nil_rated);
     }
     println!(
         "  📦 HSN summary rows: {} B2B, {} B2C",
