@@ -1,3 +1,4 @@
+use crate::invoice::note::CreditNote;
 use crate::invoice::posting::*;
 use crate::invoice::types::{
     GstBreakdown, GstInvoice, GstLineItem, Gstin, LineItemError, Recipient, StateCode,
@@ -264,4 +265,76 @@ fn test_exempt_invoice_posts_sales_without_tax_legs() {
             ("sales", EntryType::Credit, BigDecimal::from(1000)),
         ]
     );
+}
+
+fn credit_note(buyer: &str) -> CreditNote {
+    let invoice = invoice(buyer, 18);
+    let on = NaiveDate::from_ymd_opt(2024, 11, 20).unwrap();
+    CreditNote::new(&invoice, "CN-001", on, invoice.line_items.clone()).unwrap()
+}
+
+fn posted(entries: &[crate::types::Entry]) -> Vec<(&str, EntryType, BigDecimal)> {
+    entries
+        .iter()
+        .map(|e| (e.account_id.as_str(), e.entry_type, e.amount.clone()))
+        .collect()
+}
+
+#[test]
+fn test_credit_note_posts_the_reverse_of_its_invoice() {
+    let entries = credit_note(BUYER_SAME_STATE)
+        .to_entries(&accounts())
+        .unwrap();
+
+    assert_eq!(
+        posted(&entries),
+        vec![
+            ("ar", EntryType::Credit, BigDecimal::from(1180)),
+            ("sales", EntryType::Debit, BigDecimal::from(1000)),
+            ("cgst_out", EntryType::Debit, BigDecimal::from(90)),
+            ("sgst_out", EntryType::Debit, BigDecimal::from(90)),
+        ]
+    );
+    let invoice_entries = invoice(BUYER_SAME_STATE, 18)
+        .to_entries(&accounts())
+        .unwrap();
+    let reversed: Vec<_> = posted(&invoice_entries)
+        .into_iter()
+        .map(|(account, side, amount)| (account, side.opposite(), amount))
+        .collect();
+    assert_eq!(posted(&entries), reversed);
+}
+
+#[test]
+fn test_credit_note_entries_balance_in_a_transaction() {
+    let entries = credit_note(BUYER_OTHER_STATE)
+        .to_entries(&accounts())
+        .unwrap();
+    assert_eq!(entries.len(), 3);
+    assert_eq!(entries[2].account_id, "igst_out");
+
+    let on = NaiveDate::from_ymd_opt(2024, 11, 20).unwrap();
+    let transaction = entries
+        .into_iter()
+        .fold(
+            TransactionBuilder::new("cn", on, "Credit note"),
+            TransactionBuilder::entry,
+        )
+        .build()
+        .unwrap();
+    assert!(transaction.is_balanced());
+}
+
+#[test]
+fn test_non_compliant_credit_note_is_not_posted() {
+    let mut note = credit_note(BUYER_SAME_STATE);
+    note.note_date = NaiveDate::from_ymd_opt(2025, 12, 1).unwrap();
+
+    let Err(PostingError::NotCompliant(issues)) = note.to_entries(&accounts()) else {
+        panic!("a late credit note must not post");
+    };
+    assert!(matches!(
+        issues.as_slice(),
+        [ComplianceIssue::CreditNoteTooLate { .. }]
+    ));
 }

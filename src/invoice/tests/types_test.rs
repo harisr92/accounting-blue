@@ -435,3 +435,16 @@ fn test_line_item_json_without_treatment_is_taxable() {
     );
     assert_eq!(SupplyTreatment::NonGst.to_string(), "non-GST");
 }
+
+#[test]
+fn test_negated_breakdown_flips_every_amount() {
+    let breakdown = invoice("29AAPFU0939F1ZR", vec![item(18)])
+        .breakdown()
+        .unwrap();
+    let negated = breakdown.negated();
+
+    assert_eq!(negated.taxable_value, BigDecimal::from(-1000));
+    assert_eq!(negated.igst, BigDecimal::from(-180));
+    assert_eq!(negated.total, BigDecimal::from(-1180));
+    assert_eq!(negated.negated(), breakdown);
+}

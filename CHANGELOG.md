@@ -50,7 +50,7 @@
   - `Gstr1Return::to_json` writes the GST portal's offline-tool schema: short keys (`gstin`, `fp`, `ctin`, `inum`, `idt`, `val`, `pos`, `itms`, `itm_det`, `txval`, `iamt`, `camt`, `samt`, `csamt`, ...), dates as `dd-mm-yyyy`, and amounts as JSON numbers rounded to paise.
   - `ReturnPeriod` is a month from 2017 onwards, written `MMYYYY`.
   - `Gstr1Error` is the error type, and it converts into `accounting_core::Error::Gstr1`.
-  - Not covered yet: supplies through an e-commerce operator, exports, credit and debit notes, and amendments.
+  - Not covered yet: supplies through an e-commerce operator, exports, debit notes, and amendments. Credit notes are covered below.
   - New example: `cargo run --example gstr1_export`.
 - Invoices to unregistered buyers, and B2CL in GSTR-1:
   - `Recipient` names who an invoice is issued to: `Registered(Gstin)`, or `Unregistered { place_of_supply: StateCode }` for a B2C supply. `GstInvoice::new` takes `impl Into<Recipient>`, so passing a `Gstin` still works.
@@ -70,6 +70,18 @@
   - The print model and PDF show `EXEMPT_RATE_LABEL` ("Exempt") or `NON_GST_RATE_LABEL` ("Non-GST") in the rate column, and the title is `BILL_OF_SUPPLY_TITLE` ("Bill of Supply", Rule 49) when every line is exempt or non-GST. An invoice with any taxable line, nil-rated included, stays a "Tax Invoice".
 - `Gstin` implements `PartialOrd` and `Ord`.
 - `HsnSacKind::of_code` tells goods from services by chapter: SAC codes start with `99`.
+- Credit notes (`accounting_core::invoice::note`), Section 34 of the CGST Act:
+  - `CreditNote::new(&invoice, number, date, lines)` builds a note that reduces an invoice's value or tax: goods returned, a discount, or over-billing. It takes the invoice's seller and buyer, and records the invoice as an `OriginalInvoice` (number, date, `SupplyKind` and value with tax). Its lines are what is credited.
+  - Construction and deserialising refuse a note number that breaks Rule 53 (the invoice-number rules), no lines (`EmptyInvoice`), a note dated before its invoice (the new `InvoiceError::NoteBeforeOriginal`), an original supply kind its buyer can't have, such as B2B for an unregistered buyer (the new `InvoiceError::OriginalKindMismatch`), and a note whose total, tax included, is more than its invoice's value (the new `InvoiceError::CreditExceedsInvoice`). The cap is on the whole note; its lines are not matched against the invoice's, and several notes against one invoice are not added up.
+  - `GstDocument` is a new trait, implemented by `GstInvoice` and `CreditNote`, that holds the tax arithmetic they share: `is_inter_state`, `line_breakdowns` and `breakdown`. `GstInvoice`'s methods of those names are unchanged.
+  - `validate_credit_note(&note, as_of, &HsnMaster)` runs the invoice rules and four of its own, all errors: `ComplianceIssue::NoteBeforeOriginal`, `ComplianceIssue::OriginalKindMismatch` for a note whose buyer was edited to one its original supply kind can't have, `ComplianceIssue::CreditExceedsInvoice` for a note edited past its invoice's value, and `ComplianceIssue::CreditNoteTooLate` for a note issued after `credit_note_deadline(invoice_date)`, 30 November after the end of the invoice's financial year. The Act also ends the window when the annual return is filed, if that is earlier; that date is not checked.
+  - `CreditNote::to_entries(&InvoiceAccounts)` posts the reverse of an invoice: Dr sales (pass a sales returns account to keep them apart), Dr CGST/SGST or IGST output, Cr receivable. It refuses a non-compliant note like `GstInvoice::to_entries`.
+  - `GstBreakdown::negated` flips the sign of every amount.
+  - `GstDocument::supply_date` is the date a document's rates were charged on: an invoice's own date, or a credit note's original invoice date. The HSN/SAC rate warning compares a credit note's rates as of that date.
+  - GSTR-1 reports credit notes by the supply kind of their invoice. Notes against B2B invoices go to Table 9B `cdnr`, one `CdnrParty` per buyer GSTIN with `CdnrNote`s (`ntty` `C`, `nt_num`, `nt_dt`, `pos`, `rchrg`, `inv_typ`, `val`, `itms`). Notes against B2CL invoices go to `cdnur` as `CdnurNote`s with `typ` `B2CL` and IGST-only items. Notes against B2CS invoices are subtracted from their Table 7 row, which may go negative. Like an invoice, a note lists only its taxed rates, and one with no taxed line has no Table 9B entry.
+  - Every credit note is subtracted from Table 8 (its untaxed lines) and from the HSN summary tab of its supply kind, quantity included. Table 13 lists the notes as their own series, doc 5 `Credit Note` (`CREDIT_NOTES_DOC_TYPE`).
+  - `Gstr1Return::build` checks credit notes like invoices: issued by the filer, dated in the period, compliant as of their own date, and with numbers unique among the notes ignoring case (a note may share a number with an invoice). A failure is the new `Gstr1Error::InvalidCreditNote { note_number, reason: DocumentProblem }`.
+  - The `gstr1_export` example adds a credit note for a returned laptop.
 ### Fixed
 - GST amounts are rounded to paise, so fractions of a paisa no longer reach the ledger. Before, one unit at 0.99 at 5% intra-state gave CGST = SGST = 0.02475, and `to_entries` posted a receivable of 1.0395.
   - `GstCalculation::calculate` rounds the base amount and each of CGST, SGST and IGST with `round_to_paise`.
@@ -101,6 +113,8 @@
 - `PartyError` has a new `MissingAddress` variant, and `InvoiceParties::check_against` now also returns the error from `GstInvoice::breakdown`, since the Rule 46 check needs the taxable value. An unregistered buyer with an empty name is now accepted below ₹50,000 of taxable value.
 - `GstCalculation` and `GstBreakdown` amounts now serialise with 2 decimal places (`"90.00"`, not `"90"`), so a consumer that compares the serialised strings sees different output.
 - `GstCalculation::reverse_calculate` rounds a given total with fractions of a paisa to paise, so its `total_amount` is the rounded total.
+- `Gstr1Return::build` takes the period's credit notes as a new fourth argument, `&[CreditNote]`, before the HSN/SAC master. Pass `&[]` for none.
+- `Gstr1Return` has new `cdnr` and `cdnur` fields. `Gstr1Error` has a new `InvalidCreditNote` variant, `InvoiceError` has new `NoteBeforeOriginal`, `OriginalKindMismatch` and `CreditExceedsInvoice` variants, and `ComplianceIssue` has new `NoteBeforeOriginal`, `OriginalKindMismatch`, `CreditExceedsInvoice` and `CreditNoteTooLate` variants; an exhaustive `match` needs arms for them.
 
 ## 0.2.0
 
