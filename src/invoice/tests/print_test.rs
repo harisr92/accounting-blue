@@ -246,3 +246,99 @@ fn test_buyer_gstin_must_agree_with_the_recipient() {
         })
     ));
 }
+
+/// An invoice to an unregistered buyer in Maharashtra for one line of `taxable` rupees at 18%
+fn walk_in_invoice(taxable: &str) -> GstInvoice {
+    let line = GstLineItem::new(
+        "998314",
+        "IT consulting",
+        BigDecimal::from(1),
+        taxable.parse().unwrap(),
+        BigDecimal::from(18),
+    )
+    .unwrap();
+    GstInvoice::new(
+        "INV/2025-26/009",
+        NaiveDate::from_ymd_opt(2025, 4, 3).unwrap(),
+        gstin(SELLER),
+        Recipient::unregistered(StateCode::parse("27").unwrap()),
+        vec![line],
+    )
+    .unwrap()
+}
+
+fn with_buyer(buyer: InvoiceParty) -> InvoiceParties {
+    InvoiceParties::new(parties(BUYER_SAME_STATE).seller, buyer)
+}
+
+fn buyer_error(invoice: &GstInvoice, buyer: InvoiceParty) -> Option<PartyError> {
+    match InvoicePrint::from_invoice(invoice, &with_buyer(buyer)) {
+        Ok(_) => None,
+        Err(InvoiceError::InvalidParty {
+            role: PartyRole::Buyer,
+            reason,
+        }) => Some(reason),
+        Err(other) => panic!("unexpected error {other}"),
+    }
+}
+
+#[test]
+fn test_walk_in_buyer_needs_no_details_below_rule_46_threshold() {
+    let invoice = walk_in_invoice("49999.99");
+    let print = InvoicePrint::from_invoice(&invoice, &with_buyer(InvoiceParty::walk_in())).unwrap();
+
+    assert!(!print.buyer.has_name());
+    assert!(print.buyer.address.is_empty());
+    assert_eq!(print.buyer.gstin, None);
+    assert_eq!(print.place_of_supply, "27");
+    // Tax takes the invoice value past 50,000; Rule 46 looks at the taxable value
+    assert_eq!(print.total, "58,999.99");
+}
+
+#[test]
+fn test_unregistered_buyer_details_are_required_from_rule_46_threshold() {
+    let invoice = walk_in_invoice("50000");
+    let named = |address: Vec<String>| InvoiceParty::unregistered("Ravi Kumar", address);
+
+    assert_eq!(
+        buyer_error(&invoice, InvoiceParty::walk_in()),
+        Some(PartyError::EmptyName)
+    );
+    assert_eq!(
+        buyer_error(&invoice, named(Vec::new())),
+        Some(PartyError::MissingAddress)
+    );
+    assert_eq!(
+        buyer_error(&invoice, named(vec!["  ".into()])),
+        Some(PartyError::MissingAddress)
+    );
+    assert_eq!(buyer_error(&invoice, named(vec!["Pune".into()])), None);
+    // Below the threshold, check_against takes a walk-in buyer too
+    assert!(with_buyer(InvoiceParty::walk_in())
+        .check_against(&walk_in_invoice("100"))
+        .is_ok());
+}
+
+#[test]
+fn test_registered_buyer_and_seller_still_need_a_name() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item("1")]);
+    let mut unnamed = parties(BUYER_SAME_STATE);
+    unnamed.buyer.name = String::new();
+    assert!(matches!(
+        InvoicePrint::from_invoice(&invoice, &unnamed),
+        Err(InvoiceError::InvalidParty {
+            role: PartyRole::Buyer,
+            reason: PartyError::EmptyName,
+        })
+    ));
+
+    let mut small = with_buyer(InvoiceParty::walk_in());
+    small.seller.name = " ".into();
+    assert!(matches!(
+        InvoicePrint::from_invoice(&walk_in_invoice("100"), &small),
+        Err(InvoiceError::InvalidParty {
+            role: PartyRole::Seller,
+            reason: PartyError::EmptyName,
+        })
+    ));
+}

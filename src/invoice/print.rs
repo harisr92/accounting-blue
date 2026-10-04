@@ -15,6 +15,9 @@ use std::fmt;
 pub const TAX_INVOICE_TITLE: &str = "Tax Invoice";
 /// Date format printed on the invoice: day-month-year, as usual in India
 pub const PRINT_DATE_FORMAT: &str = "%d-%m-%Y";
+/// Taxable value, in rupees, from which an unregistered buyer's name and address must be on the
+/// invoice (Rule 46 of the CGST Rules); below it they are printed only if the buyer asks
+pub const UNREGISTERED_DETAILS_THRESHOLD_RUPEES: u32 = 50_000;
 
 /// Name, address and GSTIN of a party to the invoice
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +49,24 @@ impl InvoiceParty {
             gstin: None,
         }
     }
+
+    /// An unregistered buyer who gave no name or address, allowed on an invoice whose taxable
+    /// value is below [`UNREGISTERED_DETAILS_THRESHOLD_RUPEES`]
+    #[must_use]
+    pub fn walk_in() -> Self {
+        Self::unregistered(String::new(), Vec::new())
+    }
+
+    /// Whether the party has a name that is not blank; a walk-in buyer has none
+    #[must_use]
+    pub fn has_name(&self) -> bool {
+        !self.name.trim().is_empty()
+    }
+
+    /// Whether the party has an address line that is not blank
+    fn has_address(&self) -> bool {
+        self.address.iter().any(|line| !line.trim().is_empty())
+    }
 }
 
 /// The supplier and the recipient of an invoice
@@ -64,16 +85,55 @@ impl InvoiceParties {
         Self { seller, buyer }
     }
 
-    /// Check each party's name and that its GSTIN is the one on `invoice`, or that it has none
-    /// when the invoice's buyer is unregistered
+    /// Check each party's details and that its GSTIN is the one on `invoice`, or that it has
+    /// none when the invoice's buyer is unregistered
+    ///
+    /// The seller and a registered buyer need a name. An unregistered buyer needs a name and an
+    /// address when the invoice's taxable value is [`UNREGISTERED_DETAILS_THRESHOLD_RUPEES`] or
+    /// more, and neither below it (Rule 46), so [`InvoiceParty::walk_in`] passes there.
     ///
     /// # Errors
     ///
-    /// [`InvoiceError::InvalidParty`] for the first party that fails, seller first.
+    /// [`InvoiceError::InvalidParty`] for the first party that fails, seller first, or the first
+    /// error from [`GstInvoice::breakdown`].
     pub fn check_against(&self, invoice: &GstInvoice) -> Result<(), InvoiceError> {
-        check_party(PartyRole::Seller, &self.seller, Some(&invoice.seller_gstin))?;
-        check_party(PartyRole::Buyer, &self.buyer, invoice.buyer.gstin())
+        self.check_with_value(invoice, &invoice.breakdown()?.taxable_value)
     }
+
+    /// [`InvoiceParties::check_against`] for an invoice whose taxable value is already known
+    fn check_with_value(
+        &self,
+        invoice: &GstInvoice,
+        taxable_value: &BigDecimal,
+    ) -> Result<(), InvoiceError> {
+        let seller = Some(&invoice.seller_gstin);
+        check_party(PartyRole::Seller, &self.seller, seller, Details::Name)?;
+        let threshold = BigDecimal::from(UNREGISTERED_DETAILS_THRESHOLD_RUPEES);
+        let buyer_details = if invoice.buyer.is_registered() {
+            Details::Name
+        } else if taxable_value >= &threshold {
+            Details::NameAndAddress
+        } else {
+            Details::Optional
+        };
+        check_party(
+            PartyRole::Buyer,
+            &self.buyer,
+            invoice.buyer.gstin(),
+            buyer_details,
+        )
+    }
+}
+
+/// Which of a party's details the invoice must show
+#[derive(Clone, Copy)]
+enum Details {
+    /// None: an unregistered buyer below the Rule 46 threshold
+    Optional,
+    /// The name
+    Name,
+    /// The name and an address: an unregistered buyer at or above the Rule 46 threshold
+    NameAndAddress,
 }
 
 /// Which side of the invoice a party is on
@@ -100,6 +160,9 @@ pub enum PartyError {
     /// The name is empty or only whitespace
     #[error("name cannot be empty")]
     EmptyName,
+    /// An unregistered buyer has no address on an invoice at or above the Rule 46 threshold
+    #[error("an unregistered buyer's address is required from a taxable value of {UNREGISTERED_DETAILS_THRESHOLD_RUPEES}")]
+    MissingAddress,
     /// The party's GSTIN is not the one on the invoice
     #[error("GSTIN {found} does not match the invoice's {expected}")]
     GstinMismatch {
@@ -122,20 +185,30 @@ pub enum PartyError {
     },
 }
 
-/// Check one party against the GSTIN the invoice names for its role, if any
+/// Check one party's details, and its GSTIN against the one the invoice names for its role
 fn check_party(
     role: PartyRole,
     party: &InvoiceParty,
     expected: Option<&Gstin>,
+    details: Details,
 ) -> Result<(), InvoiceError> {
-    let reason = if party.name.trim().is_empty() {
-        Some(PartyError::EmptyName)
-    } else {
-        gstin_error(expected, party.gstin.as_ref())
-    };
+    let reason =
+        details_error(party, details).or_else(|| gstin_error(expected, party.gstin.as_ref()));
     reason.map_or(Ok(()), |reason| {
         Err(InvoiceError::InvalidParty { role, reason })
     })
+}
+
+/// The first required detail the party lacks, if any
+fn details_error(party: &InvoiceParty, details: Details) -> Option<PartyError> {
+    let needs_name = matches!(details, Details::Name | Details::NameAndAddress);
+    if needs_name && !party.has_name() {
+        Some(PartyError::EmptyName)
+    } else if matches!(details, Details::NameAndAddress) && !party.has_address() {
+        Some(PartyError::MissingAddress)
+    } else {
+        None
+    }
 }
 
 /// How a party's GSTIN differs from the one the invoice names, if it does
@@ -224,8 +297,9 @@ impl InvoicePrint {
     ///
     /// # Errors
     ///
-    /// [`InvoiceError::InvalidParty`] if a party's name is empty or its GSTIN is not the one on
-    /// the invoice, or the first error from [`GstInvoice::line_breakdowns`].
+    /// [`InvoiceError::InvalidParty`] if a party lacks a detail the invoice must show (see
+    /// [`InvoiceParties::check_against`]) or its GSTIN is not the one on the invoice, or the
+    /// first error from [`GstInvoice::line_breakdowns`].
     ///
     /// # Example
     ///
@@ -270,9 +344,9 @@ impl InvoicePrint {
         invoice: &GstInvoice,
         parties: &InvoiceParties,
     ) -> Result<Self, InvoiceError> {
-        parties.check_against(invoice)?;
         let breakdowns = invoice.line_breakdowns()?;
         let totals: GstBreakdown = breakdowns.iter().sum();
+        parties.check_with_value(invoice, &totals.taxable_value)?;
         let rows = invoice
             .line_items
             .iter()

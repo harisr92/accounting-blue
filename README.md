@@ -292,11 +292,11 @@ let parties = InvoiceParties::new(
 let pdf: Vec<u8> = invoice.to_pdf(&parties, &PdfOptions::default())?;
 ```
 
-The standard font has no `₹` glyph, so amounts are labelled `Rs.` by default. To print the rupee sign, pass a TrueType font that has it as `PdfFont::Custom` and set `currency_label` to `"₹"`. `InvoicePrint::from_invoice` gives the same formatted data without the `pdf` feature, for example to serialise as JSON. For an unregistered buyer, pass `InvoiceParty::unregistered(name, address)`.
+The standard font has no `₹` glyph, so amounts are labelled `Rs.` by default. To print the rupee sign, pass a TrueType font that has it as `PdfFont::Custom` and set `currency_label` to `"₹"`. `InvoicePrint::from_invoice` gives the same formatted data without the `pdf` feature, for example to serialise as JSON. For an unregistered buyer, pass `InvoiceParty::unregistered(name, address)`. Below a taxable value of ₹50,000 (Rule 46), `InvoiceParty::walk_in()` prints the invoice without the buyer's name or address.
 
 ### GSTR-1
 
-`Gstr1Return::build` aggregates a filer's invoices for one month into GSTR-1. It fills Table 4A (B2B supplies by buyer GSTIN, one item per rate), Table 5 (B2CL: inter-state supplies over ₹1 lakh to unregistered buyers, by place of supply), Table 12 (the HSN/SAC summary by code and rate) and Table 13 (documents issued). `to_json` writes the portal's offline-tool schema, with amounts as numbers rounded to paise.
+`Gstr1Return::build` aggregates a filer's invoices for one month into GSTR-1. It fills Table 4A (B2B supplies by buyer GSTIN, one item per rate), Table 5 (B2CL: inter-state supplies over ₹1 lakh to unregistered buyers, by place of supply), Table 7 (B2CS: all other supplies to unregistered buyers, summed by place of supply and rate), Table 8 (the nil-rated lines of B2CL and B2CS invoices), Table 12 (the HSN/SAC summary by code and rate) and Table 13 (documents issued). `to_json` writes the portal's offline-tool schema, with amounts as numbers rounded to paise.
 
 ```rust,ignore
 use accounting_core::invoice::HsnMaster;
@@ -306,7 +306,7 @@ let gstr1 = Gstr1Return::build(&seller_gstin, ReturnPeriod::new(2024, 11)?, &inv
 std::fs::write("gstr1.json", gstr1.to_json()?)?;
 ```
 
-Every invoice must be issued by the filer, dated in the period, carry a unique number and pass the error-severity compliance checks; otherwise `build` returns a `Gstr1Error`. B2CS supplies (other supplies to unregistered buyers) are refused with `Gstr1Error::UnsupportedSupply`; exports, credit and debit notes and amendments are not covered yet.
+Every invoice must be issued by the filer, dated in the period, carry a unique number and pass the error-severity compliance checks; otherwise `build` returns a `Gstr1Error`. Supplies through an e-commerce operator, exports, credit and debit notes and amendments are not covered yet.
 
 ## Financial Reports
 

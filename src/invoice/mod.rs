@@ -76,7 +76,7 @@ pub use pdf::{
 pub use posting::{posting_legs, InvoiceAccounts, PostingError, PostingLeg};
 pub use print::{
     paginate_rows, InvoiceParties, InvoiceParty, InvoicePrint, PartyError, PartyRole, PrintRow,
-    RowCapacity, TaxLine,
+    RowCapacity, TaxLine, UNREGISTERED_DETAILS_THRESHOLD_RUPEES,
 };
 pub use types::{
     b2cl_threshold, b2cl_threshold_revised_from, GstBreakdown, GstInvoice, GstLineItem, Gstin,

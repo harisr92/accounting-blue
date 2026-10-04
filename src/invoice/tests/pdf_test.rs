@@ -339,3 +339,27 @@ fn test_unregistered_buyer_renders_without_a_gstin() {
         "custom note missing in:\n{page}"
     );
 }
+
+#[test]
+fn test_walk_in_buyer_renders_with_a_placeholder_name() {
+    let invoice = GstInvoice::new(
+        "INV/2025-26/044",
+        NaiveDate::from_ymd_opt(2025, 6, 30).unwrap(),
+        gstin(SELLER),
+        Recipient::unregistered(StateCode::parse("27").unwrap()),
+        vec![item("Consulting")],
+    )
+    .unwrap();
+    let parties = InvoiceParties::new(parties().seller, InvoiceParty::walk_in());
+    let pdf = invoice.to_pdf(&parties, &PdfOptions::default()).unwrap();
+
+    let page = &pages(&pdf)[0];
+    for expected in [
+        "Walk-in customer",
+        "GSTIN: Unregistered",
+        "Place of Supply: State code 27",
+        "CGST",
+    ] {
+        assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
+    }
+}

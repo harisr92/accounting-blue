@@ -622,7 +622,7 @@ fn test_doc_issue_counts_b2b_and_b2cl_invoices_as_one_series() {
 }
 
 #[test]
-fn test_b2cs_invoices_are_refused() {
+fn test_b2cs_invoices_are_reported_in_table_7() {
     let small = b2c_invoice(
         "INV-001",
         day(5),
@@ -635,15 +635,157 @@ fn test_b2cs_invoices_are_refused() {
         "27",
         vec![line("998314", "1", "500000", "18")],
     );
-
-    for invoice in [small, intra] {
-        let number = invoice.invoice_number.clone();
-        assert!(matches!(
-            build(&[invoice]),
-            Err(Gstr1Error::UnsupportedSupply { invoice_number, kind: SupplyKind::B2cs })
-                if invoice_number == number
-        ));
+    for invoice in [&small, &intra] {
+        assert_eq!(invoice.supply_kind().unwrap(), SupplyKind::B2cs);
     }
+
+    let gstr1 = build(&[small, intra]).unwrap();
+    assert!(gstr1.b2b.is_empty());
+    assert!(gstr1.b2cl.is_empty());
+
+    let rows: Vec<_> = gstr1
+        .b2cs
+        .iter()
+        .map(|r| (r.place_of_supply.as_str(), r.supply_type))
+        .collect();
+    assert_eq!(rows, [("27", SupplyType::Intra), ("29", SupplyType::Inter)]);
+
+    let intra = &gstr1.b2cs[0];
+    assert_eq!(intra.taxable_value, dec("500000"));
+    assert_eq!(intra.cgst, Some(dec("45000")));
+    assert_eq!(intra.sgst, Some(dec("45000")));
+    assert_eq!(intra.igst, None);
+    let inter = &gstr1.b2cs[1];
+    assert_eq!(inter.igst, Some(dec("180")));
+    assert_eq!((inter.cgst.clone(), inter.sgst.clone()), (None, None));
+}
+
+#[test]
+fn test_b2cs_rows_sum_invoices_per_place_and_rate() {
+    let gstr1 = build(&[
+        b2c_invoice(
+            "INV-003",
+            day(20),
+            "27",
+            vec![line("1905", "10", "12.50", "5")],
+        ),
+        b2c_invoice(
+            "INV-001",
+            day(5),
+            "27",
+            vec![
+                line("998314", "2", "500", "18"),
+                line("1905", "4", "10", "5"),
+            ],
+        ),
+        b2c_invoice(
+            "INV-002",
+            day(9),
+            "07",
+            vec![line("998314", "1", "2000", "18")],
+        ),
+        b2c_invoice(
+            "INV-004",
+            day(25),
+            "27",
+            vec![line("998314", "1", "300", "18.00")],
+        ),
+    ])
+    .unwrap();
+
+    let rows: Vec<_> = gstr1
+        .b2cs
+        .iter()
+        .map(|r| {
+            (
+                r.place_of_supply.as_str(),
+                r.rate.clone(),
+                r.taxable_value.clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("07", dec("18"), dec("2000")),
+            ("27", dec("5"), dec("165")),
+            ("27", dec("18"), dec("1300")),
+        ]
+    );
+    assert_eq!(gstr1.b2cs[1].cgst, Some(dec("4.13")));
+    assert_eq!(gstr1.b2cs[2].sgst, Some(dec("117")));
+}
+
+#[test]
+fn test_b2cs_json_uses_portal_keys() {
+    let gstr1 = build(&[
+        b2c_invoice(
+            "INV-001",
+            day(5),
+            "27",
+            vec![line("998314", "1", "1000", "18")],
+        ),
+        b2c_invoice(
+            "INV-002",
+            day(6),
+            "29",
+            vec![line("998314", "1", "2000", "18")],
+        ),
+    ])
+    .unwrap();
+    let value = to_value(&gstr1);
+
+    assert_eq!(
+        value["b2cs"],
+        json!([
+            {
+                "sply_ty": "INTRA", "rt": 18.0, "typ": "OE", "pos": "27",
+                "txval": 1000.0, "camt": 90.0, "samt": 90.0, "csamt": 0.0
+            },
+            {
+                "sply_ty": "INTER", "rt": 18.0, "typ": "OE", "pos": "29",
+                "txval": 2000.0, "iamt": 360.0, "csamt": 0.0
+            }
+        ])
+    );
+    assert!(value.get("b2cl").is_none());
+}
+
+#[test]
+fn test_b2c_hsn_tab_and_documents_cover_b2cl_and_b2cs() {
+    let gstr1 = build(&[
+        invoice(
+            "INV-001",
+            day(5),
+            BUYER_OTHER_STATE,
+            vec![line("998314", "2", "500", "18")],
+        ),
+        b2c_invoice(
+            "INV-002",
+            day(10),
+            "29",
+            vec![line("998314", "1", "200000", "18")],
+        ),
+        b2c_invoice(
+            "INV-003",
+            day(12),
+            "27",
+            vec![line("998314", "1", "1000", "18")],
+        ),
+    ])
+    .unwrap();
+
+    assert_eq!(gstr1.hsn.b2b[0].taxable_value, dec("1000"));
+    assert_eq!(gstr1.hsn.b2c.len(), 1);
+    assert_eq!(gstr1.hsn.b2c[0].taxable_value, dec("201000"));
+    assert_eq!(gstr1.hsn.b2c[0].igst, dec("36000"));
+    assert_eq!(gstr1.hsn.b2c[0].cgst, dec("90"));
+
+    let series = &gstr1.doc_issue.documents[0].series[0];
+    assert_eq!(
+        (series.from.as_str(), series.to.as_str(), series.total),
+        ("INV-001", "INV-003", 3)
+    );
 }
 
 #[test]
@@ -676,4 +818,145 @@ fn test_b2cl_json_uses_portal_keys() {
     assert!(value["hsn"].get("hsn_b2b").is_none());
     assert_eq!(value["hsn"]["hsn_b2c"][0]["hsn_sc"], "998314");
     assert_eq!(value["hsn"]["hsn_b2c"][0]["uqc"], "NA");
+}
+
+#[test]
+fn test_b2cs_zero_rated_lines_go_to_table_8_not_table_7() {
+    let gstr1 = build(&[
+        b2c_invoice(
+            "INV-001",
+            day(5),
+            "27",
+            vec![
+                line("998314", "1", "1000", "18"),
+                line("4901", "10", "150", "0"),
+            ],
+        ),
+        b2c_invoice(
+            "INV-002",
+            day(6),
+            "27",
+            vec![line("4901", "2", "100", "0.00")],
+        ),
+        b2c_invoice("INV-003", day(7), "29", vec![line("4901", "4", "250", "0")]),
+    ])
+    .unwrap();
+
+    // Only the taxable line is a Table 7 row; no rt 0 rows
+    let rows: Vec<_> = gstr1
+        .b2cs
+        .iter()
+        .map(|r| (r.place_of_supply.as_str(), r.rate.clone()))
+        .collect();
+    assert_eq!(rows, [("27", dec("18"))]);
+
+    let nil: Vec<_> = gstr1
+        .nil
+        .rows
+        .iter()
+        .map(|r| (r.supply_type, r.nil_rated.clone()))
+        .collect();
+    assert_eq!(
+        nil,
+        [
+            (NilSupplyType::InterB2c, dec("1000")),
+            (NilSupplyType::IntraB2c, dec("1700")),
+        ]
+    );
+
+    // Nil-rated lines still belong in the HSN summary
+    let hsn: Vec<_> = gstr1.hsn.b2c.iter().map(|r| r.hsn_sac.as_str()).collect();
+    assert_eq!(hsn, ["4901", "998314"]);
+    assert_eq!(gstr1.doc_issue.documents[0].series[0].total, 3);
+}
+
+#[test]
+fn test_nil_json_uses_portal_keys() {
+    let gstr1 = build(&[b2c_invoice(
+        "INV-001",
+        day(5),
+        "27",
+        vec![line("4901", "10", "150", "0")],
+    )])
+    .unwrap();
+    let value = to_value(&gstr1);
+
+    assert!(value.get("b2cs").is_none());
+    assert_eq!(
+        value["nil"],
+        json!({ "inv": [
+            { "sply_ty": "INTRAB2C", "nil_amt": 1500.0, "expt_amt": 0.0, "ngsup_amt": 0.0 }
+        ] })
+    );
+}
+
+#[test]
+fn test_return_without_nil_rated_b2c_lines_has_no_nil_section() {
+    let gstr1 = build(&[
+        invoice(
+            "INV-001",
+            day(5),
+            BUYER_SAME_STATE,
+            vec![line("4901", "1", "100", "0")],
+        ),
+        b2c_invoice(
+            "INV-002",
+            day(6),
+            "27",
+            vec![line("998314", "1", "1000", "18")],
+        ),
+    ])
+    .unwrap();
+    assert!(gstr1.nil.is_empty());
+    assert!(to_value(&gstr1).get("nil").is_none());
+}
+
+#[test]
+fn test_b2cl_zero_rated_lines_go_to_table_8_not_table_5() {
+    let gstr1 = build(&[
+        b2c_invoice(
+            "INV-001",
+            day(5),
+            "29",
+            vec![
+                line("998314", "1", "200000", "18"),
+                line("4901", "10", "150", "0"),
+            ],
+        ),
+        b2c_invoice(
+            "INV-002",
+            day(6),
+            "29",
+            vec![line("4901", "1", "150000", "0")],
+        ),
+        b2c_invoice("INV-003", day(7), "29", vec![line("4901", "2", "100", "0")]),
+    ])
+    .unwrap();
+
+    // The mixed invoice keeps its whole value but lists only its 18% item
+    assert_eq!(gstr1.b2cl.len(), 1);
+    let invoices = &gstr1.b2cl[0].invoices;
+    assert_eq!(invoices.len(), 1);
+    assert_eq!(invoices[0].invoice_number, "INV-001");
+    assert_eq!(invoices[0].invoice_value, dec("237500"));
+    let rates: Vec<_> = invoices[0]
+        .items
+        .iter()
+        .map(|i| i.detail.rate.clone())
+        .collect();
+    assert_eq!(rates, [dec("18")]);
+
+    // INV-002 is all nil-rated: B2CL by value, but only in Table 8; INV-003 is B2CS
+    assert!(gstr1.b2cs.is_empty());
+    let nil: Vec<_> = gstr1
+        .nil
+        .rows
+        .iter()
+        .map(|r| (r.supply_type, r.nil_rated.clone()))
+        .collect();
+    assert_eq!(nil, [(NilSupplyType::InterB2c, dec("151700"))]);
+
+    let hsn: Vec<_> = gstr1.hsn.b2c.iter().map(|r| r.hsn_sac.as_str()).collect();
+    assert_eq!(hsn, ["4901", "998314"]);
+    assert_eq!(gstr1.doc_issue.documents[0].series[0].total, 3);
 }

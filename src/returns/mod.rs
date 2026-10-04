@@ -3,12 +3,14 @@
 //! [`Gstr1Return::build`] aggregates a filer's [`GstInvoice`](crate::invoice::GstInvoice)s for one
 //! [`ReturnPeriod`] into GSTR-1, the return of outward supplies: Table 4A (B2B supplies by buyer
 //! and rate), Table 5 (B2CL: large inter-state supplies to unregistered buyers, by place of
-//! supply), Table 12 (the HSN/SAC summary) and Table 13 (documents issued).
+//! supply), Table 7 (B2CS: other supplies to unregistered buyers, summed by place of supply and
+//! rate), Table 8 (the nil-rated lines of B2C invoices), Table 12 (the HSN/SAC summary) and Table 13
+//! (documents issued).
 //! [`Gstr1Return::to_json`] writes it in the GST portal's offline-tool schema for upload.
 //!
 //! Building is pure: the caller passes the invoices and the HSN/SAC master, and gets a value
-//! back. B2CS supplies (any other supply to an unregistered buyer) are refused, and exports,
-//! credit and debit notes and amendments are not covered yet. Failures are typed as [`Gstr1Error`].
+//! back. Supplies through an e-commerce operator, exports, credit and debit notes and amendments
+//! are not covered yet. Failures are typed as [`Gstr1Error`].
 //!
 //! # Example
 //!
@@ -47,8 +49,9 @@ pub mod period;
 
 pub use gstr1::{
     B2bInvoice, B2bInvoiceType, B2bItem, B2bParty, B2clInvoice, B2clItem, B2clItemDetail,
-    B2clPlace, DocIssue, DocSeries, DocSummary, Gstr1Error, Gstr1Return, HsnRow, HsnSummary,
-    ItemDetail, GOODS_UQC, OUTWARD_INVOICES_DOC_TYPE, SERVICES_UQC,
+    B2clPlace, B2csRow, B2csType, DocIssue, DocSeries, DocSummary, Gstr1Error, Gstr1Return, HsnRow,
+    HsnSummary, ItemDetail, NilRow, NilSupplies, NilSupplyType, SupplyType, GOODS_UQC,
+    OUTWARD_INVOICES_DOC_TYPE, SERVICES_UQC,
 };
 pub use period::{ReturnPeriod, FIRST_GST_YEAR};
 
