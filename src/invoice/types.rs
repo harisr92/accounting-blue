@@ -410,6 +410,21 @@ impl From<GstCalculation> for GstBreakdown {
     }
 }
 
+impl GstBreakdown {
+    /// Every amount with its sign flipped, for a document that reduces the supply
+    #[must_use]
+    pub fn negated(&self) -> Self {
+        Self {
+            taxable_value: -&self.taxable_value,
+            cgst: -&self.cgst,
+            sgst: -&self.sgst,
+            igst: -&self.igst,
+            total_tax: -&self.total_tax,
+            total: -&self.total,
+        }
+    }
+}
+
 impl<'a> std::iter::Sum<&'a GstBreakdown> for GstBreakdown {
     fn sum<I: Iterator<Item = &'a GstBreakdown>>(iter: I) -> Self {
         iter.fold(Self::default(), |mut total, line| {
@@ -746,7 +761,7 @@ impl GstInvoice {
     /// Whether the place of supply is in a different state from the seller's registration
     #[must_use]
     pub fn is_inter_state(&self) -> bool {
-        self.seller_gstin.state_code() != self.buyer.place_of_supply()
+        GstDocument::is_inter_state(self)
     }
 
     /// Tax breakdown for each line, in order
@@ -755,11 +770,7 @@ impl GstInvoice {
     ///
     /// The first error from [`GstLineItem::breakdown`].
     pub fn line_breakdowns(&self) -> Result<Vec<GstBreakdown>, InvoiceError> {
-        let is_inter_state = self.is_inter_state();
-        self.line_items
-            .iter()
-            .map(|item| item.breakdown(is_inter_state))
-            .collect()
+        GstDocument::line_breakdowns(self)
     }
 
     /// Tax breakdown summed across all lines
@@ -768,7 +779,7 @@ impl GstInvoice {
     ///
     /// The first error from [`GstLineItem::breakdown`].
     pub fn breakdown(&self) -> Result<GstBreakdown, InvoiceError> {
-        Ok(self.line_breakdowns()?.iter().sum())
+        GstDocument::breakdown(self)
     }
 
     /// How the invoice is reported in GSTR-1
@@ -782,6 +793,83 @@ impl GstInvoice {
     /// The first error from [`GstLineItem::breakdown`].
     pub fn supply_kind(&self) -> Result<SupplyKind, InvoiceError> {
         Ok(supply_kind_for(self, &self.breakdown()?.total))
+    }
+}
+
+impl GstDocument for GstInvoice {
+    fn number(&self) -> &str {
+        &self.invoice_number
+    }
+
+    fn date(&self) -> NaiveDate {
+        self.invoice_date
+    }
+
+    fn seller_gstin(&self) -> &Gstin {
+        &self.seller_gstin
+    }
+
+    fn buyer(&self) -> &Recipient {
+        &self.buyer
+    }
+
+    fn line_items(&self) -> &[GstLineItem] {
+        &self.line_items
+    }
+}
+
+/// A GST document a seller issues to a buyer: a [`GstInvoice`] or a
+/// [`CreditNote`](super::CreditNote)
+///
+/// The provided methods hold the tax arithmetic every document shares: whether the supply is
+/// inter-state, and the breakdown of each line and of the whole document.
+pub trait GstDocument {
+    /// Document number: at most 16 characters of letters, digits, `-` and `/`
+    fn number(&self) -> &str;
+
+    /// Date of issue
+    fn date(&self) -> NaiveDate;
+
+    /// Date of the supply the document's rates were charged on: its own date for an invoice, the
+    /// original invoice's for a credit note, which reverses tax at the rates the invoice charged
+    fn supply_date(&self) -> NaiveDate {
+        self.date()
+    }
+
+    /// Supplier's GSTIN
+    fn seller_gstin(&self) -> &Gstin;
+
+    /// Recipient: a registered buyer's GSTIN, or an unregistered buyer's place of supply
+    fn buyer(&self) -> &Recipient;
+
+    /// The document's lines
+    fn line_items(&self) -> &[GstLineItem];
+
+    /// Whether the place of supply is in a different state from the seller's registration
+    fn is_inter_state(&self) -> bool {
+        self.seller_gstin().state_code() != self.buyer().place_of_supply()
+    }
+
+    /// Tax breakdown for each line, in order
+    ///
+    /// # Errors
+    ///
+    /// The first error from [`GstLineItem::breakdown`].
+    fn line_breakdowns(&self) -> Result<Vec<GstBreakdown>, InvoiceError> {
+        let is_inter_state = self.is_inter_state();
+        self.line_items()
+            .iter()
+            .map(|item| item.breakdown(is_inter_state))
+            .collect()
+    }
+
+    /// Tax breakdown summed across all lines
+    ///
+    /// # Errors
+    ///
+    /// The first error from [`GstLineItem::breakdown`].
+    fn breakdown(&self) -> Result<GstBreakdown, InvoiceError> {
+        Ok(self.line_breakdowns()?.iter().sum())
     }
 }
 
@@ -898,6 +986,31 @@ pub enum InvoiceError {
         role: PartyRole,
         /// The first rule it breaks
         reason: PartyError,
+    },
+    /// A credit note is dated before the invoice it corrects
+    #[error("credit note dated {note_date} is before its invoice dated {original_date}")]
+    NoteBeforeOriginal {
+        /// Date of the note
+        note_date: NaiveDate,
+        /// Date of the invoice it corrects
+        original_date: NaiveDate,
+    },
+    /// A credit note's original supply kind can't apply to its buyer, such as B2B for an
+    /// unregistered buyer
+    #[error("a {kind} invoice can't have been issued to {buyer}")]
+    OriginalKindMismatch {
+        /// The supply kind the note records for its invoice
+        kind: SupplyKind,
+        /// The note's buyer
+        buyer: Recipient,
+    },
+    /// A credit note credits more than the invoice it corrects was worth
+    #[error("credit note total {credited} is more than its invoice's value {invoice_value}")]
+    CreditExceedsInvoice {
+        /// The note's total, tax included
+        credited: BigDecimal,
+        /// The invoice's value, tax included
+        invoice_value: BigDecimal,
     },
     /// The GST rate is inconsistent
     #[error(transparent)]

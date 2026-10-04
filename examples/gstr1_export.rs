@@ -1,7 +1,9 @@
-//! GSTR-1 example: aggregate a month of B2B, B2CL and B2CS invoices into the return of outward
-//! supplies and export it as JSON in the GST portal's offline-tool schema
+//! GSTR-1 example: aggregate a month of B2B, B2CL and B2CS invoices and a credit note into the
+//! return of outward supplies and export it as JSON in the GST portal's offline-tool schema
 
-use accounting_core::invoice::{GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode};
+use accounting_core::invoice::{
+    CreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode,
+};
 use accounting_core::returns::{Gstr1Return, ReturnPeriod};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -89,8 +91,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?,
     ];
 
+    // The Karnataka buyer returns one of the two laptops on INV/24-25/102
+    let credit_notes = vec![CreditNote::new(
+        &invoices[1],
+        "CN/24-25/001",
+        date(20)?,
+        vec![line("847130", "Laptop returned", 1, "55000", 18)?],
+    )?];
+
     let period = ReturnPeriod::new(2024, 11)?;
-    let gstr1 = Gstr1Return::build(&seller, period, &invoices, HsnMaster::global())?;
+    let gstr1 = Gstr1Return::build(
+        &seller,
+        period,
+        &invoices,
+        &credit_notes,
+        HsnMaster::global(),
+    )?;
 
     println!("📅 Period {} for {}", gstr1.period, gstr1.filer_gstin);
     for party in &gstr1.b2b {
@@ -121,6 +137,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "  🧺 B2CS {:?} to state {} at {}%: taxable {}",
             row.supply_type, row.place_of_supply, row.rate, row.taxable_value
         );
+    }
+    for party in &gstr1.cdnr {
+        for note in &party.notes {
+            println!(
+                "  ↩️  Credit note {} to {} on {}: value {}",
+                note.note_number, party.buyer_gstin, note.note_date, note.note_value
+            );
+        }
     }
     for row in &gstr1.nil.rows {
         println!(

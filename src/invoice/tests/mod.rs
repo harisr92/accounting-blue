@@ -1,6 +1,7 @@
 //! Unit tests for the modules in this directory
 
 mod hsn_lookup_test;
+mod note_test;
 #[cfg(feature = "pdf")]
 mod pdf_test;
 mod posting_test;

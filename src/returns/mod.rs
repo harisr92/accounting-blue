@@ -4,12 +4,14 @@
 //! [`ReturnPeriod`] into GSTR-1, the return of outward supplies: Table 4A (B2B supplies by buyer
 //! and rate), Table 5 (B2CL: large inter-state supplies to unregistered buyers, by place of
 //! supply), Table 7 (B2CS: other supplies to unregistered buyers, summed by place of supply and
-//! rate), Table 8 (the nil-rated lines of B2C invoices), Table 12 (the HSN/SAC summary) and Table 13
-//! (documents issued).
+//! rate), Table 8 (nil-rated, exempt and non-GST lines), Table 9B (credit notes: `cdnr` for
+//! registered buyers, `cdnur` against B2CL invoices), Table 12 (the HSN/SAC summary) and Table 13
+//! (documents issued). A credit note against a B2CS invoice is subtracted from Table 7, and every
+//! credit note is subtracted from Tables 8 and 12.
 //! [`Gstr1Return::to_json`] writes it in the GST portal's offline-tool schema for upload.
 //!
-//! Building is pure: the caller passes the invoices and the HSN/SAC master, and gets a value
-//! back. Supplies through an e-commerce operator, exports, credit and debit notes and amendments
+//! Building is pure: the caller passes the invoices, the credit notes and the HSN/SAC master, and
+//! gets a value back. Supplies through an e-commerce operator, exports, debit notes and amendments
 //! are not covered yet. Failures are typed as [`Gstr1Error`].
 //!
 //! # Example
@@ -31,7 +33,7 @@
 //!     GstInvoice::new("INV-002", date, seller.clone(), buyer, vec![item(18)?, item(5)?])?,
 //! ];
 //!
-//! let gstr1 = Gstr1Return::build(&seller, ReturnPeriod::new(2024, 11)?, &invoices,
+//! let gstr1 = Gstr1Return::build(&seller, ReturnPeriod::new(2024, 11)?, &invoices, &[],
 //!     HsnMaster::global())?;
 //!
 //! // One buyer with two invoices; the second has one item per rate
@@ -44,14 +46,16 @@
 //! # }
 //! ```
 
+pub mod cdn;
 pub mod gstr1;
 pub mod period;
 
+pub use cdn::{CdnrNote, CdnrParty, CdnurNote, CdnurType, NoteType};
 pub use gstr1::{
     B2bInvoice, B2bInvoiceType, B2bItem, B2bParty, B2clInvoice, B2clItem, B2clItemDetail,
-    B2clPlace, B2csRow, B2csType, DocIssue, DocSeries, DocSummary, Gstr1Error, Gstr1Return, HsnRow,
-    HsnSummary, ItemDetail, NilRow, NilSupplies, NilSupplyType, SupplyType, GOODS_UQC,
-    OUTWARD_INVOICES_DOC_TYPE, SERVICES_UQC,
+    B2clPlace, B2csRow, B2csType, DocIssue, DocSeries, DocSummary, DocumentProblem, Gstr1Error,
+    Gstr1Return, HsnRow, HsnSummary, ItemDetail, NilRow, NilSupplies, NilSupplyType, SupplyType,
+    CREDIT_NOTES_DOC_TYPE, GOODS_UQC, OUTWARD_INVOICES_DOC_TYPE, SERVICES_UQC,
 };
 pub use period::{ReturnPeriod, FIRST_GST_YEAR};
 

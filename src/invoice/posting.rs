@@ -4,9 +4,13 @@
 //! revenue, and each tax component is owed to the government. [`posting_legs`] turns a
 //! [`GstBreakdown`] into those legs and [`GstInvoice::to_entries`] maps them onto accounts. The
 //! legs always balance, because the breakdown's total is its taxable value plus its tax.
+//!
+//! A [`CreditNote`] posts the same legs on the opposite sides, reversing the part of the invoice
+//! it credits: [`CreditNote::to_entries`].
 
-use super::types::{GstBreakdown, GstInvoice, InvoiceError};
-use super::validation::{compliance_errors, ComplianceIssue};
+use super::note::CreditNote;
+use super::types::{GstBreakdown, GstDocument, GstInvoice, InvoiceError};
+use super::validation::{compliance_errors, credit_note_errors, ComplianceIssue};
 use crate::types::{Entry, EntryType};
 use bigdecimal::{BigDecimal, Zero};
 use serde::{Deserialize, Serialize};
@@ -190,25 +194,81 @@ impl GstInvoice {
     /// ```
     pub fn to_entries(&self, accounts: &InvoiceAccounts) -> Result<Vec<Entry>, PostingError> {
         let errors = compliance_errors(self, self.invoice_date);
-        if !errors.is_empty() {
-            return Err(PostingError::NotCompliant(errors));
-        }
-
-        let legs = posting_legs(&self.breakdown()?);
-        if legs.is_empty() {
-            return Err(PostingError::NothingToPost);
-        }
-
-        Ok(legs
-            .into_iter()
-            .map(|(leg, amount)| {
-                Entry::new(
-                    accounts.account_for(leg),
-                    leg.side(),
-                    amount,
-                    Some(leg.to_string()),
-                )
-            })
-            .collect())
+        document_entries(self, errors, accounts, PostingLeg::side)
     }
+}
+
+impl CreditNote {
+    /// Journal entries that record this credit note in the ledger
+    ///
+    /// The legs are an invoice's, on the opposite sides: sales and the output tax are debited,
+    /// and the receivable is credited with the note's total. Pass a sales returns account as
+    /// `accounts.sales` to keep returns apart from sales. The note must pass the error-severity
+    /// rules of [`validate_credit_note`](super::validate_credit_note) as of its own date.
+    ///
+    /// # Errors
+    ///
+    /// As [`GstInvoice::to_entries`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use accounting_core::invoice::{CreditNote, GstInvoice, GstLineItem, Gstin, InvoiceAccounts};
+    /// use accounting_core::EntryType;
+    /// use bigdecimal::BigDecimal;
+    /// use chrono::NaiveDate;
+    ///
+    /// # fn main() -> Result<(), accounting_core::Error> {
+    /// let item = GstLineItem::new("998314", "IT consulting", BigDecimal::from(1),
+    ///     BigDecimal::from(1000), BigDecimal::from(18))?;
+    /// let invoice = GstInvoice::new("INV-001", NaiveDate::from_ymd_opt(2024, 11, 15).unwrap(),
+    ///     Gstin::parse("27AAPFU0939F1ZV")?, Gstin::parse("29AAPFU0939F1ZR")?, vec![item.clone()])?;
+    /// let note = CreditNote::new(&invoice, "CN-001", NaiveDate::from_ymd_opt(2024, 11, 20).unwrap(),
+    ///     vec![item])?;
+    ///
+    /// let accounts = InvoiceAccounts::new("receivable", "sales returns", "cgst", "sgst", "igst");
+    /// let entries = note.to_entries(&accounts)?;
+    ///
+    /// // Inter-state: sales returns 1000 + IGST 180 = receivable 1180, reversed
+    /// assert_eq!(entries[0].entry_type, EntryType::Credit);
+    /// assert_eq!(entries[0].amount, BigDecimal::from(1180));
+    /// assert_eq!(entries[1].entry_type, EntryType::Debit);
+    /// assert_eq!(entries[2].account_id, "igst");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn to_entries(&self, accounts: &InvoiceAccounts) -> Result<Vec<Entry>, PostingError> {
+        let errors = credit_note_errors(self, self.note_date);
+        document_entries(self, errors, accounts, |leg| leg.side().opposite())
+    }
+}
+
+/// The entries for `document`'s legs, each on the side `side` gives it, unless it has compliance
+/// `errors` or nothing to post
+fn document_entries(
+    document: &dyn GstDocument,
+    errors: Vec<ComplianceIssue>,
+    accounts: &InvoiceAccounts,
+    side: impl Fn(PostingLeg) -> EntryType,
+) -> Result<Vec<Entry>, PostingError> {
+    if !errors.is_empty() {
+        return Err(PostingError::NotCompliant(errors));
+    }
+
+    let legs = posting_legs(&document.breakdown()?);
+    if legs.is_empty() {
+        return Err(PostingError::NothingToPost);
+    }
+
+    Ok(legs
+        .into_iter()
+        .map(|(leg, amount)| {
+            Entry::new(
+                accounts.account_for(leg),
+                side(leg),
+                amount,
+                Some(leg.to_string()),
+            )
+        })
+        .collect())
 }

@@ -1,7 +1,8 @@
 //! GSTR-1 built from a month of invoices through the public API, checked on its JSON
 
 use accounting_core::invoice::{
-    GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode, SupplyKind,
+    CreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, InvoiceAccounts, Recipient, StateCode,
+    SupplyKind,
 };
 use accounting_core::{Gstr1Error, Gstr1Return, ReturnPeriod};
 use bigdecimal::BigDecimal;
@@ -79,8 +80,14 @@ fn november_invoices() -> Vec<GstInvoice> {
 fn gstr1_json() -> Value {
     let seller = Gstin::parse(SELLER).unwrap();
     let period = ReturnPeriod::new(2024, 11).unwrap();
-    let gstr1 =
-        Gstr1Return::build(&seller, period, &november_invoices(), HsnMaster::global()).unwrap();
+    let gstr1 = Gstr1Return::build(
+        &seller,
+        period,
+        &november_invoices(),
+        &[],
+        HsnMaster::global(),
+    )
+    .unwrap();
     serde_json::from_str(&gstr1.to_json().unwrap()).unwrap()
 }
 
@@ -188,7 +195,13 @@ fn test_hsn_summary_and_documents_agree_with_the_invoices() {
 fn test_a_bad_invoice_fails_the_whole_return() {
     let seller = Gstin::parse(SELLER).unwrap();
     let october = ReturnPeriod::new(2024, 10).unwrap();
-    let result = Gstr1Return::build(&seller, october, &november_invoices(), HsnMaster::global());
+    let result = Gstr1Return::build(
+        &seller,
+        october,
+        &november_invoices(),
+        &[],
+        HsnMaster::global(),
+    );
     assert!(matches!(result, Err(Gstr1Error::OutsidePeriod { .. })));
 
     let error: accounting_core::Error = result.unwrap_err().into();
@@ -220,7 +233,7 @@ fn test_large_inter_state_sales_to_unregistered_buyers_are_reported_as_b2cl() {
 
     let seller = Gstin::parse(SELLER).unwrap();
     let period = ReturnPeriod::new(2024, 11).unwrap();
-    let gstr1 = Gstr1Return::build(&seller, period, &invoices, HsnMaster::global()).unwrap();
+    let gstr1 = Gstr1Return::build(&seller, period, &invoices, &[], HsnMaster::global()).unwrap();
     let value: Value = serde_json::from_str(&gstr1.to_json().unwrap()).unwrap();
 
     assert_eq!(value["b2b"].as_array().unwrap().len(), 2);
@@ -264,7 +277,7 @@ fn test_small_sales_to_unregistered_buyers_are_reported_as_b2cs() {
 
     let seller = Gstin::parse(SELLER).unwrap();
     let period = ReturnPeriod::new(2024, 11).unwrap();
-    let gstr1 = Gstr1Return::build(&seller, period, &invoices, HsnMaster::global()).unwrap();
+    let gstr1 = Gstr1Return::build(&seller, period, &invoices, &[], HsnMaster::global()).unwrap();
     let value: Value = serde_json::from_str(&gstr1.to_json().unwrap()).unwrap();
 
     assert_eq!(value["b2b"].as_array().unwrap().len(), 2);
@@ -291,5 +304,108 @@ fn test_small_sales_to_unregistered_buyers_are_reported_as_b2cs() {
     assert_eq!(
         value["doc_issue"]["doc_det"][0]["docs"][0]["totnum"],
         json!(7)
+    );
+}
+
+/// November's invoices with two credit notes: laptops returned by the Karnataka buyer, and a
+/// discount on the first consulting invoice
+fn november_with_credit_notes() -> (Vec<GstInvoice>, Vec<CreditNote>) {
+    let invoices = november_invoices();
+    let find = |number: &str| {
+        invoices
+            .iter()
+            .find(|i| i.invoice_number == number)
+            .unwrap()
+    };
+    let on = |day| NaiveDate::from_ymd_opt(2024, 11, day).unwrap();
+    let notes = vec![
+        CreditNote::new(
+            find("INV-002"),
+            "CN-002",
+            on(29),
+            vec![line("847130", "Laptop returned", 1, "55000", 18)],
+        )
+        .unwrap(),
+        CreditNote::new(
+            find("INV-001"),
+            "CN-001",
+            on(10),
+            vec![line("998314", "Discount on consulting", 1, "1500", 18)],
+        )
+        .unwrap(),
+    ];
+    (invoices, notes)
+}
+
+#[test]
+fn test_credit_notes_are_reported_and_netted_in_the_return() {
+    let (invoices, notes) = november_with_credit_notes();
+    let seller = Gstin::parse(SELLER).unwrap();
+    let period = ReturnPeriod::new(2024, 11).unwrap();
+    let gstr1 =
+        Gstr1Return::build(&seller, period, &invoices, &notes, HsnMaster::global()).unwrap();
+    let value: Value = serde_json::from_str(&gstr1.to_json().unwrap()).unwrap();
+
+    // Table 9B: one note per buyer, in GSTIN order; Table 4A still has its two taxed buyers
+    let cdnr = value["cdnr"].as_array().unwrap();
+    assert_eq!(cdnr.len(), 2);
+    assert_eq!(cdnr[0]["ctin"], json!(MAHARASHTRA_BUYER));
+    assert_eq!(cdnr[0]["nt"][0]["val"], json!(1770.0));
+    assert_eq!(cdnr[1]["ctin"], json!(KARNATAKA_BUYER));
+    assert_eq!(
+        cdnr[1]["nt"][0]["itms"][0]["itm_det"],
+        json!({ "rt": 18.0, "txval": 55000.0, "iamt": 9900.0, "camt": 0.0, "samt": 0.0, "csamt": 0.0 })
+    );
+    assert_eq!(value["b2b"].as_array().unwrap().len(), 2);
+
+    // Table 12 is net of the notes: the invoices' 204,592.50 less 1,770 and 64,900
+    let rows = value["hsn"]["hsn_b2b"].as_array().unwrap();
+    let hsn_total = sum(rows.iter().map(|row| row["val"].as_f64().unwrap()));
+    assert_eq!(hsn_total, 204_592.5 - 1_770.0 - 64_900.0);
+    let laptops = rows
+        .iter()
+        .find(|row| row["hsn_sc"] == json!("847130"))
+        .unwrap();
+    assert_eq!(laptops["qty"], json!(1.0));
+
+    // Table 13: the invoice series, then the credit notes
+    assert_eq!(
+        value["doc_issue"]["doc_det"][1],
+        json!({ "doc_num": 5, "doc_typ": "Credit Note", "docs": [
+            { "num": 1, "from": "CN-001", "to": "CN-002", "totnum": 2, "cancel": 0, "net_issue": 2 }
+        ] })
+    );
+}
+
+#[test]
+fn test_credit_note_posts_the_reverse_of_its_invoice_lines() {
+    let (_, notes) = november_with_credit_notes();
+    let accounts = InvoiceAccounts::new("ar", "sales_returns", "cgst", "sgst", "igst");
+
+    let entries = notes[0].to_entries(&accounts).unwrap();
+
+    let posted: Vec<_> = entries
+        .iter()
+        .map(|e| (e.account_id.as_str(), e.entry_type, e.amount.clone()))
+        .collect();
+    assert_eq!(
+        posted,
+        [
+            (
+                "ar",
+                accounting_core::EntryType::Credit,
+                BigDecimal::from(64900)
+            ),
+            (
+                "sales_returns",
+                accounting_core::EntryType::Debit,
+                BigDecimal::from(55000)
+            ),
+            (
+                "igst",
+                accounting_core::EntryType::Debit,
+                BigDecimal::from(9900)
+            ),
+        ]
     );
 }
