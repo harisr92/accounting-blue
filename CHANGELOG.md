@@ -83,6 +83,12 @@
   - `Gstr1Return::build` checks credit notes like invoices: issued by the filer, dated in the period, compliant as of their own date, and with numbers unique among the notes ignoring case (a note may share a number with an invoice). A failure is the new `Gstr1Error::InvalidCreditNote { note_number, reason: DocumentProblem }`.
   - The `gstr1_export` example adds a credit note for a returned laptop.
 ### Fixed
+- HSN master corrections under GST 2.0:
+  - Chena and paneer are nil-rated whether loose or pre-packaged, so the new `040610` defaults to 0%. Other fresh cheese under `040610` is 5%, and its line needs an explicit rate. `0406` is now cheese only, still at 5%.
+  - The cheese subheadings have their own 5% entries: `040620` (grated or powdered), `040630` (processed), `040640` (blue-veined) and `040690` (other). A line with one of these codes now gets the exact-code rate check in `validate_invoice`.
+  - Sunglasses stay at 18%, so the new `900410` defaults to 18%. `9004` now describes corrective spectacles and goggles at 5%.
+  - `220210` also covers flavoured waters, as the HS 2022 description says.
+  - `hsn_master.json` lists the notifications and references its data was checked against under `sources`.
 - GST amounts are rounded to paise, so fractions of a paisa no longer reach the ledger. Before, one unit at 0.99 at 5% intra-state gave CGST = SGST = 0.02475, and `to_entries` posted a receivable of 1.0395.
   - `GstCalculation::calculate` rounds the base amount and each of CGST, SGST and IGST with `round_to_paise`.
     - The total tax is the sum of the rounded components, and the total is the base plus the tax.

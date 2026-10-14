@@ -3,7 +3,9 @@
 //! The master is compiled into the crate from `src/data/hsn_master.json`. It covers common codes
 //! for Indian SMEs under the GST schedule named by [`HsnMaster::schedule`], not the full CBIC
 //! tariff. Rates are defaults: some goods and services carry conditional rates (price thresholds,
-//! input tax credit options), so callers can always pass an explicit rate instead.
+//! input tax credit options), so callers can always pass an explicit rate instead. The
+//! notifications and references the data was checked against are listed under `sources` in the
+//! JSON file.
 
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;

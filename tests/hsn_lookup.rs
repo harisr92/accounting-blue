@@ -82,6 +82,23 @@ fn test_lookup_falls_back_to_heading() {
 }
 
 #[test]
+fn test_subheading_rate_overrides_its_heading() {
+    let master = HsnMaster::global();
+
+    // paneer is nil-rated, other cheese is 5%
+    assert_eq!(master.default_rate("04061000"), Some(BigDecimal::from(0)));
+    assert_eq!(master.default_rate("04069000"), Some(BigDecimal::from(5)));
+    // each cheese subheading has its own entry
+    for code in ["040620", "040630", "040640", "040690"] {
+        assert_eq!(master.lookup(code).unwrap().code, code);
+        assert_eq!(master.default_rate(code), Some(BigDecimal::from(5)));
+    }
+    // sunglasses stay at 18%, corrective spectacles are 5%
+    assert_eq!(master.default_rate("90041000"), Some(BigDecimal::from(18)));
+    assert_eq!(master.default_rate("90049010"), Some(BigDecimal::from(5)));
+}
+
+#[test]
 fn test_lookup_misses() {
     let master = HsnMaster::global();
 
