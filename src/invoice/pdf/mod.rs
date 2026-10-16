@@ -1,8 +1,8 @@
 //! PDF rendering of GST invoices (needs the `pdf` feature)
 //!
 //! [`render_pdf`] lays an [`InvoicePrint`] out on A4 pages and returns the PDF bytes;
-//! [`GstInvoice::to_pdf`] builds the print model and renders it in one call. The page shows a
-//! logo placeholder, the seller and invoice details, the buyer, the item table, the tax summary
+//! [`GstInvoice::to_pdf`] builds the print model and renders it in one call. The page shows the
+//! logo if one is given, the seller and invoice details, the buyer, the item table, the tax summary
 //! with the total in words, any terms, a signature line and a footer note with page numbers. Item
 //! tables longer than a page continue on the next one, and descriptions too long for their
 //! column are cut short with an ellipsis.
@@ -59,10 +59,10 @@ mod text;
 
 use super::print::{paginate_rows, InvoiceParties, InvoicePrint};
 use super::types::{GstInvoice, InvoiceError};
-use draw::{PAGE_HEIGHT, PAGE_WIDTH};
+use draw::{Image, PAGE_HEIGHT, PAGE_WIDTH};
 use fonts::{Face, Fonts};
 use layout::Layout;
-use printpdf::{Mm, Op, PdfDocument, PdfPage, PdfSaveOptions, TextItem};
+use printpdf::{Mm, Op, PdfDocument, PdfPage, PdfSaveOptions, RawImage, TextItem};
 use std::fmt;
 
 /// Currency label printed before amounts when the built-in font is used
@@ -98,6 +98,9 @@ pub struct PdfOptions {
     /// Note printed at the foot of every page. The default, [`DEFAULT_FOOTER_NOTE`], is left out
     /// for an unregistered buyer; any other note is always printed.
     pub footer_note: String,
+    /// PNG or JPEG bytes drawn at the top left of the first page, scaled to fit the logo box and
+    /// keeping their aspect ratio; `None` prints no logo, and the seller starts at the margin
+    pub logo: Option<Vec<u8>>,
 }
 
 impl Default for PdfOptions {
@@ -107,6 +110,7 @@ impl Default for PdfOptions {
             currency_label: DEFAULT_CURRENCY_LABEL.to_string(),
             terms: Vec::new(),
             footer_note: DEFAULT_FOOTER_NOTE.to_string(),
+            logo: None,
         }
     }
 }
@@ -141,6 +145,12 @@ pub enum PdfError {
         /// Which face was rejected
         face: FontFace,
     },
+    /// The logo bytes are not an image the renderer can decode
+    #[error("the logo is not a valid PNG or JPEG image: {reason}")]
+    InvalidLogo {
+        /// Why decoding failed
+        reason: String,
+    },
     /// The metrics printpdf ships for the built-in fonts could not be loaded
     #[error("could not load the metrics of the built-in font")]
     BuiltinFontMetrics,
@@ -165,13 +175,18 @@ pub enum PdfError {
 /// # Errors
 ///
 /// [`PdfError::InvalidFont`] if custom font bytes don't parse, [`PdfError::MissingGlyph`] if the
-/// font can't draw a character on the page, [`PdfError::TermsTooLong`] if the terms don't fit on
-/// the last page, and
+/// font can't draw a character on the page, [`PdfError::InvalidLogo`] if the logo can't be
+/// decoded, [`PdfError::TermsTooLong`] if the terms don't fit on the last page, and
 /// [`PdfError::BuiltinFontMetrics`] if the built-in font metrics are unavailable.
 pub fn render_pdf(print: &InvoicePrint, options: &PdfOptions) -> Result<Vec<u8>, PdfError> {
     let mut document = PdfDocument::new(&format!("{} {}", print.title, print.invoice_number));
     let fonts = Fonts::load(&mut document, &options.font)?;
-    let layout = Layout::new(&fonts, print, options);
+    let logo = options
+        .logo
+        .as_deref()
+        .map(|bytes| load_logo(&mut document, bytes))
+        .transpose()?;
+    let layout = Layout::new(&fonts, print, options, logo.as_ref());
     layout.check_terms_fit()?;
 
     let pages = paginate_rows(&print.rows, layout.capacity());
@@ -206,6 +221,17 @@ impl GstInvoice {
     ) -> Result<Vec<u8>, PdfError> {
         render_pdf(&InvoicePrint::from_invoice(self, parties)?, options)
     }
+}
+
+/// Decode the logo and add it to `document`
+fn load_logo(document: &mut PdfDocument, bytes: &[u8]) -> Result<Image, PdfError> {
+    let image = RawImage::decode_from_bytes(bytes, &mut Vec::new())
+        .map_err(|reason| PdfError::InvalidLogo { reason })?;
+    Ok(Image {
+        id: document.add_image(&image),
+        width_px: image.width,
+        height_px: image.height,
+    })
 }
 
 /// Refuse text the fonts can't draw, rather than print blank boxes

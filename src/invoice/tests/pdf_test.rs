@@ -7,6 +7,14 @@ use printpdf::{BuiltinFont, PdfDocument, PdfParseOptions};
 
 const SELLER: &str = "27AAPFU0939F1ZV";
 const BUYER: &str = "29AAPFU0939F1ZR";
+/// A 2x1 pixel RGB PNG
+const LOGO_PNG: [u8; 70] = [
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x7B, 0x40, 0xE8,
+    0xDD, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x38, 0x21, 0x07, 0x04,
+    0x27, 0x00, 0x07, 0x23, 0x02, 0x09, 0xE4, 0x58, 0x88, 0x39, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+    0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+];
 
 fn gstin(value: &str) -> Gstin {
     Gstin::parse(value).unwrap()
@@ -220,7 +228,7 @@ fn test_large_amounts_are_printed_in_full() {
 #[test]
 fn test_labels_the_font_cannot_draw_are_refused() {
     // Symbol has digits and punctuation but no Latin letters, so every caller-supplied string
-    // below can be drawn and only the renderer's own labels ("LOGO", "Tax Invoice", ...) can't
+    // below can be drawn and only the renderer's own labels ("Tax Invoice", "BILL TO", ...) can't
     let symbol = BuiltinFont::Symbol.get_subset_font().bytes;
     let invoice = GstInvoice::new(
         "2025/042",
@@ -390,5 +398,51 @@ fn test_bill_of_supply_renders_its_title_and_exempt_rates() {
     assert!(
         !page.contains("Tax Invoice"),
         "no Tax Invoice title expected in:\n{page}"
+    );
+}
+
+/// How many images the rendered PDF holds
+fn image_count(pdf: &[u8]) -> usize {
+    let document = PdfDocument::parse(pdf, &PdfParseOptions::default(), &mut Vec::new()).unwrap();
+    document.resources.xobjects.map.len()
+}
+
+#[test]
+fn test_invoice_without_logo_prints_no_logo() {
+    let pdf = invoice(1)
+        .to_pdf(&parties(), &PdfOptions::default())
+        .unwrap();
+
+    let page = &pages(&pdf)[0];
+    assert!(
+        !page.contains("LOGO"),
+        "no logo placeholder expected in:\n{page}"
+    );
+    assert_eq!(image_count(&pdf), 0);
+}
+
+#[test]
+fn test_logo_is_drawn_when_given() {
+    let options = PdfOptions {
+        logo: Some(LOGO_PNG.to_vec()),
+        ..PdfOptions::default()
+    };
+    let pdf = invoice(1).to_pdf(&parties(), &options).unwrap();
+
+    assert_eq!(image_count(&pdf), 1);
+    assert!(pages(&pdf)[0].contains("Acme Services Pvt Ltd"));
+}
+
+#[test]
+fn test_logo_that_is_not_an_image_is_refused() {
+    let options = PdfOptions {
+        logo: Some(b"not an image".to_vec()),
+        ..PdfOptions::default()
+    };
+    let result = invoice(1).to_pdf(&parties(), &options);
+
+    assert!(
+        matches!(result, Err(PdfError::InvalidLogo { .. })),
+        "{result:?}"
     );
 }

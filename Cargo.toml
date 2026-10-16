@@ -20,7 +20,7 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 async-trait = "0.1"
 serde_json = "1.0"
 # PDF export, behind the `pdf` feature (needs Rust 1.88)
-printpdf = { version = "0.12", default-features = false, optional = true }
+printpdf = { version = "0.12", default-features = false, features = ["png", "jpeg"], optional = true }
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }

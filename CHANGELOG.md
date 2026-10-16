@@ -26,16 +26,18 @@
   - `InvoicePrint::from_invoice(&invoice, &InvoiceParties)` is pure. It returns everything a printed tax invoice shows, with every amount formatted: title, number, date (`dd-mm-yyyy`), place of supply, the parties, one `PrintRow` per line, the CGST/SGST or IGST `TaxLine`s, the totals and the total in words. It serialises to JSON as is.
   - `InvoiceParty` holds a name, address lines and a GSTIN, and `InvoiceParties` pairs a seller with a buyer. `GstInvoice` is unchanged: the parties are passed alongside it. A party with an empty name, or whose GSTIN is not the one on the invoice, is refused with `InvoiceError::InvalidParty { role: PartyRole, reason: PartyError }`.
   - `paginate_rows(&rows, RowCapacity)` splits the item rows into pages. It adds an empty last page when the totals would not fit below the last rows.
-- PDF export behind the new `pdf` cargo feature (`accounting_core::invoice::pdf`). The feature pulls in `printpdf` 0.12, which needs Rust 1.88; the crate without the feature still builds on 1.82.
+- PDF export behind the new `pdf` cargo feature (`accounting_core::invoice::pdf`). The feature pulls in `printpdf` 0.12 with its PNG and JPEG decoders, which needs Rust 1.88; the crate without the feature still builds on 1.82.
   - `GstInvoice::to_pdf(&InvoiceParties, &PdfOptions)` and `render_pdf(&InvoicePrint, &PdfOptions)` return A4 PDF bytes.
-    - The page has a logo placeholder, the seller and the invoice details, the buyer, the item table and the tax summary with the total in words.
+    - The page has the logo if one is given, the seller and the invoice details, the buyer, the item table and the tax summary with the total in words.
     - It ends with any terms, a signature line and a footer note ("E-Invoice Ready" by default) with page numbers.
   - Item tables longer than a page continue on further pages. A description too long for its column is cut short with an ellipsis; a number too wide for its column is set in a smaller size, never cut.
-  - `PdfOptions` sets the font, currency label, terms and footer note.
+  - `PdfOptions` sets the font, currency label, terms, footer note and logo.
     - `PdfFont::Builtin` (the default) uses standard Helvetica and labels amounts `Rs.`.
     - `PdfFont::Custom { regular, bold }` embeds a TrueType or OpenType font. Use it with a currency label of `₹`, or for names in an Indian script.
+    - `logo: Option<Vec<u8>>` takes PNG or JPEG bytes, drawn at the top left and scaled to fit its box. With no logo (the default) nothing is drawn there and the seller block starts at the left margin.
   - `PdfError` is the error type, and it converts into `accounting_core::Error::Pdf`. Its variants:
     - `InvalidFont` for font bytes that don't parse.
+    - `InvalidLogo` for logo bytes that aren't a PNG or JPEG image.
     - `MissingGlyph` for a character the font can't draw. Every character on the page is checked, including the renderer's own labels.
     - `TermsTooLong` for terms that don't fit below the totals on one page, since the totals, terms and signature always share a page.
     - `Invoice` for an invalid invoice or parties.

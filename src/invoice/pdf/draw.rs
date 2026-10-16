@@ -1,16 +1,30 @@
 //! Drawing primitives in millimetres measured from the top-left corner of an A4 page
 
 use super::fonts::Face;
-use printpdf::{Color, Greyscale, Line, LinePoint, Mm, Op, PaintMode, Point, Pt, Rect, TextItem};
+use printpdf::{
+    Color, Greyscale, Line, LinePoint, Mm, Op, Point, Pt, TextItem, XObjectId, XObjectTransform,
+};
 
 /// A4 width in millimetres
 pub(super) const PAGE_WIDTH: f32 = 210.0;
 /// A4 height in millimetres
 pub(super) const PAGE_HEIGHT: f32 = 297.0;
-/// Thickness of rules and frames, in points
+/// Thickness of rules, in points
 const RULE_WIDTH_PT: f32 = 0.5;
 /// Ink for text and rules
 const BLACK: f32 = 0.0;
+/// Millimetres in an inch, to turn a scale in millimetres per pixel into a DPI
+const MM_PER_INCH: f32 = 25.4;
+
+/// An image added to the document, with its size in pixels
+pub(super) struct Image {
+    /// Handle that draws the image
+    pub(super) id: XObjectId,
+    /// Width in pixels
+    pub(super) width_px: usize,
+    /// Height in pixels
+    pub(super) height_px: usize,
+}
 
 /// How text sits relative to its x position
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,17 +110,27 @@ pub(super) fn rule(x1: f32, x2: f32, y: f32) -> Op {
     }
 }
 
-/// The outline of a box whose top-left corner is at (`x`, `y`)
-pub(super) fn frame(x: f32, y: f32, width: f32, height: f32) -> Op {
-    let lower_left = point(x, y + height);
-    Op::DrawRectangle {
-        rectangle: Rect {
-            x: lower_left.x,
-            y: lower_left.y,
-            width: Mm(width).into(),
-            height: Mm(height).into(),
-            mode: Some(PaintMode::Stroke),
-            winding_order: None,
-        },
+/// `image` scaled to fit a `width` by `height` box whose top-left corner is at (`x`, `y`),
+/// keeping its aspect ratio, and the height it is drawn at; nothing for an empty image
+pub(super) fn image(
+    image: &Image,
+    (x, y): (f32, f32),
+    (width, height): (f32, f32),
+) -> (Vec<Op>, f32) {
+    if image.width_px == 0 || image.height_px == 0 {
+        return (Vec::new(), 0.0);
     }
+    let mm_per_px = (width / image.width_px as f32).min(height / image.height_px as f32);
+    let drawn_height = mm_per_px * image.height_px as f32;
+    let lower_left = point(x, y + drawn_height);
+    let op = Op::UseXobject {
+        id: image.id.clone(),
+        transform: XObjectTransform {
+            translate_x: Some(lower_left.x),
+            translate_y: Some(lower_left.y),
+            dpi: Some(MM_PER_INCH / mm_per_px),
+            ..XObjectTransform::default()
+        },
+    };
+    (vec![op], drawn_height)
 }
