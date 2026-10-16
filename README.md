@@ -214,7 +214,7 @@ cargo run --example gst_calculations
 # GSTIN validation, HSN/SAC rates and B2B invoices
 cargo run --example gst_invoice
 
-# Render a GST invoice to PDF (pass a TTF with the ₹ glyph to print the rupee sign)
+# Render a GST invoice to PDF, without and with a logo (pass a TTF with the ₹ glyph to print the rupee sign)
 cargo run --example gst_invoice_pdf --features pdf
 
 # Aggregate a month of invoices into GSTR-1 and print the portal JSON
