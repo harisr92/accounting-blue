@@ -3,7 +3,9 @@
 //! Every block takes the y position it starts at and returns its ops with the y position it ends
 //! at, so blocks stack top to bottom. Positions are millimetres from the top-left corner.
 
-use super::draw::{frame, grey_text, page_setup, rule, text, Align, PAGE_HEIGHT, PAGE_WIDTH};
+use super::draw::{
+    grey_text, image, page_setup, rule, text, Align, Image, PAGE_HEIGHT, PAGE_WIDTH,
+};
 use super::fonts::{Face, Fonts};
 use super::text::{fit, wrap};
 use super::{PdfError, PdfOptions, DEFAULT_FOOTER_NOTE};
@@ -36,10 +38,11 @@ const TITLE_SIZE: f32 = 16.0;
 const TOTAL_SIZE: f32 = 10.0;
 const MUTED: f32 = 0.45;
 
+/// The box a logo is scaled to fit, top-left at the margins
 const LOGO_WIDTH: f32 = 30.0;
 const LOGO_HEIGHT: f32 = 18.0;
-/// Left edge of the seller block, right of the logo
-const SELLER_X: f32 = LEFT + LOGO_WIDTH + 4.0;
+/// Space between the logo and the seller block
+const LOGO_GAP: f32 = 4.0;
 const SELLER_WIDTH: f32 = 82.0;
 const WORDS_WIDTH: f32 = 105.0;
 const TOTALS_LABEL_X: f32 = 128.0;
@@ -129,14 +132,21 @@ pub(super) struct Layout<'a> {
     fonts: &'a Fonts,
     print: &'a InvoicePrint,
     options: &'a PdfOptions,
+    logo: Option<&'a Image>,
 }
 
 impl<'a> Layout<'a> {
-    pub(super) fn new(fonts: &'a Fonts, print: &'a InvoicePrint, options: &'a PdfOptions) -> Self {
+    pub(super) fn new(
+        fonts: &'a Fonts,
+        print: &'a InvoicePrint,
+        options: &'a PdfOptions,
+        logo: Option<&'a Image>,
+    ) -> Self {
         Self {
             fonts,
             print,
             options,
+            logo,
         }
     }
 
@@ -200,23 +210,14 @@ impl<'a> Layout<'a> {
         .concat()
     }
 
-    /// Logo placeholder, seller, invoice details, then the buyer, on the first page
+    /// Logo if given, seller, invoice details, then the buyer, on the first page
     fn header(&self) -> Block {
-        let logo = [
-            vec![frame(LEFT, MARGIN, LOGO_WIDTH, LOGO_HEIGHT)],
-            grey_text(
-                &self.fonts.regular,
-                SMALL_SIZE,
-                MUTED,
-                (LEFT + LOGO_WIDTH / 2.0, MARGIN + LOGO_HEIGHT / 2.0 + 1.0),
-                Align::Center,
-                "LOGO",
-            ),
-        ]
-        .concat();
+        let (logo, logo_height) = self.logo.map_or((Vec::new(), 0.0), |logo| {
+            image(logo, (LEFT, MARGIN), (LOGO_WIDTH, LOGO_HEIGHT))
+        });
         let (seller, seller_bottom) = self.seller(MARGIN + 5.0);
         let (details, details_bottom) = self.details(MARGIN + 6.0);
-        let top_bottom = (MARGIN + LOGO_HEIGHT)
+        let top_bottom = (MARGIN + logo_height)
             .max(seller_bottom)
             .max(details_bottom)
             + BLOCK_GAP;
@@ -238,10 +239,20 @@ impl<'a> Layout<'a> {
     /// Seller name in large type, then its address and GSTIN
     fn seller(&self, y: f32) -> Block {
         let seller = &self.print.seller;
+        let x = self.seller_x();
         let name = self.fit(&self.fonts.bold, NAME_SIZE, &seller.name, SELLER_WIDTH);
-        let name_ops = text(&self.fonts.bold, NAME_SIZE, SELLER_X, y, Align::Left, &name);
-        let (lines, bottom) = self.lines(SELLER_X, y + 5.5, SELLER_WIDTH, &party_lines(seller));
+        let name_ops = text(&self.fonts.bold, NAME_SIZE, x, y, Align::Left, &name);
+        let (lines, bottom) = self.lines(x, y + 5.5, SELLER_WIDTH, &party_lines(seller));
         ([name_ops, lines].concat(), bottom)
+    }
+
+    /// Left edge of the seller block: right of the logo, or at the margin when there is none
+    fn seller_x(&self) -> f32 {
+        if self.logo.is_some() {
+            LEFT + LOGO_WIDTH + LOGO_GAP
+        } else {
+            LEFT
+        }
     }
 
     /// Title and invoice details, right-aligned
