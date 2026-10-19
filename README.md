@@ -152,6 +152,11 @@ through the separate `ReconciliationStorage` trait, and statement parsing throug
 `ExternalDataParser` — this crate ships no parsers, since statement layouts differ per bank and
 per gateway.
 
+#### App built on top of accounting-blue
+
+- Please see the code implementation [here](https://github.com/harisr92/accounting-tui)
+- Take a look at the binaries built for [Linux, MacOS and Windows](https://github.com/harisr92/accounting-tui/releases/tag/v0.2.4)
+
 ## Architecture
 
 ### Core Components
