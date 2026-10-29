@@ -9,6 +9,10 @@
 //! [`GstBreakdown`], and [`GstInvoice::supply_kind`] says whether GSTR-1 reports it as B2B, B2CL
 //! or B2CS.
 //!
+//! A [`Discount`], a percentage or a flat amount, comes off before tax: on a line through
+//! [`GstLineItem::with_discount`], or off the subtotal through [`GstInvoice::with_discount`],
+//! which [`apportion`] shares across the lines by value.
+//!
 //! [`HsnMaster`] holds common HSN/SAC codes with their default GST rates;
 //! [`GstLineItem::with_default_rate`] builds a line at the rate for its code.
 //!
@@ -64,6 +68,7 @@
 //! # }
 //! ```
 
+pub mod discount;
 pub mod hsn_lookup;
 pub mod note;
 #[cfg(feature = "pdf")]
@@ -73,6 +78,7 @@ pub mod print;
 pub mod types;
 pub mod validation;
 
+pub use discount::{apportion, Discount, DiscountError};
 pub use hsn_lookup::{HsnMaster, HsnSacEntry, HsnSacKind};
 pub use note::{credit_note_deadline, CreditNote, OriginalInvoice};
 #[cfg(feature = "pdf")]
@@ -83,8 +89,8 @@ pub use pdf::{
 pub use posting::{posting_legs, InvoiceAccounts, PostingError, PostingLeg};
 pub use print::{
     paginate_rows, InvoiceParties, InvoiceParty, InvoicePrint, PartyError, PartyRole, PrintRow,
-    RowCapacity, TaxLine, BILL_OF_SUPPLY_TITLE, EXEMPT_RATE_LABEL, NON_GST_RATE_LABEL,
-    TAX_INVOICE_TITLE, UNREGISTERED_DETAILS_THRESHOLD_RUPEES,
+    RowCapacity, TaxLine, BILL_OF_SUPPLY_TITLE, DISCOUNT_LABEL, EXEMPT_RATE_LABEL,
+    NON_GST_RATE_LABEL, TAX_INVOICE_TITLE, UNREGISTERED_DETAILS_THRESHOLD_RUPEES,
 };
 pub use types::{
     b2cl_threshold, b2cl_threshold_revised_from, GstBreakdown, GstDocument, GstInvoice,

@@ -1,3 +1,4 @@
+use crate::invoice::discount::Discount;
 use crate::invoice::pdf::*;
 use crate::invoice::print::{InvoiceParties, InvoiceParty};
 use crate::invoice::types::{GstInvoice, GstLineItem, Gstin, InvoiceError, Recipient, StateCode};
@@ -445,4 +446,46 @@ fn test_logo_that_is_not_an_image_is_refused() {
         matches!(result, Err(PdfError::InvalidLogo { .. })),
         "{result:?}"
     );
+}
+
+#[test]
+fn test_discounts_are_printed_in_the_table_and_totals() {
+    let discounted = item("Consulting, discounted")
+        .with_discount(Discount::Percent(BigDecimal::from(10)))
+        .unwrap();
+    let invoice = GstInvoice::new(
+        "INV/2025-26/043",
+        NaiveDate::from_ymd_opt(2025, 6, 30).unwrap(),
+        gstin(SELLER),
+        gstin(BUYER),
+        vec![discounted, item("Consulting, full price")],
+    )
+    .unwrap()
+    .with_discount(Discount::Amount(BigDecimal::from(500)))
+    .unwrap();
+    let pdf = invoice.to_pdf(&parties(), &PdfOptions::default()).unwrap();
+
+    let page = &pages(&pdf)[0];
+    for expected in [
+        "Disc.",
+        "375.23",
+        "Subtotal",
+        "Rs. 7,129.27",
+        "Discount",
+        "Rs. -500.00",
+        "Taxable Value",
+        "Rs. 6,629.27",
+    ] {
+        assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
+    }
+}
+
+#[test]
+fn test_invoice_without_discounts_has_no_discount_column() {
+    let pdf = invoice(2)
+        .to_pdf(&parties(), &PdfOptions::default())
+        .unwrap();
+    let page = &pages(&pdf)[0];
+    assert!(!page.contains("Disc."));
+    assert!(!page.contains("Subtotal"));
 }

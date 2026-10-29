@@ -1,8 +1,9 @@
 //! GST invoice domain types
 
+use super::discount::{apportion, Discount, DiscountError};
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use super::print::{PartyError, PartyRole};
-use crate::tax::gst::{GstCalculation, GstError, GstRate};
+use crate::tax::gst::{round_to_paise, GstCalculation, GstError, GstRate};
 use bigdecimal::{BigDecimal, Signed, Zero};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -484,7 +485,7 @@ impl fmt::Display for SupplyTreatment {
 /// A line on a GST invoice
 ///
 /// Deserialising goes through the same validation as [`GstLineItem::new`]; a missing
-/// `treatment` reads as [`SupplyTreatment::Taxable`].
+/// `treatment` reads as [`SupplyTreatment::Taxable`], and a missing `discount` as none.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawGstLineItem")]
 pub struct GstLineItem {
@@ -500,6 +501,9 @@ pub struct GstLineItem {
     pub gst_rate: BigDecimal,
     /// Whether GST applies to the line
     pub treatment: SupplyTreatment,
+    /// Discount off quantity x unit price, before tax
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discount: Option<Discount>,
 }
 
 /// Unvalidated shape of a [`GstLineItem`], used when deserialising
@@ -512,20 +516,26 @@ struct RawGstLineItem {
     gst_rate: BigDecimal,
     #[serde(default)]
     treatment: SupplyTreatment,
+    #[serde(default)]
+    discount: Option<Discount>,
 }
 
 impl TryFrom<RawGstLineItem> for GstLineItem {
     type Error = InvoiceError;
 
     fn try_from(raw: RawGstLineItem) -> Result<Self, Self::Error> {
-        Self::build(
+        let item = Self::build(
             raw.hsn_sac,
             raw.description,
             raw.quantity,
             raw.unit_price,
             raw.gst_rate,
             raw.treatment,
-        )
+        )?;
+        match raw.discount {
+            Some(discount) => item.with_discount(discount),
+            None => Ok(item),
+        }
     }
 }
 
@@ -605,6 +615,38 @@ impl GstLineItem {
             unit_price,
             gst_rate,
             treatment,
+            discount: None,
+        };
+        item.check().map_err(InvoiceError::InvalidLineItem)?;
+        Ok(item)
+    }
+
+    /// The line with `discount` taken off its quantity x unit price, before tax
+    ///
+    /// # Errors
+    ///
+    /// [`InvoiceError::InvalidLineItem`] with [`LineItemError::InvalidDiscount`] if the discount
+    /// is out of range or more than the line's [`GstLineItem::gross_value`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use accounting_core::invoice::{Discount, GstLineItem};
+    /// use bigdecimal::BigDecimal;
+    ///
+    /// # fn main() -> Result<(), accounting_core::invoice::InvoiceError> {
+    /// let item = GstLineItem::new("998314", "IT consulting", BigDecimal::from(10),
+    ///     BigDecimal::from(1500), BigDecimal::from(18))?
+    ///     .with_discount(Discount::Percent(BigDecimal::from(10)))?;
+    /// assert_eq!(item.discount_amount(), BigDecimal::from(1500));
+    /// assert_eq!(item.taxable_value(), BigDecimal::from(13500));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_discount(self, discount: Discount) -> Result<Self, InvoiceError> {
+        let item = Self {
+            discount: Some(discount),
+            ..self
         };
         item.check().map_err(InvoiceError::InvalidLineItem)?;
         Ok(item)
@@ -616,8 +658,19 @@ impl GstLineItem {
         self.treatment.is_taxable() && !self.gst_rate.is_zero()
     }
 
-    /// The field rules other than the HSN/SAC shape
+    /// The field rules other than the HSN/SAC shape, then the discount
     pub(super) fn check(&self) -> Result<(), LineItemError> {
+        self.check_fields().and_then(|()| {
+            self.discount.as_ref().map_or(Ok(()), |discount| {
+                discount
+                    .check(&self.gross_value())
+                    .map_err(LineItemError::InvalidDiscount)
+            })
+        })
+    }
+
+    /// The rules for the description, quantity, price and rate, leaving out the discount
+    pub(super) fn check_fields(&self) -> Result<(), LineItemError> {
         if self.description.trim().is_empty() {
             Err(LineItemError::EmptyDescription)
         } else if !self.quantity.is_positive() {
@@ -663,23 +716,56 @@ impl GstLineItem {
         Self::new(hsn_sac, description, quantity, unit_price, gst_rate)
     }
 
-    /// Taxable value of the line (quantity x unit price), exactly
-    ///
-    /// This is not rounded; [`GstLineItem::breakdown`] rounds it to paise, so its
-    /// `taxable_value` is the amount that is invoiced and posted.
+    /// Value of the line before its discount (quantity x unit price), exactly
     #[must_use]
-    pub fn taxable_value(&self) -> BigDecimal {
+    pub fn gross_value(&self) -> BigDecimal {
         &self.quantity * &self.unit_price
     }
 
-    /// Tax breakdown for this line, split as IGST for inter-state supply or CGST + SGST otherwise
+    /// Rupees the line's discount takes off its [`GstLineItem::gross_value`], rounded to paise;
+    /// zero when it has none
+    #[must_use]
+    pub fn discount_amount(&self) -> BigDecimal {
+        self.discount
+            .as_ref()
+            .map_or_else(BigDecimal::zero, |discount| {
+                discount.amount_off(&self.gross_value())
+            })
+    }
+
+    /// Taxable value of the line: quantity x unit price less the line's discount, exactly
+    ///
+    /// This is not rounded, and is before any share of an invoice discount;
+    /// [`GstDocument::line_breakdowns`] takes that share off and rounds to paise, so its
+    /// `taxable_value` is the amount that is invoiced and posted.
+    #[must_use]
+    pub fn taxable_value(&self) -> BigDecimal {
+        self.gross_value() - self.discount_amount()
+    }
+
+    /// Tax breakdown for this line on its own, split as IGST for inter-state supply or CGST + SGST
+    /// otherwise
     ///
     /// # Errors
     ///
     /// [`InvoiceError::Gst`] if the rate fails [`GstRate::validate`].
     pub fn breakdown(&self, is_inter_state: bool) -> Result<GstBreakdown, InvoiceError> {
+        self.breakdown_on(self.taxable_value(), is_inter_state)
+    }
+
+    /// Tax breakdown at this line's rate on `taxable_value`, such as what is left of the line
+    /// after its share of an invoice discount
+    ///
+    /// # Errors
+    ///
+    /// [`InvoiceError::Gst`] if the rate fails [`GstRate::validate`].
+    pub fn breakdown_on(
+        &self,
+        taxable_value: BigDecimal,
+        is_inter_state: bool,
+    ) -> Result<GstBreakdown, InvoiceError> {
         let rate = GstRate::for_supply(self.gst_rate.clone(), is_inter_state);
-        Ok(GstCalculation::calculate(self.taxable_value(), rate)?.into())
+        Ok(GstCalculation::calculate(taxable_value, rate)?.into())
     }
 }
 
@@ -701,6 +787,9 @@ pub struct GstInvoice {
     pub buyer: Recipient,
     /// Invoice lines
     pub line_items: Vec<GstLineItem>,
+    /// Discount off the subtotal, before tax, shared across the lines by value
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discount: Option<Discount>,
 }
 
 /// Unvalidated shape of a [`GstInvoice`], used when deserialising
@@ -711,19 +800,25 @@ struct RawGstInvoice {
     seller_gstin: Gstin,
     buyer: Recipient,
     line_items: Vec<GstLineItem>,
+    #[serde(default)]
+    discount: Option<Discount>,
 }
 
 impl TryFrom<RawGstInvoice> for GstInvoice {
     type Error = InvoiceError;
 
     fn try_from(raw: RawGstInvoice) -> Result<Self, Self::Error> {
-        Self::new(
+        let invoice = Self::new(
             raw.invoice_number,
             raw.invoice_date,
             raw.seller_gstin,
             raw.buyer,
             raw.line_items,
-        )
+        )?;
+        match raw.discount {
+            Some(discount) => invoice.with_discount(discount),
+            None => Ok(invoice),
+        }
     }
 }
 
@@ -755,7 +850,51 @@ impl GstInvoice {
             seller_gstin,
             buyer: buyer.into(),
             line_items,
+            discount: None,
         })
+    }
+
+    /// The invoice with `discount` taken off its subtotal, before tax
+    ///
+    /// The discount is shared across the lines in proportion to their value after their own
+    /// discounts, and each line is taxed on what is left, so lines at different rates each pay
+    /// less tax.
+    ///
+    /// # Errors
+    ///
+    /// [`InvoiceError::InvalidDiscount`] if the discount is out of range or more than the
+    /// [`GstDocument::subtotal`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use accounting_core::invoice::{Discount, GstDocument, GstInvoice, GstLineItem, Gstin};
+    /// use bigdecimal::BigDecimal;
+    /// use chrono::NaiveDate;
+    ///
+    /// # fn main() -> Result<(), accounting_core::invoice::InvoiceError> {
+    /// let item = GstLineItem::new("998314", "IT consulting", BigDecimal::from(10),
+    ///     BigDecimal::from(1500), BigDecimal::from(18))?;
+    /// let invoice = GstInvoice::new("INV-001", NaiveDate::from_ymd_opt(2024, 11, 15).unwrap(),
+    ///     Gstin::parse("27AAPFU0939F1ZV")?, Gstin::parse("27AAPFU0939F2ZU")?, vec![item])?
+    ///     .with_discount(Discount::Amount(BigDecimal::from(1000)))?;
+    ///
+    /// assert_eq!(invoice.subtotal(), BigDecimal::from(15000));
+    /// let breakdown = invoice.breakdown()?;
+    /// assert_eq!(breakdown.taxable_value, BigDecimal::from(14000));
+    /// assert_eq!(breakdown.total, BigDecimal::from(16520));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_discount(self, discount: Discount) -> Result<Self, InvoiceError> {
+        let invoice = Self {
+            discount: Some(discount),
+            ..self
+        };
+        invoice
+            .check_discount()
+            .map_err(InvoiceError::InvalidDiscount)?;
+        Ok(invoice)
     }
 
     /// Whether the place of supply is in a different state from the seller's registration
@@ -816,6 +955,10 @@ impl GstDocument for GstInvoice {
     fn line_items(&self) -> &[GstLineItem] {
         &self.line_items
     }
+
+    fn document_discount(&self) -> Option<&Discount> {
+        self.discount.as_ref()
+    }
 }
 
 /// A GST document a seller issues to a buyer: a [`GstInvoice`] or a
@@ -845,6 +988,36 @@ pub trait GstDocument {
     /// The document's lines
     fn line_items(&self) -> &[GstLineItem];
 
+    /// Discount off the subtotal, before tax; none unless the document gives one
+    fn document_discount(&self) -> Option<&Discount> {
+        None
+    }
+
+    /// Sum of the lines' taxable values after their own discounts, each rounded to paise, before
+    /// the [`GstDocument::document_discount`]
+    fn subtotal(&self) -> BigDecimal {
+        line_values(self.line_items()).iter().sum()
+    }
+
+    /// Rupees the [`GstDocument::document_discount`] takes off the subtotal; zero when there is
+    /// none
+    fn discount_amount(&self) -> BigDecimal {
+        self.document_discount()
+            .map_or_else(BigDecimal::zero, |discount| {
+                discount.amount_off(&self.subtotal())
+            })
+    }
+
+    /// Check the [`GstDocument::document_discount`] can come off the subtotal
+    ///
+    /// # Errors
+    ///
+    /// The [`DiscountError`] naming the rule it breaks.
+    fn check_discount(&self) -> Result<(), DiscountError> {
+        self.document_discount()
+            .map_or(Ok(()), |discount| discount.check(&self.subtotal()))
+    }
+
     /// Whether the place of supply is in a different state from the seller's registration
     fn is_inter_state(&self) -> bool {
         self.seller_gstin().state_code() != self.buyer().place_of_supply()
@@ -852,15 +1025,16 @@ pub trait GstDocument {
 
     /// Tax breakdown for each line, in order
     ///
+    /// Each line is taxed on its value after its own discount, less its share of the
+    /// [`GstDocument::document_discount`].
+    ///
     /// # Errors
     ///
-    /// The first error from [`GstLineItem::breakdown`].
+    /// [`InvoiceError::InvalidDiscount`] if the [`GstDocument::document_discount`] no longer fits
+    /// the subtotal, such as after its lines were edited, or the first error from
+    /// [`GstLineItem::breakdown_on`].
     fn line_breakdowns(&self) -> Result<Vec<GstBreakdown>, InvoiceError> {
-        let is_inter_state = self.is_inter_state();
-        self.line_items()
-            .iter()
-            .map(|item| item.breakdown(is_inter_state))
-            .collect()
+        Ok(price_lines(self)?.breakdowns)
     }
 
     /// Tax breakdown summed across all lines
@@ -871,6 +1045,56 @@ pub trait GstDocument {
     fn breakdown(&self) -> Result<GstBreakdown, InvoiceError> {
         Ok(self.line_breakdowns()?.iter().sum())
     }
+}
+
+/// Each line's taxable value after its own discount, rounded to paise
+fn line_values(items: &[GstLineItem]) -> Vec<BigDecimal> {
+    items
+        .iter()
+        .map(|item| round_to_paise(&item.taxable_value()))
+        .collect()
+}
+
+/// A document's lines priced once: the subtotal, the discount off it, and each line's breakdown
+/// after its share of that discount
+pub(super) struct PricedLines {
+    /// Sum of the lines after their own discounts, before the document discount
+    pub(super) subtotal: BigDecimal,
+    /// Rupees the document discount takes off the subtotal; zero when there is none
+    pub(super) discount: BigDecimal,
+    /// Each line's breakdown, in order
+    pub(super) breakdowns: Vec<GstBreakdown>,
+}
+
+/// Price `document`'s lines: share its discount across them by value and tax what is left
+///
+/// [`GstDocument::line_breakdowns`] and the print model both read this, so the line values and
+/// the subtotal are worked out once.
+pub(super) fn price_lines<D: GstDocument + ?Sized>(
+    document: &D,
+) -> Result<PricedLines, InvoiceError> {
+    let values = line_values(document.line_items());
+    let subtotal: BigDecimal = values.iter().sum();
+    let discount = document
+        .document_discount()
+        .map_or(Ok(BigDecimal::zero()), |discount| {
+            discount
+                .check(&subtotal)
+                .map(|()| discount.amount_off(&subtotal))
+        })
+        .map_err(InvoiceError::InvalidDiscount)?;
+    let is_inter_state = document.is_inter_state();
+    let breakdowns = document
+        .line_items()
+        .iter()
+        .zip(values.iter().zip(apportion(&discount, &values)))
+        .map(|(item, (value, share))| item.breakdown_on(value - share, is_inter_state))
+        .collect::<Result<_, _>>()?;
+    Ok(PricedLines {
+        subtotal,
+        discount,
+        breakdowns,
+    })
 }
 
 /// [`GstInvoice::supply_kind`] for an invoice whose value, tax included, is already known
@@ -943,6 +1167,9 @@ pub enum LineItemError {
         /// The rate it carries
         rate: BigDecimal,
     },
+    /// The line's discount is out of range or more than its value
+    #[error("{0}")]
+    InvalidDiscount(DiscountError),
 }
 
 /// Invoice-related errors
@@ -979,6 +1206,9 @@ pub enum InvoiceError {
     /// The invoice has no line items
     #[error("an invoice needs at least one line item")]
     EmptyInvoice,
+    /// The invoice's discount is out of range or more than its subtotal
+    #[error("invalid invoice discount: {0}")]
+    InvalidDiscount(DiscountError),
     /// A party's details can't be printed on the invoice
     #[error("invalid {role}: {reason}")]
     InvalidParty {

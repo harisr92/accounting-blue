@@ -12,6 +12,7 @@
 //! [`validate_credit_note`] runs the same rules over a [`CreditNote`], which is a
 //! [`GstDocument`] too, plus the rules only a note has.
 
+use super::discount::DiscountError;
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use super::note::CreditNote;
 use super::types::{invoice_number_error, GstDocument, GstInvoice, GstLineItem};
@@ -61,6 +62,9 @@ pub enum ComplianceIssue {
         /// The first rule the line breaks
         reason: LineItemError,
     },
+    /// The discount off the subtotal is out of range or more than the subtotal
+    #[error("invoice discount: {0}")]
+    InvalidDiscount(DiscountError),
     /// The invoice is dated after the day it is checked
     #[error("invoice date {invoice_date} is after {as_of}")]
     FutureDate {
@@ -142,6 +146,7 @@ impl ComplianceIssue {
             | Self::NoLineItems
             | Self::InvalidHsnSac { .. }
             | Self::InvalidLineItem { .. }
+            | Self::InvalidDiscount(_)
             | Self::FutureDate { .. }
             | Self::SameSellerAndBuyer(_)
             | Self::NoteBeforeOriginal { .. }
@@ -212,6 +217,7 @@ const ERROR_RULES: &[ErrorRule] = &[
     line_items_present_rule,
     hsn_sac_shape_rule,
     line_fields_rule,
+    discount_rule,
     date_rule,
     parties_rule,
 ];
@@ -385,6 +391,16 @@ fn line_fields_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<Compli
     })
 }
 
+/// The discount off the subtotal must fit it, as [`GstInvoice::with_discount`] requires
+fn discount_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<ComplianceIssue> {
+    document
+        .check_discount()
+        .err()
+        .map(ComplianceIssue::InvalidDiscount)
+        .into_iter()
+        .collect()
+}
+
 fn date_rule(document: &dyn GstDocument, as_of: NaiveDate) -> Vec<ComplianceIssue> {
     if document.date() > as_of {
         vec![ComplianceIssue::FutureDate {
@@ -429,7 +445,7 @@ fn hsn_master_rule(document: &dyn GstDocument, master: &HsnMaster) -> Vec<Compli
         let compare_rate = schedule_applies
             && item.treatment.is_taxable()
             && entry.code == item.hsn_sac
-            && item.check().is_ok();
+            && item.check_fields().is_ok();
         (compare_rate && entry.gst_rate != item.gst_rate).then(|| {
             ComplianceIssue::RateDiffersFromHsnDefault {
                 line,

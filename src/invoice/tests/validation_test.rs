@@ -1,3 +1,4 @@
+use crate::invoice::discount::{Discount, DiscountError};
 use crate::invoice::hsn_lookup::HsnMaster;
 use crate::invoice::note::CreditNote;
 use crate::invoice::types::{GstInvoice, GstLineItem, Gstin, Recipient, StateCode};
@@ -539,4 +540,50 @@ fn test_credit_note_edited_to_a_buyer_its_original_kind_cannot_have_is_an_error(
         }]
     );
     assert_eq!(report.issues()[0].severity(), Severity::Error);
+}
+
+#[test]
+fn test_invoice_discount_edited_past_its_subtotal_is_an_error() {
+    let mut invoice = clean_invoice();
+
+    invoice.discount = Some(Discount::Amount(BigDecimal::from(2001)));
+    assert_eq!(
+        check(&invoice).issues(),
+        [ComplianceIssue::InvalidDiscount(
+            DiscountError::ExceedsValue {
+                discount: BigDecimal::from(2001),
+                value: BigDecimal::from_str("2000.00").unwrap(),
+            }
+        )]
+    );
+
+    invoice.discount = Some(Discount::Amount(BigDecimal::from(2000)));
+    assert!(check(&invoice).is_compliant());
+}
+
+#[test]
+fn test_bad_line_discount_does_not_hide_a_rate_warning() {
+    // Printed books (HSN 4901) are 0% by default; the line is worth 1,000
+    let line = GstLineItem {
+        discount: Some(Discount::Amount(BigDecimal::from(1001))),
+        ..item("4901", 5)
+    };
+    let invoice = invoice(BUYER_SAME_STATE, vec![line]);
+
+    let issues = check(&invoice).into_issues();
+    assert!(matches!(
+        issues[0],
+        ComplianceIssue::InvalidLineItem {
+            line: 0,
+            reason: LineItemError::InvalidDiscount(DiscountError::ExceedsValue { .. }),
+        }
+    ));
+    assert!(
+        issues.contains(&ComplianceIssue::RateDiffersFromHsnDefault {
+            line: 0,
+            code: "4901".to_string(),
+            rate: BigDecimal::from(5),
+            default: BigDecimal::from(0),
+        })
+    );
 }

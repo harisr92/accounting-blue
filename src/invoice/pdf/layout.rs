@@ -59,12 +59,16 @@ enum Overflow {
 }
 
 /// A table column: its heading, width in millimetres, alignment and how it fits wide cells
+#[derive(Clone, Copy)]
 struct Column {
     heading: &'static str,
     width: f32,
     align: Align,
     overflow: Overflow,
 }
+
+/// Label of the totals line before the invoice discount
+const SUBTOTAL_LABEL: &str = "Subtotal";
 
 /// The item table's columns, left to right, spanning the width between the margins
 const COLUMNS: [Column; 9] = [
@@ -122,6 +126,32 @@ const COLUMNS: [Column; 9] = [
         align: Align::Right,
         overflow: Overflow::Shrink,
     },
+];
+
+/// Width the discount column takes from the description when a line has a discount
+const DISCOUNT_WIDTH: f32 = 16.0;
+
+/// The item table's columns when a line has a discount: [`COLUMNS`] with a discount column after
+/// the rate, narrowing the description so the table keeps its width
+const COLUMNS_WITH_DISCOUNT: [Column; 10] = [
+    COLUMNS[0],
+    COLUMNS[1],
+    Column {
+        width: COLUMNS[2].width - DISCOUNT_WIDTH,
+        ..COLUMNS[2]
+    },
+    COLUMNS[3],
+    COLUMNS[4],
+    Column {
+        heading: "Disc.",
+        width: DISCOUNT_WIDTH,
+        align: Align::Right,
+        overflow: Overflow::Shrink,
+    },
+    COLUMNS[5],
+    COLUMNS[6],
+    COLUMNS[7],
+    COLUMNS[8],
 ];
 
 /// Ops for a block and the y position just below it
@@ -349,13 +379,32 @@ impl<'a> Layout<'a> {
         (ops, y + BLOCK_GAP + 2.0)
     }
 
+    /// The item table's columns: with a discount column when any line has a discount
+    fn columns(&self) -> &'static [Column] {
+        if self.print.has_line_discounts() {
+            &COLUMNS_WITH_DISCOUNT
+        } else {
+            &COLUMNS
+        }
+    }
+
     /// Column headings, then one line per row, between rules
     fn table(&self, top: f32, rows: &[PrintRow]) -> Block {
-        let headings = COLUMNS.map(|column| column.heading.to_string());
-        let heading = self.row(&self.fonts.bold, top, &headings);
+        let columns = self.columns();
+        let with_discount = columns.len() == COLUMNS_WITH_DISCOUNT.len();
+        let headings: Vec<String> = columns
+            .iter()
+            .map(|column| column.heading.to_string())
+            .collect();
+        let heading = self.row(columns, &self.fonts.bold, top, &headings);
         let body = rows.iter().enumerate().flat_map(|(index, row)| {
             let row_top = top + ROW_HEIGHT * (index + 1) as f32;
-            self.row(&self.fonts.regular, row_top, &cells(row))
+            self.row(
+                columns,
+                &self.fonts.regular,
+                row_top,
+                &cells(row, with_discount),
+            )
         });
         let bottom = top + ROW_HEIGHT * (rows.len() + 1) as f32;
         let rules = [top, top + ROW_HEIGHT, bottom].map(|y| rule(LEFT, RIGHT, y));
@@ -365,14 +414,14 @@ impl<'a> Layout<'a> {
         )
     }
 
-    /// One table row of `cells` whose top edge is at `top`, each cut to its column
-    fn row(&self, face: &Face, top: f32, cells: &[String; 9]) -> Vec<Op> {
-        let lefts = COLUMNS.iter().scan(LEFT, |x, column| {
+    /// One table row of `cells` whose top edge is at `top`, each cut to its one of `columns`
+    fn row(&self, columns: &[Column], face: &Face, top: f32, cells: &[String]) -> Vec<Op> {
+        let lefts = columns.iter().scan(LEFT, |x, column| {
             let left = *x;
             *x += column.width;
             Some(left)
         });
-        COLUMNS
+        columns
             .iter()
             .zip(lefts)
             .zip(cells)
@@ -392,19 +441,11 @@ impl<'a> Layout<'a> {
             .collect()
     }
 
-    /// Amount in words on the left; taxable value, tax lines and total on the right
+    /// Amount in words on the left; subtotal and discount when there is one, taxable value, tax
+    /// lines and total on the right
     fn totals(&self, top: f32) -> Block {
         let print = self.print;
-        let lines: Vec<(&str, &str)> =
-            std::iter::once(("Taxable Value", print.taxable_value.as_str()))
-                .chain(
-                    print
-                        .tax_lines
-                        .iter()
-                        .map(|line| (line.label.as_str(), line.amount.as_str())),
-                )
-                .chain(std::iter::once(("Total Tax", print.total_tax.as_str())))
-                .collect();
+        let lines = summary_lines(print);
         let amounts = lines
             .iter()
             .enumerate()
@@ -599,19 +640,53 @@ fn party_lines(party: &InvoiceParty) -> Vec<String> {
         .collect()
 }
 
-/// A row's cells, in column order
-fn cells(row: &PrintRow) -> [String; 9] {
+/// The totals lines above the rule, as label and amount: the subtotal and the invoice discount
+/// when there are discounts, then the taxable value, each tax and the total tax
+fn summary_lines(print: &InvoicePrint) -> Vec<(&str, String)> {
+    let subtotal = print
+        .shows_subtotal()
+        .then(|| (SUBTOTAL_LABEL, print.subtotal.clone()));
+    let discount = print
+        .discount
+        .as_ref()
+        .zip(print.discount_label.as_ref())
+        .map(|(amount, label)| (label.as_str(), format!("-{amount}")));
+    subtotal
+        .into_iter()
+        .chain(discount)
+        .chain(std::iter::once((
+            "Taxable Value",
+            print.taxable_value.clone(),
+        )))
+        .chain(
+            print
+                .tax_lines
+                .iter()
+                .map(|line| (line.label.as_str(), line.amount.clone())),
+        )
+        .chain(std::iter::once(("Total Tax", print.total_tax.clone())))
+        .collect()
+}
+
+/// A row's cells, in column order, with the discount cell when the table has that column
+fn cells(row: &PrintRow, with_discount: bool) -> Vec<String> {
+    let discount = with_discount.then(|| row.discount.clone().unwrap_or_default());
     [
         row.serial.to_string(),
         row.hsn_sac.clone(),
         row.description.clone(),
         row.quantity.clone(),
         row.rate.clone(),
+    ]
+    .into_iter()
+    .chain(discount)
+    .chain([
         row.taxable_value.clone(),
         row.gst_rate.clone(),
         row.tax.clone(),
         row.amount.clone(),
-    ]
+    ])
+    .collect()
 }
 
 /// The size, at most `size`, at which `text` in `face` fits in `width` millimetres

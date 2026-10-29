@@ -6,7 +6,7 @@
 //! Noto Sans) as the first argument to print amounts with the rupee sign.
 
 use accounting_core::invoice::{
-    GstInvoice, GstLineItem, Gstin, InvoiceParties, InvoiceParty, PdfFont, PdfOptions,
+    Discount, GstInvoice, GstLineItem, Gstin, InvoiceParties, InvoiceParty, PdfFont, PdfOptions,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -32,7 +32,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             BigDecimal::from(2),
             BigDecimal::from_str("68500.00")?,
             BigDecimal::from(18),
-        )?,
+        )?
+        // A line discount, printed in the Disc. column
+        .with_discount(Discount::Percent(BigDecimal::from(5)))?,
         GstLineItem::new(
             "4901",
             "Printed training manuals",
@@ -48,7 +50,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         seller.clone(),
         buyer.clone(),
         items,
-    )?;
+    )?
+    // A discount off the subtotal, before tax, printed between the subtotal and taxable value
+    .with_discount(Discount::Amount(BigDecimal::from(5000)))?;
 
     let parties = InvoiceParties::new(
         InvoiceParty::new(

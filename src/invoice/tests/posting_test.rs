@@ -1,3 +1,4 @@
+use crate::invoice::discount::Discount;
 use crate::invoice::note::CreditNote;
 use crate::invoice::posting::*;
 use crate::invoice::types::{
@@ -337,4 +338,21 @@ fn test_non_compliant_credit_note_is_not_posted() {
         issues.as_slice(),
         [ComplianceIssue::CreditNoteTooLate { .. }]
     ));
+}
+
+#[test]
+fn test_discounted_invoice_posts_its_discounted_sales() {
+    let invoice = invoice(BUYER_SAME_STATE, 18)
+        .with_discount(Discount::Amount(BigDecimal::from(100)))
+        .unwrap();
+
+    assert_eq!(
+        posting_legs(&invoice.breakdown().unwrap()),
+        vec![
+            (PostingLeg::Receivable, BigDecimal::from(1062)),
+            (PostingLeg::Sales, BigDecimal::from(900)),
+            (PostingLeg::CgstOutput, BigDecimal::from(81)),
+            (PostingLeg::SgstOutput, BigDecimal::from(81)),
+        ]
+    );
 }
