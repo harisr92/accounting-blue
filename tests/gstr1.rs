@@ -1,8 +1,8 @@
 //! GSTR-1 built from a month of invoices through the public API, checked on its JSON
 
 use accounting_core::invoice::{
-    CreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, InvoiceAccounts, Recipient, StateCode,
-    SupplyKind,
+    CreditNote, Discount, GstInvoice, GstLineItem, Gstin, HsnMaster, InvoiceAccounts, Recipient,
+    StateCode, SupplyKind,
 };
 use accounting_core::{Gstr1Error, Gstr1Return, ReturnPeriod};
 use bigdecimal::BigDecimal;
@@ -406,6 +406,65 @@ fn test_credit_note_posts_the_reverse_of_its_invoice_lines() {
                 accounting_core::EntryType::Debit,
                 BigDecimal::from(9900)
             ),
+        ]
+    );
+}
+
+/// Discounts come off before tax, so the return and the posting carry the discounted values
+#[test]
+fn test_discounted_invoice_is_reported_and_posted_at_its_discounted_value() {
+    let consulting = line("998314", "Consulting", 1, "1000", 18)
+        .with_discount(Discount::Percent(BigDecimal::from(10)))
+        .unwrap();
+    // 900 + 100 subtotal, 100 off shared 90 / 10: taxable 810 at 18% and 90 at 5%
+    let invoice = invoice(
+        "INV-010",
+        12,
+        KARNATAKA_BUYER,
+        vec![consulting, line("4901", "Manuals", 1, "100", 5)],
+    )
+    .with_discount(Discount::Amount(BigDecimal::from(100)))
+    .unwrap();
+
+    let gstr1 = Gstr1Return::build(
+        &Gstin::parse(SELLER).unwrap(),
+        ReturnPeriod::new(2024, 11).unwrap(),
+        std::slice::from_ref(&invoice),
+        &[],
+        HsnMaster::global(),
+    )
+    .unwrap();
+    let value: Value = serde_json::from_str(&gstr1.to_json().unwrap()).unwrap();
+    let filed = &value["b2b"][0]["inv"][0];
+    assert_eq!(filed["val"], json!(1050.3));
+    let items: Vec<_> = filed["itms"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["itm_det"].clone())
+        .collect();
+    assert_eq!(
+        items,
+        [
+            json!({ "rt": 5.0, "txval": 90.0, "iamt": 4.5, "camt": 0.0, "samt": 0.0, "csamt": 0.0 }),
+            json!({ "rt": 18.0, "txval": 810.0, "iamt": 145.8, "camt": 0.0, "samt": 0.0, "csamt": 0.0 }),
+        ]
+    );
+
+    let accounts = InvoiceAccounts::new("ar", "sales", "cgst", "sgst", "igst");
+    let posted: Vec<_> = invoice
+        .to_entries(&accounts)
+        .unwrap()
+        .iter()
+        .map(|e| (e.account_id.clone(), e.amount.clone()))
+        .collect();
+    let rupees = |s: &str| BigDecimal::from_str(s).unwrap();
+    assert_eq!(
+        posted,
+        [
+            ("ar".to_string(), rupees("1050.30")),
+            ("sales".to_string(), rupees("900")),
+            ("igst".to_string(), rupees("150.30")),
         ]
     );
 }

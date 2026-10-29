@@ -1,6 +1,7 @@
 use crate::invoice::validation::ComplianceIssue;
 use crate::invoice::{
-    CreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode, SupplyKind,
+    CreditNote, Discount, GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode,
+    SupplyKind,
 };
 use crate::returns::gstr1::*;
 use crate::returns::period::ReturnPeriod;
@@ -1270,4 +1271,21 @@ fn test_a_credit_note_may_share_a_number_with_an_invoice() {
     let note = credit(&sale, "DOC-001", day(6), sale.line_items.clone());
 
     assert!(build_with_notes(&[sale], &[note]).is_ok());
+}
+
+#[test]
+fn test_discounted_invoice_reports_its_discounted_value() {
+    let discounted = line("998314", "2", "500", "18")
+        .with_discount(Discount::Amount(dec("100")))
+        .unwrap();
+    let invoice = invoice("INV-001", day(5), BUYER_SAME_STATE, vec![discounted])
+        .with_discount(Discount::Percent(dec("10")))
+        .unwrap();
+    let gstr1 = build(&[invoice]).unwrap();
+
+    let inv = &gstr1.b2b[0].invoices[0];
+    assert_eq!(inv.invoice_value, dec("955.80"));
+    let detail = &inv.items[0].detail;
+    assert_eq!(detail.taxable_value, dec("810"));
+    assert_eq!(detail.cgst, dec("72.90"));
 }

@@ -7,7 +7,7 @@ use bigdecimal::BigDecimal;
 
 #[cfg(feature = "pdf")]
 use crate::invoice::PdfError;
-use crate::invoice::{InvoiceError, PostingError};
+use crate::invoice::{DiscountError, InvoiceError, PostingError};
 use crate::reconciliation::ReconciliationError;
 use crate::returns::Gstr1Error;
 use crate::tax::GstError;
@@ -27,6 +27,9 @@ pub enum Error {
     /// GST invoice failure
     #[error(transparent)]
     Invoice(#[from] InvoiceError),
+    /// A discount does not fit the value it comes off
+    #[error(transparent)]
+    Discount(#[from] DiscountError),
     /// An invoice could not be posted to the ledger
     #[error(transparent)]
     Posting(#[from] PostingError),
