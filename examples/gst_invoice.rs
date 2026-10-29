@@ -1,9 +1,9 @@
 //! GST invoice examples: GSTIN validation, HSN/SAC rate lookup, intra-state and inter-state
-//! invoices, compliance checks and the ledger posting
+//! invoices, discounts, compliance checks and the ledger posting
 
 use accounting_core::invoice::{
-    validate_invoice, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster, InvoiceAccounts,
-    InvoiceValidationReport, Severity,
+    validate_invoice, Discount, GstBreakdown, GstDocument, GstInvoice, GstLineItem, Gstin,
+    HsnMaster, InvoiceAccounts, InvoiceValidationReport, Severity,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -97,6 +97,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     print_invoice("🌍 Inter-state Invoice (IGST)", &inter_state)?;
 
+    // Discounts come off before tax: 5% off the laptops, then ₹1,000 off the subtotal, shared
+    // across the lines by value
+    let mut discounted_lines = inter_state.line_items.clone();
+    discounted_lines[0] = discounted_lines[0]
+        .clone()
+        .with_discount(Discount::Percent(BigDecimal::from(5)))?;
+    let discounted = GstInvoice::new(
+        "INV/2024-25/003".to_string(),
+        date,
+        inter_state.seller_gstin.clone(),
+        inter_state.buyer.clone(),
+        discounted_lines,
+    )?
+    .with_discount(Discount::Amount(BigDecimal::from(1000)))?;
+    print_invoice("🏷️  Discounted Invoice", &discounted)?;
+
     // 5. Invalid invoices are rejected at construction
     println!("🚫 Rejected Inputs:");
     let too_long = GstInvoice::new(
@@ -173,15 +189,20 @@ fn print_invoice(title: &str, invoice: &GstInvoice) -> Result<(), Box<dyn std::e
     println!("  Lines:");
     for (item, line) in invoice.line_items.iter().zip(invoice.line_breakdowns()?) {
         println!(
-            "    [{}] {} × {} @ ₹{} ({}%) → taxable ₹{}, tax ₹{}",
+            "    [{}] {} × {} @ ₹{} less ₹{} ({}%) → taxable ₹{}, tax ₹{}",
             item.hsn_sac,
             item.description,
             item.quantity,
             item.unit_price,
+            item.discount_amount(),
             item.gst_rate,
             line.taxable_value,
             line.total_tax
         );
+    }
+    if invoice.discount.is_some() {
+        println!("  Subtotal:      ₹{}", invoice.subtotal());
+        println!("  Discount:      ₹{}", invoice.discount_amount());
     }
     print_breakdown(&invoice.breakdown()?);
     println!();
