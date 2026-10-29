@@ -1,9 +1,15 @@
+use crate::invoice::discount::{Discount, DiscountError};
 use crate::invoice::types::*;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 use std::str::FromStr;
 
 const SELLER: &str = "27AAPFU0939F1ZV";
+const BUYER_SAME_STATE: &str = "27AAPFU0939F2ZU";
+
+fn dec(value: &str) -> BigDecimal {
+    BigDecimal::from_str(value).unwrap()
+}
 
 fn gstin_with_checksum(body: &str) -> String {
     format!("{body}{}", gstin_checksum(body.as_bytes()).unwrap() as char)
@@ -447,4 +453,146 @@ fn test_negated_breakdown_flips_every_amount() {
     assert_eq!(negated.igst, BigDecimal::from(-180));
     assert_eq!(negated.total, BigDecimal::from(-1180));
     assert_eq!(negated.negated(), breakdown);
+}
+
+#[test]
+fn test_line_discount_lowers_taxable_value_and_tax() {
+    let line = item(18)
+        .with_discount(Discount::Percent(dec("10")))
+        .unwrap();
+
+    assert_eq!(line.gross_value(), dec("1000"));
+    assert_eq!(line.discount_amount(), dec("100"));
+    assert_eq!(line.taxable_value(), dec("900"));
+    let breakdown = line.breakdown(false).unwrap();
+    assert_eq!(breakdown.cgst, dec("81"));
+    assert_eq!(breakdown.total, dec("1062"));
+}
+
+#[test]
+fn test_full_line_discount_leaves_nothing_to_tax() {
+    let line = item(18)
+        .with_discount(Discount::Amount(dec("1000")))
+        .unwrap();
+    assert_eq!(line.breakdown(false).unwrap().total, dec("0"));
+}
+
+#[test]
+fn test_line_discount_above_its_value_is_rejected() {
+    assert!(matches!(
+        item(18).with_discount(Discount::Amount(dec("1000.01"))),
+        Err(InvoiceError::InvalidLineItem(
+            LineItemError::InvalidDiscount(DiscountError::ExceedsValue { .. })
+        ))
+    ));
+}
+
+#[test]
+fn test_line_discount_is_read_from_json() {
+    let json = r#"{"hsn_sac": "998314", "description": "IT consulting", "quantity": "2",
+        "unit_price": "500", "gst_rate": "18", "discount": {"amount": "50"}}"#;
+    let line: GstLineItem = serde_json::from_str(json).unwrap();
+    assert_eq!(line.taxable_value(), dec("950"));
+
+    let over = json.replace(r#""50""#, r#""5000""#);
+    assert!(serde_json::from_str::<GstLineItem>(&over).is_err());
+
+    let plain = serde_json::to_string(&item(18)).unwrap();
+    assert!(!plain.contains("discount"));
+}
+
+#[test]
+fn test_invoice_discount_is_shared_across_rates_before_tax() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item(18), item(5)])
+        .with_discount(Discount::Percent(dec("10")))
+        .unwrap();
+
+    assert_eq!(invoice.subtotal(), dec("2000"));
+    assert_eq!(invoice.discount_amount(), dec("200"));
+    let lines = invoice.line_breakdowns().unwrap();
+    assert_eq!(lines[0].taxable_value, dec("900"));
+    assert_eq!(lines[0].cgst, dec("81"));
+    assert_eq!(lines[1].taxable_value, dec("900"));
+    assert_eq!(lines[1].cgst, dec("22.50"));
+    let total = invoice.breakdown().unwrap();
+    assert_eq!(total.taxable_value, dec("1800"));
+    assert_eq!(total.total_tax, dec("207"));
+    assert_eq!(total.total, dec("2007"));
+}
+
+#[test]
+fn test_invoice_discount_applies_after_line_discounts() {
+    let discounted = item(18)
+        .with_discount(Discount::Amount(dec("500")))
+        .unwrap();
+    let invoice = invoice(BUYER_SAME_STATE, vec![item(18), discounted])
+        .with_discount(Discount::Amount(dec("100")))
+        .unwrap();
+
+    assert_eq!(invoice.subtotal(), dec("1500"));
+    let lines = invoice.line_breakdowns().unwrap();
+    assert_eq!(lines[0].taxable_value, dec("933.33"));
+    assert_eq!(lines[1].taxable_value, dec("466.67"));
+    assert_eq!(invoice.breakdown().unwrap().taxable_value, dec("1400"));
+}
+
+#[test]
+fn test_invoice_discount_above_its_subtotal_is_rejected() {
+    let result =
+        invoice(BUYER_SAME_STATE, vec![item(18)]).with_discount(Discount::Amount(dec("1000.01")));
+    assert!(matches!(
+        result,
+        Err(InvoiceError::InvalidDiscount(
+            DiscountError::ExceedsValue { .. }
+        ))
+    ));
+}
+
+#[test]
+fn test_invoice_discount_edited_past_its_subtotal_is_not_priced() {
+    let mut invoice = invoice(BUYER_SAME_STATE, vec![item(18)]);
+    invoice.discount = Some(Discount::Amount(dec("1000.01")));
+    assert!(matches!(
+        invoice.line_breakdowns(),
+        Err(InvoiceError::InvalidDiscount(
+            DiscountError::ExceedsValue { .. }
+        ))
+    ));
+}
+
+#[test]
+fn test_full_line_discount_on_a_half_paisa_value_leaves_nothing_negative() {
+    let line = GstLineItem::new("998314", "Consulting", dec("0.5"), dec("6.67"), dec("18"))
+        .unwrap()
+        .with_discount(Discount::Percent(dec("100")))
+        .unwrap();
+    assert_eq!(line.taxable_value(), BigDecimal::from(0));
+    let invoice = invoice(BUYER_SAME_STATE, vec![line]);
+    assert_eq!(
+        invoice.breakdown().unwrap().taxable_value,
+        BigDecimal::from(0)
+    );
+}
+
+#[test]
+fn test_invoice_discount_round_trips_through_json() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item(18)])
+        .with_discount(Discount::Amount(dec("100")))
+        .unwrap();
+    let json = serde_json::to_string(&invoice).unwrap();
+    assert_eq!(serde_json::from_str::<GstInvoice>(&json).unwrap(), invoice);
+
+    let over = json.replace(r#"{"amount":"100"}"#, r#"{"amount":"5000"}"#);
+    assert_ne!(over, json);
+    assert!(serde_json::from_str::<GstInvoice>(&over).is_err());
+}
+
+#[test]
+fn test_invoice_without_discount_is_priced_as_before() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item(18)]);
+    assert_eq!(invoice.discount_amount(), dec("0"));
+    assert_eq!(invoice.breakdown().unwrap().total, dec("1180"));
+    assert!(!serde_json::to_string(&invoice)
+        .unwrap()
+        .contains("discount"));
 }

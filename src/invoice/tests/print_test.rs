@@ -1,3 +1,4 @@
+use crate::invoice::discount::Discount;
 use crate::invoice::print::*;
 use crate::invoice::types::{
     GstInvoice, GstLineItem, Gstin, InvoiceError, Recipient, StateCode, SupplyTreatment,
@@ -410,4 +411,81 @@ fn test_invoice_with_any_taxed_line_stays_a_tax_invoice() {
     assert_eq!(print.title, TAX_INVOICE_TITLE);
     let rates: Vec<_> = print.rows.iter().map(|r| r.gst_rate.as_str()).collect();
     assert_eq!(rates, ["Exempt", "18%"]);
+}
+
+/// Consulting at 10% off with books at full price, and 10% off the subtotal
+fn discounted_invoice() -> GstInvoice {
+    let consulting = item("2")
+        .with_discount(Discount::Percent(BigDecimal::from(10)))
+        .unwrap();
+    invoice(BUYER_SAME_STATE, vec![consulting, item_at("4", 5)])
+        .with_discount(Discount::Percent(BigDecimal::from(10)))
+        .unwrap()
+}
+
+#[test]
+fn test_discounts_are_printed_between_subtotal_and_taxable_value() {
+    let print =
+        InvoicePrint::from_invoice(&discounted_invoice(), &parties(BUYER_SAME_STATE)).unwrap();
+
+    // Each row is taxed on its value after its own discount and its share of the invoice
+    // discount: 2,700.90 - 270.09 and 600.00 - 60.00
+    assert_eq!(print.rows[0].discount.as_deref(), Some("300.10"));
+    assert_eq!(print.rows[0].taxable_value, "2,430.81");
+    assert_eq!(print.rows[1].discount, None);
+    assert_eq!(print.rows[1].taxable_value, "540.00");
+    assert_eq!(print.rows[1].tax, "27.00");
+    assert_eq!(print.rows[1].amount, "567.00");
+    assert_eq!(print.subtotal, "3,300.90");
+    assert_eq!(print.discount.as_deref(), Some("330.09"));
+    assert_eq!(print.discount_label.as_deref(), Some("Discount (10%)"));
+    assert_eq!(print.taxable_value, "2,970.81");
+    assert!(print.has_line_discounts());
+    assert!(print.shows_subtotal());
+}
+
+#[test]
+fn test_flat_invoice_discount_is_labelled_without_a_rate() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item("2")])
+        .with_discount(Discount::Amount(BigDecimal::from(1)))
+        .unwrap();
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap();
+
+    assert_eq!(print.discount_label.as_deref(), Some(DISCOUNT_LABEL));
+    assert_eq!(print.taxable_value, "3,000.00");
+    assert!(!print.has_line_discounts());
+    assert!(print.shows_subtotal());
+}
+
+#[test]
+fn test_invoice_without_discounts_prints_no_discount() {
+    let print = InvoicePrint::from_invoice(
+        &invoice(BUYER_SAME_STATE, vec![item("2")]),
+        &parties(BUYER_SAME_STATE),
+    )
+    .unwrap();
+
+    assert_eq!(print.discount, None);
+    assert_eq!(print.discount_label, None);
+    assert_eq!(print.subtotal, print.taxable_value);
+    assert!(!print.shows_subtotal());
+    let json = serde_json::to_string(&print).unwrap();
+    assert!(!json.contains("discount"));
+}
+
+#[test]
+fn test_zero_discounts_are_not_printed() {
+    let line = item("2")
+        .with_discount(Discount::Amount(BigDecimal::from(0)))
+        .unwrap();
+    let invoice = invoice(BUYER_SAME_STATE, vec![line])
+        .with_discount(Discount::Percent(BigDecimal::from(0)))
+        .unwrap();
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap();
+
+    assert_eq!(print.rows[0].discount, None);
+    assert_eq!(print.discount, None);
+    assert_eq!(print.discount_label, None);
+    assert!(!print.has_line_discounts());
+    assert!(!print.shows_subtotal());
 }

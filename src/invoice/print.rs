@@ -5,7 +5,10 @@
 //! [`GstInvoice`] and the [`InvoiceParties`] that issue and receive it, and serialises to JSON as
 //! is. The PDF renderer (behind the `pdf` feature) only lays this model out on the page.
 
-use super::types::{GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError, SupplyTreatment};
+use super::discount::Discount;
+use super::types::{
+    price_lines, GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError, SupplyTreatment,
+};
 use crate::utils::formatting::{amount_in_words, format_inr};
 use bigdecimal::{BigDecimal, Zero};
 use serde::{Deserialize, Serialize};
@@ -20,6 +23,9 @@ pub const BILL_OF_SUPPLY_TITLE: &str = "Bill of Supply";
 pub const EXEMPT_RATE_LABEL: &str = "Exempt";
 /// Printed in the GST rate column of a non-GST line
 pub const NON_GST_RATE_LABEL: &str = "Non-GST";
+/// Label of the invoice discount line in the totals; a percentage discount adds its rate, as in
+/// `Discount (10%)`
+pub const DISCOUNT_LABEL: &str = "Discount";
 /// Date format printed on the invoice: day-month-year, as usual in India
 pub const PRINT_DATE_FORMAT: &str = "%d-%m-%Y";
 /// Taxable value, in rupees, from which an unregistered buyer's name and address must be on the
@@ -248,11 +254,15 @@ pub struct PrintRow {
     pub quantity: String,
     /// Price per unit, before tax
     pub rate: String,
-    /// Quantity times rate
+    /// The line's discount in rupees; `None` when it has none or it is zero
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discount: Option<String>,
+    /// Quantity times rate, less the line's discount and its share of any invoice discount: the
+    /// value tax is charged on, as Rule 46 asks. The rows add up to the total taxable value
     pub taxable_value: String,
     /// GST rate, e.g. `18%`, or [`EXEMPT_RATE_LABEL`] / [`NON_GST_RATE_LABEL`]
     pub gst_rate: String,
-    /// GST charged on the line
+    /// GST charged on the taxable value
     pub tax: String,
     /// Taxable value plus tax
     pub amount: String,
@@ -287,7 +297,15 @@ pub struct InvoicePrint {
     pub buyer: InvoiceParty,
     /// Item table
     pub rows: Vec<PrintRow>,
-    /// Total taxable value
+    /// Sum of the lines after their own discounts, before the invoice discount
+    pub subtotal: String,
+    /// The invoice discount off the subtotal, in rupees; `None` when there is none or it is zero
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discount: Option<String>,
+    /// Label of the discount line, such as `Discount (10%)`; `None` when there is no discount
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discount_label: Option<String>,
+    /// Total taxable value: the subtotal less the invoice discount, before tax
     pub taxable_value: String,
     /// Tax lines with a non-zero amount
     pub tax_lines: Vec<TaxLine>,
@@ -351,13 +369,17 @@ impl InvoicePrint {
         invoice: &GstInvoice,
         parties: &InvoiceParties,
     ) -> Result<Self, InvoiceError> {
-        let breakdowns = invoice.line_breakdowns()?;
-        let totals: GstBreakdown = breakdowns.iter().sum();
+        let priced = price_lines(invoice)?;
+        let totals: GstBreakdown = priced.breakdowns.iter().sum();
         parties.check_with_value(invoice, &totals.taxable_value)?;
+        let discount = invoice
+            .discount
+            .as_ref()
+            .filter(|_| !priced.discount.is_zero());
         let rows = invoice
             .line_items
             .iter()
-            .zip(&breakdowns)
+            .zip(&priced.breakdowns)
             .enumerate()
             .map(|(index, (item, breakdown))| print_row(index + 1, item, breakdown))
             .collect();
@@ -371,12 +393,35 @@ impl InvoicePrint {
             seller: parties.seller.clone(),
             buyer: parties.buyer.clone(),
             rows,
+            subtotal: format_inr(&priced.subtotal),
+            discount: discount.map(|_| format_inr(&priced.discount)),
+            discount_label: discount.map(discount_label),
             taxable_value: format_inr(&totals.taxable_value),
             tax_lines: tax_lines(&totals),
             total_tax: format_inr(&totals.total_tax),
             total: format_inr(&totals.total),
             total_in_words: amount_in_words(&totals.total),
         })
+    }
+
+    /// Whether any row carries a line discount, so the item table needs a discount column
+    #[must_use]
+    pub fn has_line_discounts(&self) -> bool {
+        self.rows.iter().any(|row| row.discount.is_some())
+    }
+
+    /// Whether the totals show a subtotal: when a line or the invoice has a discount above zero
+    #[must_use]
+    pub fn shows_subtotal(&self) -> bool {
+        self.discount.is_some() || self.has_line_discounts()
+    }
+}
+
+/// [`DISCOUNT_LABEL`], with the rate of a percentage discount
+fn discount_label(discount: &Discount) -> String {
+    match discount {
+        Discount::Percent(_) => format!("{DISCOUNT_LABEL} ({discount})"),
+        Discount::Amount(_) => DISCOUNT_LABEL.to_string(),
     }
 }
 
@@ -410,6 +455,9 @@ fn print_row(serial: usize, item: &GstLineItem, breakdown: &GstBreakdown) -> Pri
         description: item.description.clone(),
         quantity: plain_number(&item.quantity),
         rate: format_inr(&item.unit_price),
+        discount: Some(item.discount_amount())
+            .filter(|amount| !amount.is_zero())
+            .map(|amount| format_inr(&amount)),
         taxable_value: format_inr(&breakdown.taxable_value),
         gst_rate: rate_label(item),
         tax: format_inr(&breakdown.total_tax),
