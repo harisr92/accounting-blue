@@ -269,6 +269,7 @@ The library supports Indian GST with:
 - **Reverse calculations**: From total amount to base amount
 - **Multi-item invoices**: Complex invoices with different rates
 - **Unregistered buyers**: invoices to a `Recipient::Unregistered { place_of_supply }`, taxed by the place of supply
+- **Discounts before tax**: a `Discount` (percentage or flat amount) on a line with `GstLineItem::with_discount`, and off the subtotal with `GstInvoice::with_discount`. The subtotal discount is shared across the lines by value, so each rate is taxed on its discounted share, and the PDF shows a discount column, the subtotal and the discount
 - **Exempt and non-GST supplies**: `GstLineItem::exempt` and `GstLineItem::non_gst` lines carry no GST, are reported in GSTR-1 Table 8, and an invoice of only such lines prints as a "Bill of Supply"
 
 ```rust,ignore

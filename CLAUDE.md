@@ -41,6 +41,7 @@ Rust library for double-entry bookkeeping, Indian GST (tax maths and B2B invoice
 | Pagination | `PaginationOption::paginate` |
 | Choosing a GST rate by supply type | `GstRate::for_supply` |
 | Validation rules | `utils::validation` |
+| Discount amounts and sharing an invoice discount across lines | `invoice::discount` |
 | Printing amounts (Indian grouping, amount in words) | `utils::formatting` |
 
 If you are about to copy a block, extract it into its home instead.
