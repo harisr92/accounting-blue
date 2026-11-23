@@ -6,7 +6,7 @@
 
 use bigdecimal::BigDecimal;
 
-use crate::billing::DiscountError;
+use crate::billing::{BillingError, DiscountError, LineError};
 #[cfg(feature = "pdf")]
 use crate::invoice::PdfError;
 #[cfg(feature = "india")]
@@ -34,6 +34,12 @@ pub enum Error {
     #[cfg(feature = "india")]
     #[error(transparent)]
     Invoice(#[from] InvoiceError),
+    /// An invoice or credit note could not be built, priced or posted
+    #[error(transparent)]
+    Billing(#[from] BillingError),
+    /// A line item is invalid
+    #[error(transparent)]
+    Line(#[from] LineError),
     /// A discount does not fit the value it comes off
     #[error(transparent)]
     Discount(#[from] DiscountError),

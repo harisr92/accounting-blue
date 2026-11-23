@@ -6,6 +6,9 @@
 
 pub mod discount;
 pub mod document;
+pub mod error;
+pub mod invoice;
+pub mod note;
 pub mod posting;
 pub mod tax;
 
@@ -14,6 +17,9 @@ pub use document::{
     check_line_fields, line_values, price_lines, BillableLine, LineError, LineItem, PricedLines,
     TaxDocument,
 };
+pub use error::BillingError;
+pub use invoice::Invoice;
+pub use note::{CreditNote, OriginalDocument};
 pub use posting::{breakdown_entries, posting_legs, PostingAccounts, PostingError, PostingLeg};
 pub use tax::{
     check_rate, FlatRate, NoTax, TaxBreakdown, TaxComponent, TaxError, TaxRegime, MAX_TAX_RATE,
