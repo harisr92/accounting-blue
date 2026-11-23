@@ -38,7 +38,15 @@ jobs:
         run: cargo fmt --all -- --check
         if: matrix.rust == 'stable'
 
-      - name: Run clippy
+      - name: Run clippy (core only)
+        run: cargo clippy --all-targets -- -D warnings
+        if: matrix.rust == 'stable'
+
+      - name: Run clippy (india)
+        run: cargo clippy --all-targets --features india -- -D warnings
+        if: matrix.rust == 'stable'
+
+      - name: Run clippy (all features)
         run: cargo clippy --all-targets --all-features -- -D warnings
         if: matrix.rust == 'stable'
 
@@ -48,15 +56,18 @@ jobs:
       - name: Run tests
         run: cargo test --verbose
 
+      - name: Run tests with the india feature
+        run: cargo test --features india --verbose
+
       - name: Run tests with all features
         run: cargo test --all-features --verbose
 
       - name: Run examples
         run: |
           cargo run --example basic_ledger
-          cargo run --example gst_calculations
-          cargo run --example gst_invoice
-          cargo run --example gstr1_export
+          cargo run --features india --example gst_calculations
+          cargo run --features india --example gst_invoice
+          cargo run --features india --example gstr1_export
           cargo run --example reconciliation
           cargo run --example pagination_demo
           cargo run --example api_pagination_patterns
