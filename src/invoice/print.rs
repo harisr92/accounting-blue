@@ -471,6 +471,43 @@ impl InvoicePrint {
     /// The payee defaults to the seller's name. The link asks for
     /// [`PaymentDetails::amount_due`], or the invoice total when that is unset, and is left out
     /// when the amount is zero or less. Details with no bank or UPI field set print nothing.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use accounting_core::invoice::{
+    ///     GstInvoice, GstLineItem, Gstin, InvoiceParties, InvoiceParty, InvoicePrint,
+    ///     PaymentDetails,
+    /// };
+    /// use bigdecimal::BigDecimal;
+    /// use chrono::NaiveDate;
+    ///
+    /// # fn main() -> Result<(), accounting_core::invoice::InvoiceError> {
+    /// let seller = Gstin::parse("27AAPFU0939F1ZV")?;
+    /// let buyer = Gstin::parse("29AAPFU0939F1ZR")?;
+    /// let item = GstLineItem::new("998314", "IT consulting", BigDecimal::from(1),
+    ///     BigDecimal::from(1000), BigDecimal::from(18))?;
+    /// let invoice = GstInvoice::new("INV0002", NaiveDate::from_ymd_opt(2025, 4, 1).unwrap(),
+    ///     seller.clone(), buyer.clone(), vec![item])?;
+    /// let parties = InvoiceParties::new(
+    ///     InvoiceParty::new("Acme Services", vec!["Mumbai".into()], seller),
+    ///     InvoiceParty::new("Globex Ltd", vec!["Bengaluru".into()], buyer),
+    /// );
+    /// let payment = PaymentDetails {
+    ///     upi_id: Some("acme@okhdfc".into()),
+    ///     // A part-paid invoice: the QR code asks for the balance
+    ///     amount_due: Some(BigDecimal::from(180)),
+    ///     ..PaymentDetails::default()
+    /// };
+    ///
+    /// let print = InvoicePrint::from_invoice(&invoice, &parties)?.with_payment(payment);
+    /// assert_eq!(
+    ///     print.upi_uri.as_deref(),
+    ///     Some("upi://pay?pa=acme%40okhdfc&pn=Acme%20Services&am=180.00&cu=INR&tn=INV0002"),
+    /// );
+    /// # Ok(())
+    /// # }
+    /// ```
     #[must_use]
     pub fn with_payment(self, payment: PaymentDetails) -> Self {
         let payment = payment.trimmed();
@@ -509,6 +546,40 @@ impl InvoicePrint {
     /// This view with the due date, reference, delivery address and notes in `details`
     ///
     /// A blank reference and blank notes are left out.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use accounting_core::invoice::{
+    ///     GstInvoice, GstLineItem, Gstin, InvoiceDetails, InvoiceParties, InvoiceParty,
+    ///     InvoicePrint,
+    /// };
+    /// use bigdecimal::BigDecimal;
+    /// use chrono::NaiveDate;
+    ///
+    /// # fn main() -> Result<(), accounting_core::invoice::InvoiceError> {
+    /// let seller = Gstin::parse("27AAPFU0939F1ZV")?;
+    /// let buyer = Gstin::parse("29AAPFU0939F1ZR")?;
+    /// let item = GstLineItem::new("998314", "IT consulting", BigDecimal::from(1),
+    ///     BigDecimal::from(1000), BigDecimal::from(18))?;
+    /// let invoice = GstInvoice::new("INV0002", NaiveDate::from_ymd_opt(2025, 4, 1).unwrap(),
+    ///     seller.clone(), buyer.clone(), vec![item])?;
+    /// let parties = InvoiceParties::new(
+    ///     InvoiceParty::new("Acme Services", vec!["Mumbai".into()], seller),
+    ///     InvoiceParty::new("Globex Ltd", vec!["Bengaluru".into()], buyer),
+    /// );
+    /// let details = InvoiceDetails {
+    ///     due_date: NaiveDate::from_ymd_opt(2025, 4, 16),
+    ///     reference: Some("PO-7781".into()),
+    ///     ..InvoiceDetails::default()
+    /// };
+    ///
+    /// let print = InvoicePrint::from_invoice(&invoice, &parties)?.with_details(&details);
+    /// assert_eq!(print.due_date.as_deref(), Some("16-04-2025"));
+    /// assert_eq!(print.reference.as_deref(), Some("PO-7781"));
+    /// # Ok(())
+    /// # }
+    /// ```
     #[must_use]
     pub fn with_details(self, details: &InvoiceDetails) -> Self {
         Self {
@@ -572,9 +643,10 @@ fn rate_label(item: &GstLineItem) -> String {
 /// The quantity, with the line's unit after it when there is one
 fn quantity_label(item: &GstLineItem) -> String {
     let quantity = plain_number(&item.quantity);
-    item.unit
-        .as_ref()
-        .map_or_else(|| quantity.clone(), |unit| format!("{quantity} {unit}"))
+    match &item.unit {
+        Some(unit) => format!("{quantity} {unit}"),
+        None => quantity,
+    }
 }
 
 /// Format one line item with its tax breakdown

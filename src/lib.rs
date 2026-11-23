@@ -225,7 +225,7 @@ pub mod types;
 pub mod utils;
 
 pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};
-pub use invoice::{state_label, state_name};
+pub use invoice::{state_label, state_name, InvoiceDetails, PaymentDetails};
 pub use invoice::{
     validate_credit_note, validate_invoice, ComplianceIssue, CreditNote, Discount, GstBreakdown,
     GstDocument, GstInvoice, GstLineItem, Gstin, HsnMaster, HsnSacEntry, HsnSacKind,
