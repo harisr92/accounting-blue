@@ -1,4 +1,5 @@
 use crate::invoice::discount::Discount;
+use crate::invoice::payment::PaymentDetails;
 use crate::invoice::print::*;
 use crate::invoice::types::{
     GstInvoice, GstLineItem, Gstin, InvoiceError, Recipient, StateCode, SupplyTreatment,
@@ -551,4 +552,79 @@ fn test_blank_reference_is_left_out() {
         .unwrap()
         .with_details(&details);
     assert_eq!(print.reference, None);
+}
+
+fn upi_payment() -> PaymentDetails {
+    PaymentDetails {
+        bank_name: Some("HDFC Bank".into()),
+        account_number: Some("50100012345678".into()),
+        ifsc: Some("HDFC0001234".into()),
+        upi_id: Some("acme@okhdfc".into()),
+        ..PaymentDetails::default()
+    }
+}
+
+#[test]
+fn test_invoice_prints_no_payment_details_until_they_are_given() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item("1")]);
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap();
+    assert_eq!(print.payment, None);
+    assert_eq!(print.upi_uri, None);
+    assert_eq!(print.total_amount.to_string(), "1770.60");
+
+    let empty = print.with_payment(PaymentDetails::default());
+    assert_eq!(empty.payment, None);
+    assert_eq!(empty.upi_uri, None);
+}
+
+#[test]
+fn test_payment_details_default_the_payee_and_ask_upi_for_the_total() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item("1")]);
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE))
+        .unwrap()
+        .with_payment(upi_payment());
+
+    let payment = print.payment.as_ref().unwrap();
+    assert_eq!(
+        payment.payee_name.as_deref(),
+        Some(print.seller.name.as_str())
+    );
+    assert_eq!(payment.ifsc.as_deref(), Some("HDFC0001234"));
+    let uri = print.upi_uri.as_deref().unwrap();
+    assert!(uri.starts_with("upi://pay?pa=acme%40okhdfc&pn="), "{uri}");
+    assert!(
+        uri.contains("&am=1770.60&cu=INR&tn=INV%2F2025-26%2F007"),
+        "{uri}"
+    );
+}
+
+#[test]
+fn test_upi_link_asks_for_the_amount_due_when_given() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item("1")]);
+    let base = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap();
+    let part_paid = base.clone().with_payment(PaymentDetails {
+        amount_due: Some("500".parse().unwrap()),
+        ..upi_payment()
+    });
+    assert!(part_paid.upi_uri.unwrap().contains("&am=500.00&"));
+
+    let paid = base.with_payment(PaymentDetails {
+        amount_due: Some(BigDecimal::from(0)),
+        ..upi_payment()
+    });
+    assert_eq!(paid.upi_uri, None);
+    assert!(paid.payment.is_some(), "bank details still print");
+}
+
+#[test]
+fn test_no_upi_link_without_a_upi_id() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item("1")]);
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE))
+        .unwrap()
+        .with_payment(PaymentDetails {
+            upi_id: Some(" ".into()),
+            ..upi_payment()
+        });
+    assert!(print.payment.is_some());
+    assert_eq!(print.upi_uri, None);
 }

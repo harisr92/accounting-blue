@@ -9,6 +9,7 @@ use super::draw::{
 use super::fonts::{Face, Fonts};
 use super::text::{fit, wrap};
 use super::{PdfError, PdfOptions};
+use crate::invoice::payment::PaymentDetails;
 use crate::invoice::print::{InvoiceParty, InvoicePrint, PrintRow, RowCapacity};
 use printpdf::Op;
 
@@ -527,20 +528,33 @@ impl<'a> Layout<'a> {
         )
     }
 
-    /// The left column below the totals, top to bottom: notes, then terms
+    /// The left column below the totals, top to bottom: notes, payment details, then terms
     fn closing_column(&self, top: f32) -> Block {
-        let (notes, bottom) = self.section(top, "Notes", &self.print.notes);
+        let (notes, bottom) = self.section(top, "Notes", &self.print.notes, WORDS_WIDTH);
+        let (payment, bottom) = self.payment(next_top(&notes, bottom));
         let (terms, bottom) = self.section(
-            next_top(&notes, bottom),
+            next_top(&payment, bottom),
             "Terms & Conditions",
             &self.options.terms,
+            WORDS_WIDTH,
         );
-        ([notes, terms].concat(), bottom)
+        ([notes, payment, terms].concat(), bottom)
     }
 
-    /// A bold `heading` and `lines` wrapped to the column below it, or nothing when `lines` is
+    /// "Payment details" with the bank account and UPI ID, or nothing when there are none
+    fn payment(&self, top: f32) -> Block {
+        let lines = self
+            .print
+            .payment
+            .as_ref()
+            .map(payment_lines)
+            .unwrap_or_default();
+        self.section(top, "Payment details", &lines, WORDS_WIDTH)
+    }
+
+    /// A bold `heading` and `lines` wrapped to `width` below it, or nothing when `lines` is
     /// empty
-    fn section(&self, top: f32, heading: &str, lines: &[String]) -> Block {
+    fn section(&self, top: f32, heading: &str, lines: &[String], width: f32) -> Block {
         if lines.is_empty() {
             return (Vec::new(), top);
         }
@@ -552,7 +566,7 @@ impl<'a> Layout<'a> {
             Align::Left,
             heading,
         );
-        let (lines, bottom) = self.lines(LEFT, top + 2.0 * LINE_HEIGHT, WORDS_WIDTH, lines);
+        let (lines, bottom) = self.lines(LEFT, top + 2.0 * LINE_HEIGHT, width, lines);
         ([heading, lines].concat(), bottom)
     }
 
@@ -678,6 +692,20 @@ fn ship_to_lines(party: &InvoiceParty) -> Vec<String> {
         .cloned()
         .chain(party.gstin.as_ref().map(|gstin| format!("GSTIN: {gstin}")))
         .collect()
+}
+
+/// The lines of the payment block: payee, bank, account number, IFSC and UPI ID, each when set
+fn payment_lines(payment: &PaymentDetails) -> Vec<String> {
+    [
+        ("Name", &payment.payee_name),
+        ("Bank", &payment.bank_name),
+        ("A/c No", &payment.account_number),
+        ("IFSC", &payment.ifsc),
+        ("UPI", &payment.upi_id),
+    ]
+    .into_iter()
+    .filter_map(|(label, value)| value.as_ref().map(|value| format!("{label}: {value}")))
+    .collect()
 }
 
 /// Where the block after one that ends at `bottom` starts: a gap below it, or at `bottom` when

@@ -1,4 +1,5 @@
 use crate::invoice::discount::Discount;
+use crate::invoice::payment::PaymentDetails;
 use crate::invoice::pdf::*;
 use crate::invoice::print::{InvoiceDetails, InvoiceParties, InvoiceParty, InvoicePrint};
 use crate::invoice::types::{GstInvoice, GstLineItem, Gstin, InvoiceError, Recipient, StateCode};
@@ -597,4 +598,77 @@ fn test_notes_count_towards_the_room_below_the_totals() {
         matches!(result, Err(PdfError::TermsTooLong { lines, max_lines: fit }) if lines == max_lines + 1 && fit < max_lines),
         "{result:?}"
     );
+}
+
+fn payment() -> PaymentDetails {
+    PaymentDetails {
+        bank_name: Some("HDFC Bank".into()),
+        account_number: Some("50100012345678".into()),
+        ifsc: Some("HDFC0001234".into()),
+        upi_id: Some("acme@okhdfc".into()),
+        ..PaymentDetails::default()
+    }
+}
+
+#[test]
+fn test_payment_details_are_printed_on_the_last_page() {
+    let print = InvoicePrint::from_invoice(&invoice(2), &parties())
+        .unwrap()
+        .with_payment(payment());
+    let page = &pages(&render_pdf(&print, &PdfOptions::default()).unwrap())[0];
+
+    for expected in [
+        "Payment details",
+        "Name: Acme Services Pvt Ltd",
+        "Bank: HDFC Bank",
+        "A/c No: 50100012345678",
+        "IFSC: HDFC0001234",
+        "UPI: acme@okhdfc",
+    ] {
+        assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
+    }
+}
+
+#[test]
+fn test_invoice_without_payment_details_prints_no_payment_block() {
+    let page = &pages(
+        &invoice(1)
+            .to_pdf(&parties(), &PdfOptions::default())
+            .unwrap(),
+    )[0];
+    assert!(!page.contains("Payment details"));
+}
+
+#[test]
+fn test_long_invoice_keeps_totals_and_payment_together_on_the_last_page() {
+    let options = PdfOptions {
+        terms: vec!["Payment due within 15 days.".into(); 3],
+        ..PdfOptions::default()
+    };
+    let render = |print: &InvoicePrint| pages(&render_pdf(print, &options).unwrap());
+    for lines in [20, 30, 40, 55] {
+        let print = InvoicePrint::from_invoice(&invoice(lines), &parties())
+            .unwrap()
+            .with_details(&details())
+            .with_payment(payment());
+        let pages = render(&print);
+        let last = pages.last().unwrap();
+        for expected in [
+            "Amount in words",
+            "Payment details",
+            "IFSC: HDFC0001234",
+            "Authorised Signatory",
+        ] {
+            assert!(
+                last.contains(expected),
+                "{lines} lines: missing {expected:?} in:\n{last}"
+            );
+        }
+        let printed = pages
+            .iter()
+            .flat_map(|page| page.lines())
+            .filter(|line| line.starts_with("Consulting, phase "))
+            .count();
+        assert_eq!(printed, lines);
+    }
 }

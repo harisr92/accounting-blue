@@ -27,6 +27,9 @@
 //! total in words. With the `pdf` feature, `GstInvoice::to_pdf` renders that view as an A4 PDF
 //! (see the `pdf` module).
 //!
+//! [`InvoicePrint::with_payment`] adds [`PaymentDetails`] (bank account and UPI ID) to the
+//! printable view, with a [`upi_uri`] payment link the PDF draws as a QR code.
+//!
 //! [`state_label`] names a GST state code, as in `29 - Karnataka`, from the [`GST_STATES`] table.
 //!
 //! [`CreditNote::new`] builds a credit note against an invoice, to reduce its value or tax after a
@@ -73,6 +76,7 @@
 pub mod discount;
 pub mod hsn_lookup;
 pub mod note;
+pub mod payment;
 #[cfg(feature = "pdf")]
 pub mod pdf;
 pub mod posting;
@@ -84,6 +88,7 @@ pub mod validation;
 pub use discount::{apportion, Discount, DiscountError};
 pub use hsn_lookup::{HsnMaster, HsnSacEntry, HsnSacKind};
 pub use note::{credit_note_deadline, CreditNote, OriginalInvoice};
+pub use payment::{upi_uri, PaymentDetails, UPI_CURRENCY};
 #[cfg(feature = "pdf")]
 pub use pdf::{render_pdf, FontFace, PdfError, PdfFont, PdfOptions, DEFAULT_CURRENCY_LABEL};
 pub use posting::{posting_legs, InvoiceAccounts, PostingError, PostingLeg};

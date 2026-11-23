@@ -3,6 +3,7 @@
 mod discount_test;
 mod hsn_lookup_test;
 mod note_test;
+mod payment_test;
 #[cfg(feature = "pdf")]
 mod pdf_test;
 mod posting_test;

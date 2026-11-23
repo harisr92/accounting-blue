@@ -6,12 +6,13 @@
 //! is. The PDF renderer (behind the `pdf` feature) only lays this model out on the page.
 
 use super::discount::Discount;
+use super::payment::{upi_uri, PaymentDetails};
 use super::state::state_label;
 use super::types::{
     price_lines, GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError, SupplyTreatment,
 };
 use crate::utils::formatting::{amount_in_words, format_inr};
-use bigdecimal::{BigDecimal, Zero};
+use bigdecimal::{BigDecimal, Signed, Zero};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -339,6 +340,8 @@ pub struct InvoicePrint {
     pub total_tax: String,
     /// Invoice total
     pub total: String,
+    /// Invoice total as a number, unformatted, for machine use such as a UPI payment link
+    pub total_amount: BigDecimal,
     /// Invoice total in words
     pub total_in_words: String,
     /// Due date, `dd-mm-yyyy`; `None` when not given
@@ -353,6 +356,14 @@ pub struct InvoicePrint {
     /// Notes to the buyer, printed above the terms on the last page
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
+    /// Where to pay, trimmed, with the payee defaulting to the seller; `None` when no bank or
+    /// UPI detail is given
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payment: Option<PaymentDetails>,
+    /// UPI payment link for the amount due, drawn as a QR code; `None` without a UPI ID or when
+    /// nothing is due
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upi_uri: Option<String>,
 }
 
 impl InvoicePrint {
@@ -444,12 +455,55 @@ impl InvoicePrint {
             tax_lines: tax_lines(&totals),
             total_tax: format_inr(&totals.total_tax),
             total: format_inr(&totals.total),
+            total_amount: totals.total.clone(),
             total_in_words: amount_in_words(&totals.total),
             due_date: None,
             reference: None,
             ship_to: None,
             notes: Vec::new(),
+            payment: None,
+            upi_uri: None,
         })
+    }
+
+    /// This view with where to pay: bank details and, with a UPI ID, a UPI payment link
+    ///
+    /// The payee defaults to the seller's name. The link asks for
+    /// [`PaymentDetails::amount_due`], or the invoice total when that is unset, and is left out
+    /// when the amount is zero or less. Details with no bank or UPI field set print nothing.
+    #[must_use]
+    pub fn with_payment(self, payment: PaymentDetails) -> Self {
+        let payment = payment.trimmed();
+        if payment.is_empty() {
+            return Self {
+                payment: None,
+                upi_uri: None,
+                ..self
+            };
+        }
+        let payment = PaymentDetails {
+            payee_name: payment
+                .payee_name
+                .or_else(|| Some(self.seller.name.clone())),
+            ..payment
+        };
+        let amount = payment
+            .amount_due
+            .clone()
+            .unwrap_or_else(|| self.total_amount.clone());
+        let upi_uri = payment
+            .upi_id
+            .as_deref()
+            .filter(|_| amount.is_positive())
+            .map(|upi_id| {
+                let payee = payment.payee_name.as_deref().unwrap_or_default();
+                upi_uri(upi_id, payee, &amount, &self.invoice_number)
+            });
+        Self {
+            payment: Some(payment),
+            upi_uri,
+            ..self
+        }
     }
 
     /// This view with the due date, reference, delivery address and notes in `details`
