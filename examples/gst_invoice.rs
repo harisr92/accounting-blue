@@ -1,7 +1,7 @@
 //! GST invoice examples: GSTIN validation, HSN/SAC rate lookup, intra-state and inter-state
 //! invoices, discounts, compliance checks and the ledger posting
 
-use accounting_core::invoice::{
+use accounting_core::gst::invoice::{
     validate_invoice, Discount, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster,
     InvoiceAccounts, InvoiceValidationReport, Severity,
 };

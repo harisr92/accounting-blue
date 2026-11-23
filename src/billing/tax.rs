@@ -3,7 +3,7 @@
 //! A [`TaxRegime`] says what tax a line pays: given the line's taxable value and its rate, it
 //! returns a [`TaxBreakdown`] of named [`TaxComponent`]s. [`NoTax`] charges nothing and
 //! [`FlatRate`] charges one tax at the line's rate, such as VAT or a sales tax. The Indian GST
-//! regime, which splits a rate into CGST + SGST or charges IGST, lives in `tax::gst` behind the
+//! regime, which splits a rate into CGST + SGST or charges IGST, lives in `gst::tax` behind the
 //! `india` feature.
 //!
 //! Regimes are pure: they take values and return values, and the same input always gives the

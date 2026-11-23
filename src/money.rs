@@ -2,7 +2,7 @@
 //!
 //! Amounts are [`BigDecimal`] in a currency's major unit (rupees, euros, dollars) with
 //! [`MONEY_SCALE`] decimal places once rounded. [`round_money`] is the only rounding rule in the
-//! crate; the Indian tax code re-exports it as `tax::round_to_paise`.
+//! crate; the Indian tax code re-exports it as `gst::tax::round_to_paise`.
 
 use bigdecimal::{BigDecimal, RoundingMode};
 

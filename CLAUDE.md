@@ -41,7 +41,7 @@ Rust library for double-entry bookkeeping, financial reports and bank/gateway re
 |------|------|
 | Debit/credit sign rule | `AccountType::balance_effect` and `EntryType::signed` |
 | Pagination | `PaginationOption::paginate` |
-| Rounding money | `money::round_money` (`tax::round_to_paise` re-exports it) |
+| Rounding money | `money::round_money` (`gst::tax::round_to_paise` re-exports it) |
 | Choosing a GST rate by supply type | `GstRate::for_supply` |
 | Validation rules | `utils::validation`; rules every invoice shares: `billing::validation` |
 | Discount amounts and sharing an invoice discount across lines | `billing::discount` |
@@ -101,7 +101,7 @@ If you are about to copy a block, extract it into its home instead.
 
   A module's tests live in the `tests/` folder of the module that declares it. For a directory module, that is the folder next to its directory, not inside it.
 - Test files import what they test explicitly, e.g. `use crate::reconciliation::scoring::*;` plus any types and crates they need. They are no longer children of the code under test, so they can't use `use super::*;`.
-- If a test needs a private helper, make it `pub(super)`. That makes it visible to the parent module, which is where the `tests/` folder lives, and to nothing outside it. Don't use `pub(crate)` or `pub` for this. Examples: `scoring::score_amount`, `invoice::types::gstin_checksum`.
+- If a test needs a private helper, make it `pub(super)`. That makes it visible to the parent module, which is where the `tests/` folder lives, and to nothing outside it. Don't use `pub(crate)` or `pub` for this. Examples: `scoring::score_amount`, `gst::invoice::types::gstin_checksum`.
 - One `<module>_test.rs` per source module. Don't add extra modules such as `display_tests`; group related tests inside that one file instead.
 - Tests that exercise several modules through the public API go in the top-level `tests/` directory as integration tests. Examples of public API usage go in doc comments, which run as doctests.
 - Name test functions `test_<behaviour>`, describing the behaviour rather than the function under test.

@@ -8,14 +8,14 @@ use bigdecimal::BigDecimal;
 
 use crate::billing::{BillingError, DiscountError, LineError};
 #[cfg(feature = "pdf")]
-use crate::invoice::PdfError;
+use crate::gst::invoice::PdfError;
 #[cfg(feature = "india")]
-use crate::invoice::{InvoiceError, PostingError};
+use crate::gst::invoice::{InvoiceError, PostingError};
+#[cfg(feature = "india")]
+use crate::gst::returns::Gstr1Error;
+#[cfg(feature = "india")]
+use crate::gst::tax::GstError;
 use crate::reconciliation::ReconciliationError;
-#[cfg(feature = "india")]
-use crate::returns::Gstr1Error;
-#[cfg(feature = "india")]
-use crate::tax::GstError;
 
 /// Boxed error from a storage backend, kept as the `source` of a storage failure
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;

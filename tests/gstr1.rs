@@ -1,7 +1,7 @@
 //! GSTR-1 built from a month of invoices through the public API, checked on its JSON
 #![cfg(feature = "india")]
 
-use accounting_core::invoice::{
+use accounting_core::gst::invoice::{
     Discount, GstCreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, InvoiceAccounts, Recipient,
     StateCode, SupplyKind,
 };

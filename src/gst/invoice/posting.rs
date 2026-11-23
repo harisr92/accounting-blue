@@ -1,0 +1,235 @@
+//! Ledger posting for a GST invoice
+//!
+//! An issued invoice is one journal entry: the buyer owes the total, the taxable value is sales
+//! revenue, and each tax component is owed to the government. [`posting_legs`] turns a
+//! [`GstBreakdown`] into those legs and [`GstInvoice::to_entries`] maps them onto accounts. The
+//! legs always balance, because the breakdown's total is its taxable value plus its tax.
+//!
+//! A [`GstCreditNote`] posts the same legs on the opposite sides, reversing the part of the invoice
+//! it credits: [`GstCreditNote::to_entries`].
+
+use super::note::GstCreditNote;
+use super::types::{GstBreakdown, GstDocument, GstInvoice, InvoiceError};
+use super::validation::{compliance_errors, credit_note_errors, ComplianceIssue};
+use crate::billing::{self, breakdown_entries, PostingAccounts, TaxBreakdown};
+use crate::gst::tax::{CGST_CODE, IGST_CODE, SGST_CODE};
+use crate::types::{Entry, EntryType};
+use bigdecimal::BigDecimal;
+use serde::{Deserialize, Serialize};
+
+pub use crate::billing::PostingLeg;
+
+/// Every leg a GST invoice can post, debit first: receivable, sales, then CGST, SGST and IGST
+#[must_use]
+pub fn gst_legs() -> [PostingLeg; 5] {
+    [
+        PostingLeg::Receivable,
+        PostingLeg::Sales,
+        PostingLeg::tax(CGST_CODE),
+        PostingLeg::tax(SGST_CODE),
+        PostingLeg::tax(IGST_CODE),
+    ]
+}
+
+/// Legs of the journal entry for `breakdown`, leaving out those with a zero amount
+///
+/// An invoice only ever carries CGST + SGST or IGST, never both. See
+/// [`billing::posting_legs`].
+#[must_use]
+pub fn posting_legs(breakdown: &GstBreakdown) -> Vec<(PostingLeg, BigDecimal)> {
+    billing::posting_legs(&TaxBreakdown::from(breakdown))
+}
+
+/// Why an invoice could not be posted to the ledger
+#[derive(Debug, thiserror::Error)]
+pub enum PostingError {
+    /// The invoice breaks compliance rules; carries the error-severity issues
+    #[error("invoice is not compliant ({} error(s)), first: {}", .0.len(), .0.first().map_or(String::new(), ToString::to_string))]
+    NotCompliant(Vec<ComplianceIssue>),
+    /// The invoice total is zero, so there is nothing to post
+    #[error("invoice total is zero, so there is nothing to post")]
+    NothingToPost,
+    /// The invoice's tax could not be calculated
+    #[error(transparent)]
+    Invoice(#[from] InvoiceError),
+    /// The breakdown could not be mapped onto the accounts
+    #[error(transparent)]
+    Posting(billing::PostingError),
+}
+
+impl From<billing::PostingError> for PostingError {
+    /// [`PostingError::NothingToPost`] for a zero total, [`PostingError::Posting`] otherwise
+    fn from(error: billing::PostingError) -> Self {
+        match error {
+            billing::PostingError::NothingToPost => Self::NothingToPost,
+            other @ billing::PostingError::NoTaxAccount { .. } => Self::Posting(other),
+        }
+    }
+}
+
+/// Accounts a GST invoice posts to, one per leg in [`gst_legs`]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InvoiceAccounts {
+    /// Debited with the invoice total (accounts receivable or cash)
+    pub receivable: String,
+    /// Credited with the taxable value
+    pub sales: String,
+    /// Credited with CGST
+    pub cgst_output: String,
+    /// Credited with SGST
+    pub sgst_output: String,
+    /// Credited with IGST
+    pub igst_output: String,
+}
+
+impl InvoiceAccounts {
+    /// Name the account for each leg
+    pub fn new(
+        receivable: impl Into<String>,
+        sales: impl Into<String>,
+        cgst_output: impl Into<String>,
+        sgst_output: impl Into<String>,
+        igst_output: impl Into<String>,
+    ) -> Self {
+        Self {
+            receivable: receivable.into(),
+            sales: sales.into(),
+            cgst_output: cgst_output.into(),
+            sgst_output: sgst_output.into(),
+            igst_output: igst_output.into(),
+        }
+    }
+
+    /// Account id `leg` posts to; `None` for a tax other than CGST, SGST or IGST
+    #[must_use]
+    pub fn account_for(&self, leg: &PostingLeg) -> Option<&str> {
+        match leg {
+            PostingLeg::Receivable => Some(&self.receivable),
+            PostingLeg::Sales => Some(&self.sales),
+            PostingLeg::Tax(code) if code == CGST_CODE => Some(&self.cgst_output),
+            PostingLeg::Tax(code) if code == SGST_CODE => Some(&self.sgst_output),
+            PostingLeg::Tax(code) if code == IGST_CODE => Some(&self.igst_output),
+            PostingLeg::Tax(_) => None,
+        }
+    }
+}
+
+impl From<&InvoiceAccounts> for PostingAccounts {
+    fn from(accounts: &InvoiceAccounts) -> Self {
+        PostingAccounts::new(accounts.receivable.clone(), accounts.sales.clone())
+            .with_tax(CGST_CODE, accounts.cgst_output.clone())
+            .with_tax(SGST_CODE, accounts.sgst_output.clone())
+            .with_tax(IGST_CODE, accounts.igst_output.clone())
+    }
+}
+
+impl GstInvoice {
+    /// Journal entries that record this invoice in the ledger
+    ///
+    /// The invoice must pass the error-severity compliance rules of
+    /// [`validate_invoice`](super::validate_invoice), checked as of its own date: every error rule
+    /// applies except the future-date check, which depends on when the caller posts it. Warnings
+    /// don't block the posting. The entries balance: the receivable debit equals the sales and tax
+    /// credits. Pass them to [`TransactionBuilder::entry`](crate::ledger::TransactionBuilder::entry)
+    /// to build the transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`PostingError::NotCompliant`] with the error-severity issues if the invoice breaks a
+    /// compliance rule, [`PostingError::NothingToPost`] if its total is zero, or
+    /// [`PostingError::Invoice`] for any error from [`GstInvoice::breakdown`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use accounting_core::gst::invoice::{GstInvoice, GstLineItem, Gstin, InvoiceAccounts};
+    /// use accounting_core::EntryType;
+    /// use bigdecimal::BigDecimal;
+    /// use chrono::NaiveDate;
+    ///
+    /// # fn main() -> Result<(), accounting_core::Error> {
+    /// let item = GstLineItem::new("998314", "IT consulting", BigDecimal::from(1),
+    ///     BigDecimal::from(1000), BigDecimal::from(18))?;
+    /// let invoice = GstInvoice::new("INV-001", NaiveDate::from_ymd_opt(2024, 11, 15).unwrap(),
+    ///     Gstin::parse("27AAPFU0939F1ZV")?, Gstin::parse("29AAPFU0939F1ZR")?, vec![item])?;
+    ///
+    /// let accounts = InvoiceAccounts::new("receivable", "sales", "cgst", "sgst", "igst");
+    /// let entries = invoice.to_entries(&accounts)?;
+    ///
+    /// // Inter-state: receivable 1180 = sales 1000 + IGST 180
+    /// assert_eq!(entries.len(), 3);
+    /// assert_eq!(entries[0].entry_type, EntryType::Debit);
+    /// assert_eq!(entries[0].amount, BigDecimal::from(1180));
+    /// assert_eq!(entries[2].account_id, "igst");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn to_entries(&self, accounts: &InvoiceAccounts) -> Result<Vec<Entry>, PostingError> {
+        let errors = compliance_errors(self, self.invoice_date);
+        document_entries(self, errors, accounts, PostingLeg::side)
+    }
+}
+
+impl GstCreditNote {
+    /// Journal entries that record this credit note in the ledger
+    ///
+    /// The legs are an invoice's, on the opposite sides: sales and the output tax are debited,
+    /// and the receivable is credited with the note's total. Pass a sales returns account as
+    /// `accounts.sales` to keep returns apart from sales. The note must pass the error-severity
+    /// rules of [`validate_credit_note`](super::validate_credit_note) as of its own date.
+    ///
+    /// # Errors
+    ///
+    /// As [`GstInvoice::to_entries`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use accounting_core::gst::invoice::{GstCreditNote, GstInvoice, GstLineItem, Gstin, InvoiceAccounts};
+    /// use accounting_core::EntryType;
+    /// use bigdecimal::BigDecimal;
+    /// use chrono::NaiveDate;
+    ///
+    /// # fn main() -> Result<(), accounting_core::Error> {
+    /// let item = GstLineItem::new("998314", "IT consulting", BigDecimal::from(1),
+    ///     BigDecimal::from(1000), BigDecimal::from(18))?;
+    /// let invoice = GstInvoice::new("INV-001", NaiveDate::from_ymd_opt(2024, 11, 15).unwrap(),
+    ///     Gstin::parse("27AAPFU0939F1ZV")?, Gstin::parse("29AAPFU0939F1ZR")?, vec![item.clone()])?;
+    /// let note = GstCreditNote::new(&invoice, "CN-001", NaiveDate::from_ymd_opt(2024, 11, 20).unwrap(),
+    ///     vec![item])?;
+    ///
+    /// let accounts = InvoiceAccounts::new("receivable", "sales returns", "cgst", "sgst", "igst");
+    /// let entries = note.to_entries(&accounts)?;
+    ///
+    /// // Inter-state: sales returns 1000 + IGST 180 = receivable 1180, reversed
+    /// assert_eq!(entries[0].entry_type, EntryType::Credit);
+    /// assert_eq!(entries[0].amount, BigDecimal::from(1180));
+    /// assert_eq!(entries[1].entry_type, EntryType::Debit);
+    /// assert_eq!(entries[2].account_id, "igst");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn to_entries(&self, accounts: &InvoiceAccounts) -> Result<Vec<Entry>, PostingError> {
+        let errors = credit_note_errors(self, self.note_date);
+        document_entries(self, errors, accounts, |leg| leg.side().opposite())
+    }
+}
+
+/// The entries for `document`'s legs, each on the side `side` gives it, unless it has compliance
+/// `errors` or nothing to post
+fn document_entries(
+    document: &dyn GstDocument,
+    errors: Vec<ComplianceIssue>,
+    accounts: &InvoiceAccounts,
+    side: impl Fn(&PostingLeg) -> EntryType,
+) -> Result<Vec<Entry>, PostingError> {
+    if !errors.is_empty() {
+        return Err(PostingError::NotCompliant(errors));
+    }
+    let breakdown = document.tax_breakdown()?;
+    Ok(breakdown_entries(
+        &breakdown,
+        &PostingAccounts::from(accounts),
+        side,
+    )?)
+}

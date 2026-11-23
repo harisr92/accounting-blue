@@ -317,7 +317,7 @@ With the `india` feature, the library supports Indian GST with:
 - **Exempt and non-GST supplies**: `GstLineItem::exempt` and `GstLineItem::non_gst` lines carry no GST, are reported in GSTR-1 Table 8, and an invoice of only such lines prints as a "Bill of Supply"
 
 ```rust,ignore
-use accounting_core::invoice::{GstInvoice, Recipient, StateCode, SupplyKind};
+use accounting_core::gst::invoice::{GstInvoice, Recipient, StateCode, SupplyKind};
 
 let buyer = Recipient::unregistered(StateCode::parse("07")?); // Delhi, no GSTIN
 let invoice = GstInvoice::new("INV-104", date, seller_gstin, buyer, items)?;
@@ -334,7 +334,7 @@ accounting-core = { version = "0.4", features = ["pdf"] }
 ```
 
 ```rust,ignore
-use accounting_core::invoice::{InvoiceParties, InvoiceParty, PdfOptions};
+use accounting_core::gst::invoice::{InvoiceParties, InvoiceParty, PdfOptions};
 
 let parties = InvoiceParties::new(
     InvoiceParty::new("Acme Services", vec!["Mumbai".into()], seller_gstin),
@@ -352,8 +352,8 @@ The PDF prints no footer note unless `PdfOptions::footer_note` sets one. `GstLin
 `Gstr1Return::build` aggregates a filer's invoices for one month into GSTR-1. It fills Table 4A (B2B supplies by buyer GSTIN, one item per rate), Table 5 (B2CL: inter-state supplies over ₹1 lakh to unregistered buyers, by place of supply), Table 7 (B2CS: all other supplies to unregistered buyers, summed by place of supply and rate), Table 8 (nil-rated, exempt and non-GST lines, for registered and unregistered buyers), Table 9B (credit notes: `cdnr` for registered buyers, `cdnur` against B2CL invoices), Table 12 (the HSN/SAC summary by code and rate) and Table 13 (documents issued). A credit note against a B2CS invoice is subtracted from Table 7, and every credit note is subtracted from Tables 8 and 12. `to_json` writes the portal's offline-tool schema, with amounts as numbers rounded to paise.
 
 ```rust,ignore
-use accounting_core::invoice::HsnMaster;
-use accounting_core::returns::{Gstr1Return, ReturnPeriod};
+use accounting_core::gst::invoice::HsnMaster;
+use accounting_core::gst::returns::{Gstr1Return, ReturnPeriod};
 
 let gstr1 = Gstr1Return::build(&seller_gstin, ReturnPeriod::new(2024, 11)?, &invoices, &credit_notes, HsnMaster::global())?;
 std::fs::write("gstr1.json", gstr1.to_json()?)?;

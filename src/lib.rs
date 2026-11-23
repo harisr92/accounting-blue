@@ -255,15 +255,11 @@
 pub mod billing;
 pub mod error;
 #[cfg(feature = "india")]
-pub mod invoice;
+pub mod gst;
 pub mod ledger;
 pub mod money;
 pub mod reconciliation;
 pub mod reports;
-#[cfg(feature = "india")]
-pub mod returns;
-#[cfg(feature = "india")]
-pub mod tax;
 pub mod traits;
 pub mod types;
 pub mod utils;
@@ -275,9 +271,9 @@ pub use billing::{
 };
 pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};
 #[cfg(feature = "india")]
-pub use invoice::{state_label, state_name, InvoiceDetails, PaymentDetails};
+pub use gst::invoice::{state_label, state_name, InvoiceDetails, PaymentDetails};
 #[cfg(feature = "india")]
-pub use invoice::{
+pub use gst::invoice::{
     validate_credit_note, validate_invoice, ComplianceIssue, GstBreakdown, GstCreditNote,
     GstDocument, GstInvoice, GstLineItem, Gstin, HsnMaster, HsnSacEntry, HsnSacKind,
     InvoiceAccounts, InvoiceError, InvoiceParties, InvoiceParty, InvoicePrint,
@@ -285,7 +281,11 @@ pub use invoice::{
     SupplyTreatment,
 };
 #[cfg(feature = "pdf")]
-pub use invoice::{PdfError, PdfFont, PdfOptions};
+pub use gst::invoice::{PdfError, PdfFont, PdfOptions};
+#[cfg(feature = "india")]
+pub use gst::returns::{Gstr1Error, Gstr1Return, ReturnPeriod};
+#[cfg(feature = "india")]
+pub use gst::tax::{GstCalculation, GstCalculator, GstCategory, GstError, GstRate};
 pub use ledger::{
     patterns, BillPaymentWithTaxParams, InvoiceWithTaxParams, Ledger, TransactionBuilder,
     STANDARD_CHART,
@@ -293,10 +293,6 @@ pub use ledger::{
 pub use reports::{
     BalanceSheet, CashFlowItem, CashFlowStatement, IncomeStatement, LedgerIntegrityReport,
 };
-#[cfg(feature = "india")]
-pub use returns::{Gstr1Error, Gstr1Return, ReturnPeriod};
-#[cfg(feature = "india")]
-pub use tax::{GstCalculation, GstCalculator, GstCategory, GstError, GstRate};
 pub use traits::{
     AccountStore, AccountValidator, LedgerStorage, TransactionStore, TransactionValidator,
 };
