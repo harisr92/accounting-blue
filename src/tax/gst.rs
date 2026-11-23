@@ -1,40 +1,18 @@
 //! GST (Goods and Services Tax) calculation engine for Indian tax compliance
 
-use bigdecimal::{BigDecimal, RoundingMode, Signed, Zero};
+use bigdecimal::{BigDecimal, Signed, Zero};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Decimal places in an amount of rupees: one paisa is 0.01
-pub const PAISE_SCALE: i64 = 2;
+pub use crate::money::MONEY_SCALE as PAISE_SCALE;
 
 /// `rate` percent of `amount`, exactly; [`GstCalculation`] rounds the result to paise
-#[must_use]
-pub fn percent_of(amount: &BigDecimal, rate: &BigDecimal) -> BigDecimal {
-    (amount * rate) / BigDecimal::from(100)
-}
+pub use crate::money::percent_of;
 
-/// Round an amount of rupees to the nearest paisa, with halves rounded away from zero
-///
-/// This is the one rounding rule for money in the crate: 0.025 becomes 0.03 and 0.0249
-/// becomes 0.02. The result always has [`PAISE_SCALE`] decimal places.
-///
-/// # Example
-///
-/// ```
-/// use accounting_core::tax::round_to_paise;
-/// use bigdecimal::BigDecimal;
-/// use std::str::FromStr;
-///
-/// let round = |s| round_to_paise(&BigDecimal::from_str(s).unwrap()).to_string();
-/// assert_eq!(round("0.02475"), "0.02");
-/// assert_eq!(round("0.025"), "0.03");
-/// assert_eq!(round("-0.025"), "-0.03");
-/// assert_eq!(round("90"), "90.00");
-/// ```
-#[must_use]
-pub fn round_to_paise(amount: &BigDecimal) -> BigDecimal {
-    amount.with_scale_round(PAISE_SCALE, RoundingMode::HalfUp)
-}
+/// Round an amount of rupees to the nearest paisa, with halves rounded away from zero; the
+/// crate's one rounding rule, [`crate::money::round_money`]
+pub use crate::money::round_money as round_to_paise;
 
 /// GST rate structure for Indian taxation
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

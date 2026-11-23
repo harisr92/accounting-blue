@@ -229,6 +229,7 @@ pub mod error;
 #[cfg(feature = "india")]
 pub mod invoice;
 pub mod ledger;
+pub mod money;
 pub mod reconciliation;
 pub mod reports;
 #[cfg(feature = "india")]
