@@ -3,7 +3,7 @@
 //! A seller issues a [`CreditNote`] to reduce the value of an invoice it issued: goods returned,
 //! a discount after the sale, or an amount over-billed. The note is built from the [`Invoice`] it
 //! corrects, so it bills the same customer under the same regime, and it records the invoice as
-//! an [`OriginalDocument`]. It may not be dated before the invoice, nor credit more than the
+//! an [`OriginalInvoice`]. It may not be dated before the invoice, nor credit more than the
 //! invoice was worth. [`CreditNote::to_entries`] posts it as the reverse of an invoice.
 
 use crate::document::error::DocumentError;
@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 
 /// The invoice a credit note corrects
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OriginalDocument {
+pub struct OriginalInvoice {
     /// Invoice number
     pub number: String,
     /// Date of issue
@@ -61,7 +61,7 @@ pub struct CreditNote<R> {
     /// Date of issue
     pub date: NaiveDate,
     /// The invoice the note corrects
-    pub original: OriginalDocument,
+    pub original: OriginalInvoice,
     /// Who is credited, the same as on the invoice
     pub customer: String,
     /// What is credited: the value and tax each line takes off the invoice
@@ -95,7 +95,7 @@ impl<R: TaxRegime<Error = TaxError> + Clone> CreditNote<R> {
         let note = Self {
             number,
             date,
-            original: OriginalDocument {
+            original: OriginalInvoice {
                 number: invoice.number.clone(),
                 date: invoice.date,
                 value: invoice.tax_breakdown()?.total,

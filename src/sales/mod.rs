@@ -9,7 +9,7 @@
 pub mod credit_note;
 pub mod invoice;
 
-pub use credit_note::{CreditNote, OriginalDocument};
+pub use credit_note::{CreditNote, OriginalInvoice};
 pub use invoice::Invoice;
 
 #[cfg(test)]

@@ -41,7 +41,7 @@ fn test_note_records_its_invoice_and_takes_its_customer_and_regime() {
     let note = CreditNote::new(&invoice(), "CN-001", date(12), vec![chairs(2)]).unwrap();
     assert_eq!(
         note.original,
-        OriginalDocument {
+        OriginalInvoice {
             number: "INV-001".to_string(),
             date: date(10),
             value: BigDecimal::from(600),
