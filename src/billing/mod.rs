@@ -5,9 +5,14 @@
 //! `india` feature.
 
 pub mod discount;
+pub mod document;
 pub mod tax;
 
 pub use discount::{apportion, Discount, DiscountError};
+pub use document::{
+    check_line_fields, line_values, price_lines, BillableLine, LineError, LineItem, PricedLines,
+    TaxDocument,
+};
 pub use tax::{
     check_rate, FlatRate, NoTax, TaxBreakdown, TaxComponent, TaxError, TaxRegime, MAX_TAX_RATE,
 };
