@@ -3,7 +3,7 @@
 //! [`render_pdf`] lays an [`InvoicePrint`] out on A4 pages and returns the PDF bytes;
 //! [`GstInvoice::to_pdf`] builds the print model and renders it in one call. The page shows the
 //! logo if one is given, the seller and invoice details, the buyer, the item table, the tax summary
-//! with the total in words, any terms, a signature line and a footer note with page numbers. Item
+//! with the total in words, any terms, a signature line, and page numbers with any footer note the caller sets. Item
 //! tables longer than a page continue on the next one, and descriptions too long for their
 //! column are cut short with an ellipsis.
 //!
@@ -67,9 +67,6 @@ use std::fmt;
 
 /// Currency label printed before amounts when the built-in font is used
 pub const DEFAULT_CURRENCY_LABEL: &str = "Rs.";
-/// Note printed at the foot of every page by default; left out when the buyer is unregistered,
-/// since e-invoicing applies only to B2B supplies
-pub const DEFAULT_FOOTER_NOTE: &str = "E-Invoice Ready";
 
 /// The font an invoice is set in
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -95,9 +92,9 @@ pub struct PdfOptions {
     pub currency_label: String,
     /// Terms and conditions, one paragraph each, printed above the page foot on the last page
     pub terms: Vec<String>,
-    /// Note printed at the foot of every page. The default, [`DEFAULT_FOOTER_NOTE`], is left out
-    /// for an unregistered buyer; any other note is always printed.
-    pub footer_note: String,
+    /// Note printed at the foot of every page, beside the page number; `None` (the default)
+    /// prints none
+    pub footer_note: Option<String>,
     /// PNG or JPEG bytes drawn at the top left of the first page, scaled to fit the logo box and
     /// keeping their aspect ratio; `None` prints no logo, and the seller starts at the margin
     pub logo: Option<Vec<u8>>,
@@ -109,7 +106,7 @@ impl Default for PdfOptions {
             font: PdfFont::Builtin,
             currency_label: DEFAULT_CURRENCY_LABEL.to_string(),
             terms: Vec::new(),
-            footer_note: DEFAULT_FOOTER_NOTE.to_string(),
+            footer_note: None,
             logo: None,
         }
     }

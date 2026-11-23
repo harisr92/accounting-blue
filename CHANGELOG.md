@@ -30,7 +30,7 @@
 - PDF export behind the new `pdf` cargo feature (`accounting_core::invoice::pdf`). The feature pulls in `printpdf` 0.12 with its PNG and JPEG decoders, which needs Rust 1.88; the crate without the feature still builds on 1.82.
   - `GstInvoice::to_pdf(&InvoiceParties, &PdfOptions)` and `render_pdf(&InvoicePrint, &PdfOptions)` return A4 PDF bytes.
     - The page has the logo if one is given, the seller and the invoice details, the buyer, the item table and the tax summary with the total in words.
-    - It ends with any terms, a signature line and a footer note ("E-Invoice Ready" by default) with page numbers.
+    - It ends with any terms, a signature line, and page numbers with any footer note the caller sets.
   - Item tables longer than a page continue on further pages. A description too long for its column is cut short with an ellipsis; a number too wide for its column is set in a smaller size, never cut.
   - `PdfOptions` sets the font, currency label, terms, footer note and logo.
     - `PdfFont::Builtin` (the default) uses standard Helvetica and labels amounts `Rs.`.
@@ -134,6 +134,9 @@
 - `Gstr1Return::build` takes the period's credit notes as a new fourth argument, `&[CreditNote]`, before the HSN/SAC master. Pass `&[]` for none.
 - `Gstr1Return` has new `cdnr` and `cdnur` fields. `Gstr1Error` has a new `InvalidCreditNote` variant, `InvoiceError` has new `NoteBeforeOriginal`, `OriginalKindMismatch` and `CreditExceedsInvoice` variants, and `ComplianceIssue` has new `NoteBeforeOriginal`, `OriginalKindMismatch`, `CreditExceedsInvoice` and `CreditNoteTooLate` variants; an exhaustive `match` needs arms for them.
 - `GstLineItem` and `GstInvoice` have a new public field `discount`, and `PrintRow` and `InvoicePrint` have new discount and subtotal fields. Code that builds these as struct literals must set them. `GstLineItem::taxable_value` is now net of the line's discount; `gross_value` returns quantity x unit price. `LineItemError`, `InvoiceError` and `ComplianceIssue` each have a new `InvalidDiscount` variant, so an exhaustive `match` needs an arm for it. `accounting_core::Error` has a new `Discount(DiscountError)` variant, so `Discount::check` and `GstDocument::check_discount` work with `?`. Invoices without a discount are priced, reported and printed as before.
+
+- The crate version is now 0.3.0.
+- The PDF no longer prints a footer note by default. `DEFAULT_FOOTER_NOTE` ("E-Invoice Ready") is removed, and `PdfOptions::footer_note` is now `Option<String>`, `None` by default, printed as given on every page. Set `footer_note: Some(..)` to print one.
 
 ## 0.2.0
 

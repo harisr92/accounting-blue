@@ -91,7 +91,6 @@ fn test_invoice_renders_as_a_one_page_pdf() {
         "Rupees Eight Thousand Eight Hundred Fifty Five and Thirty Two Paise Only",
         "Payment due within 30 days.",
         "Authorised Signatory",
-        "E-Invoice Ready",
         "Page 1 of 1",
     ] {
         assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
@@ -256,7 +255,6 @@ fn test_labels_the_font_cannot_draw_are_refused() {
             bold: None,
         },
         currency_label: String::new(),
-        footer_note: String::new(),
         ..PdfOptions::default()
     };
     let result = invoice.to_pdf(&parties, &options);
@@ -333,20 +331,35 @@ fn test_unregistered_buyer_renders_without_a_gstin() {
         assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
     }
     assert!(!page.contains(BUYER), "no buyer GSTIN expected in:\n{page}");
-    assert!(
-        !page.contains(DEFAULT_FOOTER_NOTE),
-        "no e-invoice note expected for an unregistered buyer in:\n{page}"
-    );
+}
 
+#[test]
+fn test_no_footer_note_is_printed_by_default() {
+    let page = &pages(
+        &invoice(1)
+            .to_pdf(&parties(), &PdfOptions::default())
+            .unwrap(),
+    )[0];
+    assert!(
+        !page.contains("E-Invoice Ready"),
+        "no footer note expected in:\n{page}"
+    );
+    assert!(page.contains("Page 1 of 1"));
+}
+
+#[test]
+fn test_footer_note_is_printed_when_given() {
     let custom = PdfOptions {
-        footer_note: "Thank you for your business".into(),
+        footer_note: Some("Thank you for your business".into()),
         ..PdfOptions::default()
     };
-    let page = &pages(&invoice.to_pdf(&parties, &custom).unwrap())[0];
-    assert!(
-        page.contains("Thank you for your business"),
-        "custom note missing in:\n{page}"
-    );
+    let pdf = invoice(42).to_pdf(&parties(), &custom).unwrap();
+    for page in pages(&pdf) {
+        assert!(
+            page.contains("Thank you for your business"),
+            "custom note missing in:\n{page}"
+        );
+    }
 }
 
 #[test]

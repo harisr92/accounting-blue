@@ -85,10 +85,7 @@ pub use discount::{apportion, Discount, DiscountError};
 pub use hsn_lookup::{HsnMaster, HsnSacEntry, HsnSacKind};
 pub use note::{credit_note_deadline, CreditNote, OriginalInvoice};
 #[cfg(feature = "pdf")]
-pub use pdf::{
-    render_pdf, FontFace, PdfError, PdfFont, PdfOptions, DEFAULT_CURRENCY_LABEL,
-    DEFAULT_FOOTER_NOTE,
-};
+pub use pdf::{render_pdf, FontFace, PdfError, PdfFont, PdfOptions, DEFAULT_CURRENCY_LABEL};
 pub use posting::{posting_legs, InvoiceAccounts, PostingError, PostingLeg};
 pub use print::{
     paginate_rows, InvoiceParties, InvoiceParty, InvoicePrint, PartyError, PartyRole, PrintRow,

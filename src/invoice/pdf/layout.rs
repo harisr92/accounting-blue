@@ -8,7 +8,7 @@ use super::draw::{
 };
 use super::fonts::{Face, Fonts};
 use super::text::{fit, wrap};
-use super::{PdfError, PdfOptions, DEFAULT_FOOTER_NOTE};
+use super::{PdfError, PdfOptions};
 use crate::invoice::print::{InvoiceParty, InvoicePrint, PrintRow, RowCapacity};
 use printpdf::Op;
 
@@ -546,20 +546,7 @@ impl<'a> Layout<'a> {
         )
     }
 
-    /// The note at the foot of every page
-    ///
-    /// The default [`DEFAULT_FOOTER_NOTE`] is left out for an unregistered buyer: e-invoicing
-    /// (an IRN from the IRP) applies only to B2B supplies. A custom note is always printed.
-    fn footer_note(&self) -> &str {
-        let note = self.options.footer_note.as_str();
-        if note == DEFAULT_FOOTER_NOTE && self.print.buyer.gstin.is_none() {
-            ""
-        } else {
-            note
-        }
-    }
-
-    /// Footer note and page number at the foot of every page
+    /// Any footer note and the page number at the foot of every page
     fn page_strip(&self, number: usize, count: usize) -> Vec<Op> {
         let y = PAGE_HEIGHT - MARGIN;
         let page = format!("Page {number} of {count}");
@@ -572,7 +559,7 @@ impl<'a> Layout<'a> {
                 MUTED,
                 (LEFT, y),
                 Align::Left,
-                self.footer_note(),
+                self.options.footer_note.as_deref().unwrap_or_default(),
             ),
             grey_text(face, SMALL_SIZE, MUTED, (RIGHT, y), Align::Right, &page),
         ]
