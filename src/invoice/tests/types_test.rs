@@ -596,3 +596,25 @@ fn test_invoice_without_discount_is_priced_as_before() {
         .unwrap()
         .contains("discount"));
 }
+
+#[test]
+fn test_line_unit_is_set_and_blank_unit_is_none() {
+    assert_eq!(item(18).unit, None);
+    assert_eq!(item(18).with_unit(" NOS ").unit.as_deref(), Some("NOS"));
+    assert_eq!(item(18).with_unit("  ").unit, None);
+}
+
+#[test]
+fn test_line_unit_round_trips_through_serde_and_defaults_to_none() {
+    let line = item(18).with_unit("BKT");
+    let json = serde_json::to_string(&line).unwrap();
+    assert!(json.contains("\"unit\":\"BKT\""));
+    assert_eq!(serde_json::from_str::<GstLineItem>(&json).unwrap(), line);
+
+    let without = serde_json::to_string(&item(18)).unwrap();
+    assert!(!without.contains("\"unit\""));
+    assert_eq!(
+        serde_json::from_str::<GstLineItem>(&without).unwrap().unit,
+        None
+    );
+}

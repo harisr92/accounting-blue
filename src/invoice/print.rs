@@ -251,7 +251,7 @@ pub struct PrintRow {
     pub hsn_sac: String,
     /// What was supplied
     pub description: String,
-    /// Quantity
+    /// Quantity, followed by the line's unit when it has one, as in `5 BKT`
     pub quantity: String,
     /// Price per unit, before tax
     pub rate: String,
@@ -458,13 +458,21 @@ fn rate_label(item: &GstLineItem) -> String {
     }
 }
 
+/// The quantity, with the line's unit after it when there is one
+fn quantity_label(item: &GstLineItem) -> String {
+    let quantity = plain_number(&item.quantity);
+    item.unit
+        .as_ref()
+        .map_or_else(|| quantity.clone(), |unit| format!("{quantity} {unit}"))
+}
+
 /// Format one line item with its tax breakdown
 fn print_row(serial: usize, item: &GstLineItem, breakdown: &GstBreakdown) -> PrintRow {
     PrintRow {
         serial,
         hsn_sac: item.hsn_sac.clone(),
         description: item.description.clone(),
-        quantity: plain_number(&item.quantity),
+        quantity: quantity_label(item),
         rate: format_inr(&item.unit_price),
         discount: Some(item.discount_amount())
             .filter(|amount| !amount.is_zero())

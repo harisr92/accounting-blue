@@ -86,13 +86,13 @@ const COLUMNS: [Column; 9] = [
     },
     Column {
         heading: "Description",
-        width: 48.0,
+        width: 45.0,
         align: Align::Left,
         overflow: Overflow::Ellipsis,
     },
     Column {
         heading: "Qty",
-        width: 13.0,
+        width: 16.0,
         align: Align::Right,
         overflow: Overflow::Shrink,
     },

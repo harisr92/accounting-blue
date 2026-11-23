@@ -1289,3 +1289,44 @@ fn test_discounted_invoice_reports_its_discounted_value() {
     assert_eq!(detail.taxable_value, dec("810"));
     assert_eq!(detail.cgst, dec("72.90"));
 }
+
+#[test]
+fn test_hsn_summary_reports_the_line_unit_and_splits_rows_by_unit() {
+    let gstr1 = build(&[invoice(
+        "INV-001",
+        day(1),
+        BUYER_SAME_STATE,
+        vec![
+            line("3917", "10", "20", "18").with_unit("BKT"),
+            line("3917", "4", "20", "18").with_unit("BKT"),
+            line("3917", "3", "20", "18").with_unit("NOS"),
+            line("3917", "2", "20", "18"),
+        ],
+    )])
+    .unwrap();
+
+    let rows: Vec<_> = gstr1
+        .hsn
+        .b2b
+        .iter()
+        .map(|row| (row.uqc.as_str(), row.quantity.clone()))
+        .collect();
+    assert_eq!(
+        rows,
+        [("BKT", dec("14")), ("NOS", dec("3")), (GOODS_UQC, dec("2"))]
+    );
+    assert_eq!(to_value(&gstr1)["hsn"]["hsn_b2b"][0]["uqc"], json!("BKT"));
+}
+
+#[test]
+fn test_services_report_na_even_with_a_unit() {
+    let gstr1 = build(&[invoice(
+        "INV-001",
+        day(1),
+        BUYER_SAME_STATE,
+        vec![line("998314", "3", "100", "18").with_unit("HRS")],
+    )])
+    .unwrap();
+    assert_eq!(gstr1.hsn.b2b[0].uqc, SERVICES_UQC);
+    assert_eq!(gstr1.hsn.b2b[0].quantity, dec("0"));
+}

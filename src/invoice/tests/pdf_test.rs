@@ -505,3 +505,17 @@ fn test_invoice_without_discounts_has_no_discount_column() {
     assert!(!page.contains("Disc."));
     assert!(!page.contains("Subtotal"));
 }
+
+#[test]
+fn test_quantity_is_printed_with_its_unit() {
+    let invoice = GstInvoice::new(
+        "INV/2025-26/044",
+        NaiveDate::from_ymd_opt(2025, 6, 30).unwrap(),
+        gstin(SELLER),
+        gstin(BUYER),
+        vec![item("Site visits").with_unit("NOS")],
+    )
+    .unwrap();
+    let page = &pages(&invoice.to_pdf(&parties(), &PdfOptions::default()).unwrap())[0];
+    assert!(page.contains("3 NOS"), "missing unit in:\n{page}");
+}

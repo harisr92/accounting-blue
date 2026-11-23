@@ -492,3 +492,15 @@ fn test_zero_discounts_are_not_printed() {
     assert!(!print.has_line_discounts());
     assert!(!print.shows_subtotal());
 }
+
+#[test]
+fn test_quantity_prints_with_its_unit_when_there_is_one() {
+    let invoice = invoice(
+        BUYER_SAME_STATE,
+        vec![item_at("5", 0).with_unit("BKT"), item_at("2.5", 0)],
+    );
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap();
+
+    assert_eq!(print.rows[0].quantity, "5 BKT");
+    assert_eq!(print.rows[1].quantity, "2.5");
+}

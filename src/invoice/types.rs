@@ -504,6 +504,10 @@ pub struct GstLineItem {
     /// Discount off quantity x unit price, before tax
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub discount: Option<Discount>,
+    /// Unit the quantity is counted in, such as `NOS` or `KGS`; free text here, reported as the
+    /// unit quantity code in GSTR-1's HSN summary. `None` when the line has no unit
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
 }
 
 /// Unvalidated shape of a [`GstLineItem`], used when deserialising
@@ -518,6 +522,8 @@ struct RawGstLineItem {
     treatment: SupplyTreatment,
     #[serde(default)]
     discount: Option<Discount>,
+    #[serde(default)]
+    unit: Option<String>,
 }
 
 impl TryFrom<RawGstLineItem> for GstLineItem {
@@ -532,6 +538,10 @@ impl TryFrom<RawGstLineItem> for GstLineItem {
             raw.gst_rate,
             raw.treatment,
         )?;
+        let item = match raw.unit {
+            Some(unit) => item.with_unit(unit),
+            None => item,
+        };
         match raw.discount {
             Some(discount) => item.with_discount(discount),
             None => Ok(item),
@@ -616,6 +626,7 @@ impl GstLineItem {
             gst_rate,
             treatment,
             discount: None,
+            unit: None,
         };
         item.check().map_err(InvoiceError::InvalidLineItem)?;
         Ok(item)
@@ -650,6 +661,32 @@ impl GstLineItem {
         };
         item.check().map_err(InvoiceError::InvalidLineItem)?;
         Ok(item)
+    }
+
+    /// The line with its quantity counted in `unit`, such as `NOS`; a blank unit leaves it
+    /// without one
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use accounting_core::invoice::GstLineItem;
+    /// use bigdecimal::BigDecimal;
+    ///
+    /// # fn main() -> Result<(), accounting_core::invoice::InvoiceError> {
+    /// let item = GstLineItem::new("3917", "PVC pipe", BigDecimal::from(5), BigDecimal::from(120),
+    ///     BigDecimal::from(18))?
+    ///     .with_unit("BKT");
+    /// assert_eq!(item.unit.as_deref(), Some("BKT"));
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn with_unit(self, unit: impl Into<String>) -> Self {
+        let unit = unit.into().trim().to_string();
+        Self {
+            unit: (!unit.is_empty()).then_some(unit),
+            ..self
+        }
     }
 
     /// Whether the line charges GST: taxable at a rate above 0

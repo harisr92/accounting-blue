@@ -46,8 +46,8 @@ use serde::{Serialize, Serializer};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
 
-/// Unit quantity code reported for goods in the HSN summary; line items carry no unit, so `OTH`
-/// (others)
+/// Unit quantity code reported for goods whose line has no unit in the HSN summary: `OTH`
+/// (others). A line with a unit reports that unit
 pub const GOODS_UQC: &str = "OTH";
 
 /// Unit quantity code reported for services in the HSN summary: `NA`, with a quantity of 0
@@ -445,7 +445,8 @@ pub struct HsnRow {
     /// Description from the HSN/SAC master, or of the first line if the master lacks the code
     #[serde(rename = "desc")]
     pub description: String,
-    /// Unit quantity code: [`GOODS_UQC`] for goods, [`SERVICES_UQC`] for services
+    /// Unit quantity code: the lines' unit for goods, or [`GOODS_UQC`] when they have none;
+    /// [`SERVICES_UQC`] for services
     #[serde(rename = "uqc")]
     pub uqc: String,
     /// Total quantity for goods; 0 for services, which the portal reports without a quantity
@@ -1053,7 +1054,7 @@ fn by_rate_where(
         })
 }
 
-/// The lines of every invoice with one HSN/SAC code and rate, before numbering
+/// The lines of every invoice with one HSN/SAC code, unit and rate, before numbering
 #[derive(Default)]
 struct HsnTotals {
     quantity: BigDecimal,
@@ -1061,7 +1062,11 @@ struct HsnTotals {
     first_description: String,
 }
 
-/// One tab of Table 12: every line of `priced` grouped by HSN/SAC code and rate
+/// Grouping key of a Table 12 row: HSN/SAC code, unit quantity code and rate
+type HsnKey = (String, String, BigDecimal);
+
+/// One tab of Table 12: every line of `priced` grouped by HSN/SAC code, unit and rate, so
+/// quantities in different units are never added together
 fn hsn_rows(priced: &[&PricedDocument], master: &HsnMaster) -> Vec<HsnRow> {
     let totals = priced
         .iter()
@@ -1074,7 +1079,11 @@ fn hsn_rows(priced: &[&PricedDocument], master: &HsnMaster) -> Vec<HsnRow> {
         })
         .fold(BTreeMap::new(), |mut rows, (item, breakdown, quantity)| {
             let totals: &mut HsnTotals = rows
-                .entry((item.hsn_sac.clone(), item.gst_rate.normalized()))
+                .entry((
+                    item.hsn_sac.clone(),
+                    uqc(item).to_string(),
+                    item.gst_rate.normalized(),
+                ))
                 .or_default();
             if totals.first_description.is_empty() {
                 totals.first_description.clone_from(&item.description);
@@ -1087,30 +1096,34 @@ fn hsn_rows(priced: &[&PricedDocument], master: &HsnMaster) -> Vec<HsnRow> {
     totals
         .into_iter()
         .enumerate()
-        .map(|(i, ((hsn_sac, rate), totals))| hsn_row(i + 1, hsn_sac, rate, totals, master))
+        .map(|(i, (key, totals))| hsn_row(i + 1, key, totals, master))
         .collect()
 }
 
-fn hsn_row(
-    number: usize,
-    hsn_sac: String,
-    rate: BigDecimal,
-    totals: HsnTotals,
-    master: &HsnMaster,
-) -> HsnRow {
+/// The unit quantity code a line reports: its unit, or [`GOODS_UQC`], for goods, and
+/// [`SERVICES_UQC`] for services
+fn uqc(item: &GstLineItem) -> &str {
+    match HsnSacKind::of_code(&item.hsn_sac) {
+        HsnSacKind::Hsn => item.unit.as_deref().unwrap_or(GOODS_UQC),
+        HsnSacKind::Sac => SERVICES_UQC,
+    }
+}
+
+fn hsn_row(number: usize, key: HsnKey, totals: HsnTotals, master: &HsnMaster) -> HsnRow {
+    let (hsn_sac, uqc, rate) = key;
     let description = master
         .lookup(&hsn_sac)
         .map_or(totals.first_description, |entry| entry.description.clone());
-    let (uqc, quantity) = match HsnSacKind::of_code(&hsn_sac) {
-        HsnSacKind::Hsn => (GOODS_UQC, totals.quantity),
-        HsnSacKind::Sac => (SERVICES_UQC, BigDecimal::zero()),
+    let quantity = match HsnSacKind::of_code(&hsn_sac) {
+        HsnSacKind::Hsn => totals.quantity,
+        HsnSacKind::Sac => BigDecimal::zero(),
     };
     let breakdown = totals.breakdown;
     HsnRow {
         number,
         hsn_sac,
         description,
-        uqc: uqc.to_string(),
+        uqc,
         quantity,
         total_value: breakdown.total,
         taxable_value: breakdown.taxable_value,

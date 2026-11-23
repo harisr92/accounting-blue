@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Units on invoice lines: `GstLineItem::unit: Option<String>` (free text, set with `with_unit`; a blank unit is none). The printed quantity reads `5 BKT` when a line has a unit, and GSTR-1's HSN summary reports it as the unit quantity code, grouping rows by HSN/SAC code, unit and rate so quantities in different units are never added. Goods without a unit still report `OTH`, and services `NA`.
 - GST state names (`accounting_core::invoice::state`): `GST_STATES` lists every state code the GST portal uses with its name (01 Jammu and Kashmir to 38 Ladakh, 97 Other Territory, 99 Centre Jurisdiction). `state_name(code)` looks a code up, and `state_label(code)` prints it as `29 - Karnataka`, or the bare code when it names no state.
 - `tax::round_to_paise` and `tax::PAISE_SCALE`: money rounding to the paisa, half-up (0.025 becomes 0.03). This is the one rounding rule in the crate.
 - Invoice compliance checks (`accounting_core::invoice::validation`):
@@ -138,6 +139,7 @@
 - The crate version is now 0.3.0.
 - The PDF no longer prints a footer note by default. `DEFAULT_FOOTER_NOTE` ("E-Invoice Ready") is removed, and `PdfOptions::footer_note` is now `Option<String>`, `None` by default, printed as given on every page. Set `footer_note: Some(..)` to print one.
 - `InvoicePrint::place_of_supply` is now a state label such as `29 - Karnataka` instead of the bare code `29`, and the PDF prints "Place of Supply: 29 - Karnataka". `InvoicePrint` has a new `buyer_state` field, the buyer's state label, which the PDF prints under the Bill To address. Code that builds `InvoicePrint` as a struct literal must set it.
+- `GstLineItem` has a new public field `unit`, so code that builds it as a struct literal must set it. The PDF item table's Qty column is 3 mm wider and the Description column 3 mm narrower.
 
 ## 0.2.0
 
