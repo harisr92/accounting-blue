@@ -3,7 +3,7 @@
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use super::print::{PartyError, PartyRole};
 use crate::billing::discount::{Discount, DiscountError};
-use crate::billing::{BillableLine, TaxBreakdown, TaxDocument, TaxRegime};
+use crate::billing::{BillableLine, TaxBreakdown, TaxComponent, TaxDocument, TaxRegime};
 use crate::tax::gst::{GstCalculation, GstError, GstRegime, CGST_CODE, IGST_CODE, SGST_CODE};
 use bigdecimal::{BigDecimal, Signed, Zero};
 use chrono::NaiveDate;
@@ -424,6 +424,20 @@ impl From<&TaxBreakdown> for GstBreakdown {
             total_tax: breakdown.total_tax.clone(),
             total: breakdown.total.clone(),
         }
+    }
+}
+
+impl From<&GstBreakdown> for TaxBreakdown {
+    /// The breakdown with its CGST, SGST and IGST as components, in that order
+    fn from(breakdown: &GstBreakdown) -> Self {
+        TaxBreakdown::new(
+            breakdown.taxable_value.clone(),
+            vec![
+                TaxComponent::new(CGST_CODE, breakdown.cgst.clone()),
+                TaxComponent::new(SGST_CODE, breakdown.sgst.clone()),
+                TaxComponent::new(IGST_CODE, breakdown.igst.clone()),
+            ],
+        )
     }
 }
 

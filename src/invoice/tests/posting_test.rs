@@ -6,7 +6,7 @@ use crate::invoice::types::{
 };
 use crate::invoice::validation::ComplianceIssue;
 use crate::ledger::TransactionBuilder;
-use crate::tax::round_to_paise;
+use crate::tax::{round_to_paise, CGST_CODE, IGST_CODE, SGST_CODE};
 use crate::types::EntryType;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -48,8 +48,8 @@ fn test_intra_state_posting_splits_cgst_and_sgst() {
         vec![
             (PostingLeg::Receivable, BigDecimal::from(1180)),
             (PostingLeg::Sales, BigDecimal::from(1000)),
-            (PostingLeg::CgstOutput, BigDecimal::from(90)),
-            (PostingLeg::SgstOutput, BigDecimal::from(90)),
+            (PostingLeg::tax(CGST_CODE), BigDecimal::from(90)),
+            (PostingLeg::tax(SGST_CODE), BigDecimal::from(90)),
         ]
     );
 }
@@ -63,7 +63,7 @@ fn test_inter_state_posting_charges_igst() {
         vec![
             (PostingLeg::Receivable, BigDecimal::from(1180)),
             (PostingLeg::Sales, BigDecimal::from(1000)),
-            (PostingLeg::IgstOutput, BigDecimal::from(180)),
+            (PostingLeg::tax(IGST_CODE), BigDecimal::from(180)),
         ]
     );
 }
@@ -84,7 +84,7 @@ fn test_zero_rated_posting_has_no_tax_legs() {
 
 #[test]
 fn test_only_the_receivable_leg_is_a_debit() {
-    let debits: Vec<_> = PostingLeg::ALL
+    let debits: Vec<_> = gst_legs()
         .into_iter()
         .filter(|leg| leg.side() == EntryType::Debit)
         .collect();
@@ -116,9 +116,9 @@ fn test_entries_post_to_the_named_accounts_and_balance() {
 #[test]
 fn test_every_leg_maps_to_its_own_account() {
     let accounts = accounts();
-    let ids: Vec<_> = PostingLeg::ALL
+    let ids: Vec<_> = gst_legs()
         .into_iter()
-        .map(|leg| accounts.account_for(leg))
+        .map(|leg| accounts.account_for(&leg).unwrap())
         .collect();
     assert_eq!(ids, vec!["ar", "sales", "cgst_out", "sgst_out", "igst_out"]);
 }
@@ -351,8 +351,8 @@ fn test_discounted_invoice_posts_its_discounted_sales() {
         vec![
             (PostingLeg::Receivable, BigDecimal::from(1062)),
             (PostingLeg::Sales, BigDecimal::from(900)),
-            (PostingLeg::CgstOutput, BigDecimal::from(81)),
-            (PostingLeg::SgstOutput, BigDecimal::from(81)),
+            (PostingLeg::tax(CGST_CODE), BigDecimal::from(81)),
+            (PostingLeg::tax(SGST_CODE), BigDecimal::from(81)),
         ]
     );
 }

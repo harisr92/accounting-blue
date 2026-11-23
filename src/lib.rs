@@ -241,7 +241,7 @@ pub mod traits;
 pub mod types;
 pub mod utils;
 
-pub use billing::{apportion, Discount, DiscountError};
+pub use billing::{apportion, Discount, DiscountError, PostingAccounts, PostingLeg};
 pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};
 #[cfg(feature = "india")]
 pub use invoice::{state_label, state_name, InvoiceDetails, PaymentDetails};
@@ -250,7 +250,7 @@ pub use invoice::{
     validate_credit_note, validate_invoice, ComplianceIssue, CreditNote, GstBreakdown, GstDocument,
     GstInvoice, GstLineItem, Gstin, HsnMaster, HsnSacEntry, HsnSacKind, InvoiceAccounts,
     InvoiceError, InvoiceParties, InvoiceParty, InvoicePrint, InvoiceValidationReport,
-    PostingError, PostingLeg, Recipient, Severity, StateCode, SupplyKind, SupplyTreatment,
+    PostingError, Recipient, Severity, StateCode, SupplyKind, SupplyTreatment,
 };
 #[cfg(feature = "pdf")]
 pub use invoice::{PdfError, PdfFont, PdfOptions};

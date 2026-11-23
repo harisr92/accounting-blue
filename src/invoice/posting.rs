@@ -11,84 +11,33 @@
 use super::note::CreditNote;
 use super::types::{GstBreakdown, GstDocument, GstInvoice, InvoiceError};
 use super::validation::{compliance_errors, credit_note_errors, ComplianceIssue};
+use crate::billing::{self, breakdown_entries, PostingAccounts, TaxBreakdown};
+use crate::tax::{CGST_CODE, IGST_CODE, SGST_CODE};
 use crate::types::{Entry, EntryType};
-use bigdecimal::{BigDecimal, Zero};
+use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
-use std::fmt;
 
-/// One leg of an invoice's journal entry
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum PostingLeg {
-    /// Debit: the total the buyer owes
-    Receivable,
-    /// Credit: the taxable value earned as revenue
-    Sales,
-    /// Credit: central GST owed on an intra-state supply
-    CgstOutput,
-    /// Credit: state GST owed on an intra-state supply
-    SgstOutput,
-    /// Credit: integrated GST owed on an inter-state supply
-    IgstOutput,
-}
+pub use crate::billing::PostingLeg;
 
-impl PostingLeg {
-    /// Every leg, debit first
-    pub const ALL: [PostingLeg; 5] = [
-        Self::Receivable,
-        Self::Sales,
-        Self::CgstOutput,
-        Self::SgstOutput,
-        Self::IgstOutput,
-    ];
-
-    /// Side of the journal entry this leg posts to
-    #[must_use]
-    pub fn side(self) -> EntryType {
-        match self {
-            Self::Receivable => EntryType::Debit,
-            Self::Sales | Self::CgstOutput | Self::SgstOutput | Self::IgstOutput => {
-                EntryType::Credit
-            }
-        }
-    }
-
-    /// The amount of `breakdown` this leg carries
-    #[must_use]
-    pub fn amount(self, breakdown: &GstBreakdown) -> &BigDecimal {
-        match self {
-            Self::Receivable => &breakdown.total,
-            Self::Sales => &breakdown.taxable_value,
-            Self::CgstOutput => &breakdown.cgst,
-            Self::SgstOutput => &breakdown.sgst,
-            Self::IgstOutput => &breakdown.igst,
-        }
-    }
-}
-
-impl fmt::Display for PostingLeg {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Receivable => "Receivable",
-            Self::Sales => "Sales",
-            Self::CgstOutput => "CGST output",
-            Self::SgstOutput => "SGST output",
-            Self::IgstOutput => "IGST output",
-        })
-    }
+/// Every leg a GST invoice can post, debit first: receivable, sales, then CGST, SGST and IGST
+#[must_use]
+pub fn gst_legs() -> [PostingLeg; 5] {
+    [
+        PostingLeg::Receivable,
+        PostingLeg::Sales,
+        PostingLeg::tax(CGST_CODE),
+        PostingLeg::tax(SGST_CODE),
+        PostingLeg::tax(IGST_CODE),
+    ]
 }
 
 /// Legs of the journal entry for `breakdown`, leaving out those with a zero amount
 ///
-/// A zero leg would fail [`Transaction::validate`](crate::types::Transaction::validate), and an
-/// invoice only ever carries CGST + SGST or IGST, never both.
+/// An invoice only ever carries CGST + SGST or IGST, never both. See
+/// [`billing::posting_legs`].
 #[must_use]
 pub fn posting_legs(breakdown: &GstBreakdown) -> Vec<(PostingLeg, BigDecimal)> {
-    PostingLeg::ALL
-        .into_iter()
-        .map(|leg| (leg, leg.amount(breakdown)))
-        .filter(|(_, amount)| !amount.is_zero())
-        .map(|(leg, amount)| (leg, amount.clone()))
-        .collect()
+    billing::posting_legs(&TaxBreakdown::from(breakdown))
 }
 
 /// Why an invoice could not be posted to the ledger
@@ -103,9 +52,22 @@ pub enum PostingError {
     /// The invoice's tax could not be calculated
     #[error(transparent)]
     Invoice(#[from] InvoiceError),
+    /// The breakdown could not be mapped onto the accounts
+    #[error(transparent)]
+    Posting(billing::PostingError),
 }
 
-/// Accounts an invoice posts to, one per [`PostingLeg`]
+impl From<billing::PostingError> for PostingError {
+    /// [`PostingError::NothingToPost`] for a zero total, [`PostingError::Posting`] otherwise
+    fn from(error: billing::PostingError) -> Self {
+        match error {
+            billing::PostingError::NothingToPost => Self::NothingToPost,
+            other @ billing::PostingError::NoTaxAccount { .. } => Self::Posting(other),
+        }
+    }
+}
+
+/// Accounts a GST invoice posts to, one per leg in [`gst_legs`]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InvoiceAccounts {
     /// Debited with the invoice total (accounts receivable or cash)
@@ -138,16 +100,26 @@ impl InvoiceAccounts {
         }
     }
 
-    /// Account id `leg` posts to
+    /// Account id `leg` posts to; `None` for a tax other than CGST, SGST or IGST
     #[must_use]
-    pub fn account_for(&self, leg: PostingLeg) -> &str {
+    pub fn account_for(&self, leg: &PostingLeg) -> Option<&str> {
         match leg {
-            PostingLeg::Receivable => &self.receivable,
-            PostingLeg::Sales => &self.sales,
-            PostingLeg::CgstOutput => &self.cgst_output,
-            PostingLeg::SgstOutput => &self.sgst_output,
-            PostingLeg::IgstOutput => &self.igst_output,
+            PostingLeg::Receivable => Some(&self.receivable),
+            PostingLeg::Sales => Some(&self.sales),
+            PostingLeg::Tax(code) if code == CGST_CODE => Some(&self.cgst_output),
+            PostingLeg::Tax(code) if code == SGST_CODE => Some(&self.sgst_output),
+            PostingLeg::Tax(code) if code == IGST_CODE => Some(&self.igst_output),
+            PostingLeg::Tax(_) => None,
         }
+    }
+}
+
+impl From<&InvoiceAccounts> for PostingAccounts {
+    fn from(accounts: &InvoiceAccounts) -> Self {
+        PostingAccounts::new(accounts.receivable.clone(), accounts.sales.clone())
+            .with_tax(CGST_CODE, accounts.cgst_output.clone())
+            .with_tax(SGST_CODE, accounts.sgst_output.clone())
+            .with_tax(IGST_CODE, accounts.igst_output.clone())
     }
 }
 
@@ -249,26 +221,15 @@ fn document_entries(
     document: &dyn GstDocument,
     errors: Vec<ComplianceIssue>,
     accounts: &InvoiceAccounts,
-    side: impl Fn(PostingLeg) -> EntryType,
+    side: impl Fn(&PostingLeg) -> EntryType,
 ) -> Result<Vec<Entry>, PostingError> {
     if !errors.is_empty() {
         return Err(PostingError::NotCompliant(errors));
     }
-
-    let legs = posting_legs(&document.breakdown()?);
-    if legs.is_empty() {
-        return Err(PostingError::NothingToPost);
-    }
-
-    Ok(legs
-        .into_iter()
-        .map(|(leg, amount)| {
-            Entry::new(
-                accounts.account_for(leg),
-                side(leg),
-                amount,
-                Some(leg.to_string()),
-            )
-        })
-        .collect())
+    let breakdown = document.tax_breakdown()?;
+    Ok(breakdown_entries(
+        &breakdown,
+        &PostingAccounts::from(accounts),
+        side,
+    )?)
 }
