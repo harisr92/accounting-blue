@@ -88,9 +88,10 @@ pub use note::{credit_note_deadline, CreditNote, OriginalInvoice};
 pub use pdf::{render_pdf, FontFace, PdfError, PdfFont, PdfOptions, DEFAULT_CURRENCY_LABEL};
 pub use posting::{posting_legs, InvoiceAccounts, PostingError, PostingLeg};
 pub use print::{
-    paginate_rows, InvoiceParties, InvoiceParty, InvoicePrint, PartyError, PartyRole, PrintRow,
-    RowCapacity, TaxLine, BILL_OF_SUPPLY_TITLE, DISCOUNT_LABEL, EXEMPT_RATE_LABEL,
-    NON_GST_RATE_LABEL, TAX_INVOICE_TITLE, UNREGISTERED_DETAILS_THRESHOLD_RUPEES,
+    paginate_rows, InvoiceDetails, InvoiceParties, InvoiceParty, InvoicePrint, PartyError,
+    PartyRole, PrintRow, RowCapacity, TaxLine, BILL_OF_SUPPLY_TITLE, DISCOUNT_LABEL,
+    EXEMPT_RATE_LABEL, NON_GST_RATE_LABEL, TAX_INVOICE_TITLE,
+    UNREGISTERED_DETAILS_THRESHOLD_RUPEES,
 };
 pub use state::{state_label, state_name, GST_STATES};
 pub use types::{

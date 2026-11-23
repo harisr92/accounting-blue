@@ -504,3 +504,51 @@ fn test_quantity_prints_with_its_unit_when_there_is_one() {
     assert_eq!(print.rows[0].quantity, "5 BKT");
     assert_eq!(print.rows[1].quantity, "2.5");
 }
+
+#[test]
+fn test_invoice_prints_no_details_until_they_are_given() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item("1")]);
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap();
+
+    assert_eq!(print.due_date, None);
+    assert_eq!(print.reference, None);
+    assert_eq!(print.ship_to, None);
+    assert!(print.notes.is_empty());
+    let json = serde_json::to_value(&print).unwrap();
+    for field in ["due_date", "reference", "ship_to", "notes"] {
+        assert!(json.get(field).is_none(), "{field} serialised: {json}");
+    }
+}
+
+#[test]
+fn test_details_print_the_due_date_reference_delivery_address_and_notes() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item("1")]);
+    let ship_to = InvoiceParty::unregistered("Site office", vec!["Plot 4, MIDC".into()]);
+    let details = InvoiceDetails {
+        due_date: NaiveDate::from_ymd_opt(2025, 4, 18),
+        reference: Some(" PO-7781 ".into()),
+        ship_to: Some(ship_to.clone()),
+        notes: vec!["Thank you.".into(), "  ".into()],
+    };
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE))
+        .unwrap()
+        .with_details(&details);
+
+    assert_eq!(print.due_date.as_deref(), Some("18-04-2025"));
+    assert_eq!(print.reference.as_deref(), Some("PO-7781"));
+    assert_eq!(print.ship_to, Some(ship_to));
+    assert_eq!(print.notes, ["Thank you."]);
+}
+
+#[test]
+fn test_blank_reference_is_left_out() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item("1")]);
+    let details = InvoiceDetails {
+        reference: Some("   ".into()),
+        ..InvoiceDetails::default()
+    };
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE))
+        .unwrap()
+        .with_details(&details);
+    assert_eq!(print.reference, None);
+}

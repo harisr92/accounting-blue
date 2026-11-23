@@ -11,8 +11,8 @@
 //! Helvetica only covers Western European characters, so an invoice with the `₹` sign or with
 //! names in an Indian script needs a [`PdfFont::Custom`] TrueType font that has those glyphs.
 //! Rendering refuses any character its font can't draw with [`PdfError::MissingGlyph`], whether it
-//! comes from the invoice or is one of the renderer's own labels. The terms print on the same page
-//! as the totals, so terms longer than that page holds are refused with
+//! comes from the invoice or is one of the renderer's own labels. The notes and terms print on the
+//! same page as the totals, so notes and terms longer than that page holds are refused with
 //! [`PdfError::TermsTooLong`].
 //!
 //! # Example
@@ -157,10 +157,10 @@ pub enum PdfError {
         /// The first character that can't be drawn
         ch: char,
     },
-    /// The terms, once wrapped, don't fit below the totals on one page
-    #[error("the terms take {lines} lines but at most {max_lines} fit below the totals")]
+    /// The notes and terms, once wrapped, don't fit below the totals on one page
+    #[error("the notes and terms take {lines} lines but at most {max_lines} fit below the totals")]
     TermsTooLong {
-        /// Lines the terms wrap to
+        /// Lines the notes and terms wrap to, together
         lines: usize,
         /// Lines that fit
         max_lines: usize,

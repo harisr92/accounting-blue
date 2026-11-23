@@ -1,6 +1,6 @@
 use crate::invoice::discount::Discount;
 use crate::invoice::pdf::*;
-use crate::invoice::print::{InvoiceParties, InvoiceParty};
+use crate::invoice::print::{InvoiceDetails, InvoiceParties, InvoiceParty, InvoicePrint};
 use crate::invoice::types::{GstInvoice, GstLineItem, Gstin, InvoiceError, Recipient, StateCode};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -518,4 +518,83 @@ fn test_quantity_is_printed_with_its_unit() {
     .unwrap();
     let page = &pages(&invoice.to_pdf(&parties(), &PdfOptions::default()).unwrap())[0];
     assert!(page.contains("3 NOS"), "missing unit in:\n{page}");
+}
+
+fn details() -> InvoiceDetails {
+    InvoiceDetails {
+        due_date: NaiveDate::from_ymd_opt(2025, 7, 15),
+        reference: Some("PO-7781".into()),
+        ship_to: Some(InvoiceParty::unregistered(
+            "Globex Warehouse",
+            vec!["Hosur Road, Bengaluru 560068".into()],
+        )),
+        notes: vec!["Goods once sold are taken back within 7 days.".into()],
+    }
+}
+
+#[test]
+fn test_details_are_printed_in_the_header_and_above_the_terms() {
+    let print = InvoicePrint::from_invoice(&invoice(2), &parties())
+        .unwrap()
+        .with_details(&details());
+    let options = PdfOptions {
+        terms: vec!["Payment due within 15 days.".into()],
+        ..PdfOptions::default()
+    };
+    let page = &pages(&render_pdf(&print, &options).unwrap())[0];
+
+    for expected in [
+        "Due Date: 15-07-2025",
+        "Reference: PO-7781",
+        "BILL TO",
+        "SHIP TO",
+        "Globex Warehouse",
+        "Hosur Road, Bengaluru 560068",
+        "Notes",
+        "Goods once sold are taken back within 7 days.",
+        "Payment due within 15 days.",
+    ] {
+        assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
+    }
+    assert!(
+        !page.contains("Unregistered"),
+        "the ship-to party prints no GSTIN line without one in:\n{page}"
+    );
+}
+
+#[test]
+fn test_invoice_without_a_delivery_address_prints_no_ship_to() {
+    let page = &pages(
+        &invoice(1)
+            .to_pdf(&parties(), &PdfOptions::default())
+            .unwrap(),
+    )[0];
+    assert!(!page.contains("SHIP TO"));
+    assert!(!page.contains("Due Date"));
+    assert!(!page.contains("Notes"));
+}
+
+#[test]
+fn test_notes_count_towards_the_room_below_the_totals() {
+    let terms_only = PdfOptions {
+        terms: vec!["Term.".into(); 200],
+        ..PdfOptions::default()
+    };
+    let Err(PdfError::TermsTooLong { max_lines, .. }) = invoice(1).to_pdf(&parties(), &terms_only)
+    else {
+        panic!("expected the terms to be too long");
+    };
+    let options = PdfOptions {
+        terms: vec!["Term.".into(); max_lines],
+        ..PdfOptions::default()
+    };
+    let print = InvoicePrint::from_invoice(&invoice(1), &parties())
+        .unwrap()
+        .with_details(&details());
+
+    let result = render_pdf(&print, &options);
+    assert!(
+        matches!(result, Err(PdfError::TermsTooLong { lines, max_lines: fit }) if lines == max_lines + 1 && fit < max_lines),
+        "{result:?}"
+    );
 }

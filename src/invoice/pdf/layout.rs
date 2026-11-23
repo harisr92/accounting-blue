@@ -48,6 +48,12 @@ const WORDS_WIDTH: f32 = 105.0;
 const TOTALS_LABEL_X: f32 = 128.0;
 const SIGNATURE_HEIGHT: f32 = 22.0;
 const SIGNATURE_WIDTH: f32 = 50.0;
+/// Width of each line of the invoice details, right-aligned at the margin
+const DETAILS_WIDTH: f32 = 80.0;
+/// Space between the Bill To and Ship To columns
+const COLUMN_GAP: f32 = 6.0;
+/// Slack allowed when checking a block ends above the page foot, for rounding in the sums
+const FIT_TOLERANCE: f32 = 0.01;
 
 /// How a cell too wide for its column is made to fit
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -193,22 +199,24 @@ impl<'a> Layout<'a> {
         }
     }
 
-    /// Check the terms fit below the totals on a page of their own
+    /// Check the closing column (notes and terms) fits below the totals on a page of its own
     ///
-    /// The totals, terms and signature always go on one page, so terms taller than the room left
-    /// there would run over the page foot.
+    /// The totals, notes, terms and signature always go on one page, so a closing column taller
+    /// than the room left there would run over the page foot.
     pub(super) fn check_terms_fit(&self) -> Result<(), PdfError> {
         let top = self.continuation_header().1 + BLOCK_GAP;
         let (_, totals_bottom) = self.totals(top);
-        // The first line's baseline sits two lines below the top of the terms block
-        let first_baseline = totals_bottom + 2.0 * LINE_HEIGHT;
-        let max_lines = row_count(BODY_BOTTOM - first_baseline, f32::floor, LINE_HEIGHT) + 1;
-        let lines = self.wrapped(WORDS_WIDTH, &self.options.terms).len();
-        if lines > max_lines {
-            Err(PdfError::TermsTooLong { lines, max_lines })
-        } else {
-            Ok(())
+        let (_, bottom) = self.closing_column(totals_bottom);
+        if bottom <= BODY_BOTTOM + FIT_TOLERANCE {
+            return Ok(());
         }
+        let lines = self.wrapped(WORDS_WIDTH, &self.print.notes).len()
+            + self.wrapped(WORDS_WIDTH, &self.options.terms).len();
+        let over = row_count(bottom - BODY_BOTTOM - FIT_TOLERANCE, f32::ceil, LINE_HEIGHT);
+        Err(PdfError::TermsTooLong {
+            lines,
+            max_lines: lines.saturating_sub(over),
+        })
     }
 
     /// Ops for page `number` of `count`, showing `rows`, with the totals on the last page
@@ -293,12 +301,21 @@ impl<'a> Layout<'a> {
         } else {
             "Intra-state (CGST + SGST)"
         };
-        let lines = [
-            format!("Invoice No: {}", print.invoice_number),
-            format!("Invoice Date: {}", print.invoice_date),
-            format!("Place of Supply: {}", print.place_of_supply),
-            format!("Supply: {supply}"),
-        ];
+        let lines: Vec<String> = [
+            Some(format!("Invoice No: {}", print.invoice_number)),
+            Some(format!("Invoice Date: {}", print.invoice_date)),
+            print
+                .due_date
+                .as_ref()
+                .map(|date| format!("Due Date: {date}")),
+            print.reference.as_ref().map(|r| format!("Reference: {r}")),
+            Some(format!("Place of Supply: {}", print.place_of_supply)),
+            Some(format!("Supply: {supply}")),
+        ]
+        .into_iter()
+        .flatten()
+        .map(|line| self.fit(&self.fonts.regular, BODY_SIZE, &line, DETAILS_WIDTH))
+        .collect();
         let title = text(
             &self.fonts.bold,
             TITLE_SIZE,
@@ -322,39 +339,48 @@ impl<'a> Layout<'a> {
         (title.into_iter().chain(detail_ops).collect(), bottom)
     }
 
-    /// "Bill To" and the buyer's name, or [`WALK_IN_BUYER_LABEL`] when it has none, address and
-    /// GSTIN
+    /// "Bill To" with the buyer's name, or [`WALK_IN_BUYER_LABEL`] when it has none, address,
+    /// state and GSTIN; beside it "Ship To" with the delivery address when there is one
     fn buyer(&self, y: f32) -> Block {
-        let buyer = &self.print.buyer;
-        let width = RIGHT - LEFT;
-        let label = grey_text(
-            &self.fonts.bold,
-            SMALL_SIZE,
-            MUTED,
-            (LEFT, y),
-            Align::Left,
-            "BILL TO",
-        );
+        let print = self.print;
+        let buyer = &print.buyer;
         let shown_name = if buyer.has_name() {
             buyer.name.as_str()
         } else {
             WALK_IN_BUYER_LABEL
         };
-        let name = self.fit(&self.fonts.bold, PARTY_SIZE, shown_name, width);
-        let name_ops = text(
-            &self.fonts.bold,
-            PARTY_SIZE,
-            LEFT,
-            y + 5.0,
-            Align::Left,
-            &name,
-        );
-        let (lines, bottom) = self.lines(
-            LEFT,
-            y + 5.0 + LINE_HEIGHT + 0.5,
+        let bill_lines = party_lines(buyer, Some(&print.buyer_state));
+        let Some(ship_to) = &print.ship_to else {
+            return self.party_block((LEFT, y), RIGHT - LEFT, "BILL TO", shown_name, &bill_lines);
+        };
+        let width = (RIGHT - LEFT - COLUMN_GAP) / 2.0;
+        let (bill, bill_bottom) =
+            self.party_block((LEFT, y), width, "BILL TO", shown_name, &bill_lines);
+        let (ship, ship_bottom) = self.party_block(
+            (LEFT + width + COLUMN_GAP, y),
             width,
-            &party_lines(buyer, Some(&self.print.buyer_state)),
+            "SHIP TO",
+            &ship_to.name,
+            &ship_to_lines(ship_to),
         );
+        ([bill, ship].concat(), bill_bottom.max(ship_bottom))
+    }
+
+    /// A party block `width` wide at `(x, y)`: a small grey `label`, the name in bold, then
+    /// `lines`
+    fn party_block(
+        &self,
+        (x, y): (f32, f32),
+        width: f32,
+        label: &str,
+        name: &str,
+        lines: &[String],
+    ) -> Block {
+        let bold = &self.fonts.bold;
+        let label = grey_text(bold, SMALL_SIZE, MUTED, (x, y), Align::Left, label);
+        let name = self.fit(bold, PARTY_SIZE, name, width);
+        let name_ops = text(bold, PARTY_SIZE, x, y + 5.0, Align::Left, &name);
+        let (lines, bottom) = self.lines(x, y + 5.0 + LINE_HEIGHT + 0.5, width, lines);
         ([label, name_ops, lines].concat(), bottom)
     }
 
@@ -492,27 +518,46 @@ impl<'a> Layout<'a> {
         ([label, lines].concat(), bottom)
     }
 
-    /// Terms on the left, signature on the right, below the totals
+    /// Notes and terms on the left, signature on the right, below the totals
     fn closing(&self, top: f32) -> Block {
-        let (terms, terms_bottom) = if self.options.terms.is_empty() {
-            (Vec::new(), top)
-        } else {
-            let heading = text(
-                &self.fonts.bold,
-                BODY_SIZE,
-                LEFT,
-                top + LINE_HEIGHT,
-                Align::Left,
-                "Terms & Conditions",
-            );
-            let (lines, bottom) = self.lines(
-                LEFT,
-                top + 2.0 * LINE_HEIGHT,
-                WORDS_WIDTH,
-                &self.options.terms,
-            );
-            ([heading, lines].concat(), bottom)
-        };
+        let (column, column_bottom) = self.closing_column(top);
+        (
+            [column, self.signature(top)].concat(),
+            column_bottom.max(top + SIGNATURE_HEIGHT),
+        )
+    }
+
+    /// The left column below the totals, top to bottom: notes, then terms
+    fn closing_column(&self, top: f32) -> Block {
+        let (notes, bottom) = self.section(top, "Notes", &self.print.notes);
+        let (terms, bottom) = self.section(
+            next_top(&notes, bottom),
+            "Terms & Conditions",
+            &self.options.terms,
+        );
+        ([notes, terms].concat(), bottom)
+    }
+
+    /// A bold `heading` and `lines` wrapped to the column below it, or nothing when `lines` is
+    /// empty
+    fn section(&self, top: f32, heading: &str, lines: &[String]) -> Block {
+        if lines.is_empty() {
+            return (Vec::new(), top);
+        }
+        let heading = text(
+            &self.fonts.bold,
+            BODY_SIZE,
+            LEFT,
+            top + LINE_HEIGHT,
+            Align::Left,
+            heading,
+        );
+        let (lines, bottom) = self.lines(LEFT, top + 2.0 * LINE_HEIGHT, WORDS_WIDTH, lines);
+        ([heading, lines].concat(), bottom)
+    }
+
+    /// "For" the seller, a signature line and "Authorised Signatory", on the right
+    fn signature(&self, top: f32) -> Vec<Op> {
         let signer = self.fit(
             &self.fonts.bold,
             BODY_SIZE,
@@ -520,7 +565,7 @@ impl<'a> Layout<'a> {
             RIGHT - TOTALS_LABEL_X,
         );
         let line_y = top + SIGNATURE_HEIGHT - 5.0;
-        let signature = [
+        [
             text(
                 &self.fonts.bold,
                 BODY_SIZE,
@@ -539,11 +584,7 @@ impl<'a> Layout<'a> {
                 "Authorised Signatory",
             ),
         ]
-        .concat();
-        (
-            [terms, signature].concat(),
-            terms_bottom.max(top + SIGNATURE_HEIGHT),
-        )
+        .concat()
     }
 
     /// Any footer note and the page number at the foot of every page
@@ -627,6 +668,26 @@ fn party_lines(party: &InvoiceParty, state: Option<&str>) -> Vec<String> {
         .chain(state.map(|state| format!("State: {state}")))
         .chain(std::iter::once(identity))
         .collect()
+}
+
+/// The delivery address lines, then the GSTIN only when the delivery party has one
+fn ship_to_lines(party: &InvoiceParty) -> Vec<String> {
+    party
+        .address
+        .iter()
+        .cloned()
+        .chain(party.gstin.as_ref().map(|gstin| format!("GSTIN: {gstin}")))
+        .collect()
+}
+
+/// Where the block after one that ends at `bottom` starts: a gap below it, or at `bottom` when
+/// the block drew nothing
+fn next_top(ops: &[Op], bottom: f32) -> f32 {
+    if ops.is_empty() {
+        bottom
+    } else {
+        bottom + BLOCK_GAP
+    }
 }
 
 /// The totals lines above the rule, as label and amount: the subtotal and the invoice discount

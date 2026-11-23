@@ -12,6 +12,7 @@ use super::types::{
 };
 use crate::utils::formatting::{amount_in_words, format_inr};
 use bigdecimal::{BigDecimal, Zero};
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -242,6 +243,26 @@ fn gstin_error(expected: Option<&Gstin>, found: Option<&Gstin>) -> Option<PartyE
     }
 }
 
+/// Details printed on an invoice that are not part of the tax document: the due date, the
+/// buyer's reference, a delivery address and notes
+///
+/// Applied with [`InvoicePrint::with_details`]; [`InvoicePrint::from_invoice`] prints none.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InvoiceDetails {
+    /// Date the invoice is due for payment
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due_date: Option<NaiveDate>,
+    /// The buyer's reference, such as a purchase order number
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
+    /// Where the goods are delivered, when that differs from the buyer's address (Rule 46)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ship_to: Option<InvoiceParty>,
+    /// Notes to the buyer, one paragraph each
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
+}
+
 /// One line of the item table, formatted for print
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrintRow {
@@ -320,6 +341,18 @@ pub struct InvoicePrint {
     pub total: String,
     /// Invoice total in words
     pub total_in_words: String,
+    /// Due date, `dd-mm-yyyy`; `None` when not given
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due_date: Option<String>,
+    /// The buyer's reference, such as a purchase order number; `None` when not given
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
+    /// Delivery address, printed beside the buyer's; `None` when it is the buyer's address
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ship_to: Option<InvoiceParty>,
+    /// Notes to the buyer, printed above the terms on the last page
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
 }
 
 impl InvoicePrint {
@@ -412,7 +445,31 @@ impl InvoicePrint {
             total_tax: format_inr(&totals.total_tax),
             total: format_inr(&totals.total),
             total_in_words: amount_in_words(&totals.total),
+            due_date: None,
+            reference: None,
+            ship_to: None,
+            notes: Vec::new(),
         })
+    }
+
+    /// This view with the due date, reference, delivery address and notes in `details`
+    ///
+    /// A blank reference and blank notes are left out.
+    #[must_use]
+    pub fn with_details(self, details: &InvoiceDetails) -> Self {
+        Self {
+            due_date: details
+                .due_date
+                .map(|date| date.format(PRINT_DATE_FORMAT).to_string()),
+            reference: details.reference.as_deref().and_then(non_blank),
+            ship_to: details.ship_to.clone(),
+            notes: details
+                .notes
+                .iter()
+                .filter_map(|note| non_blank(note))
+                .collect(),
+            ..self
+        }
     }
 
     /// Whether any row carries a line discount, so the item table needs a discount column
@@ -498,6 +555,12 @@ fn tax_lines(totals: &GstBreakdown) -> Vec<TaxLine> {
         amount: format_inr(amount),
     })
     .collect()
+}
+
+/// `text` trimmed, or `None` when it is blank
+fn non_blank(text: &str) -> Option<String> {
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_string())
 }
 
 /// A number without trailing zeros or exponent, e.g. `10` or `2.5`
