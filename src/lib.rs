@@ -6,6 +6,8 @@
 //! ## Features
 //!
 //! - **Double-entry bookkeeping**: Complete transaction validation and balance tracking
+//! - **Invoicing**: Invoices, credit notes and discounts under a pluggable tax regime (none, a flat
+//!   VAT or sales tax, or your own), posted to the ledger
 //! - **Account management**: Support for Assets, Liabilities, Equity, Income, and Expense accounts
 //! - **Paginated responses**: Efficient pagination for large datasets with comprehensive metadata
 //! - **Financial reporting**: Balance sheets, income statements, and trial balance generation
@@ -16,7 +18,7 @@
 //!
 //! | Feature | Adds |
 //! |---------|------|
-//! | `india` | Indian GST: rates and CGST/SGST/IGST maths (`tax`), GSTIN, HSN/SAC master data, GST invoices and credit notes (`invoice`), GSTR-1 returns (`returns`), and Indian amount formatting (`utils::formatting`) |
+//! | `india` | Indian GST on top of the invoicing core: rates and CGST/SGST/IGST maths (`tax`), GSTIN, HSN/SAC master data, GST invoices and credit notes (`invoice`), GSTR-1 returns (`returns`), and Indian amount formatting (`utils::formatting`) |
 //! | `pdf` | Renders GST invoices to PDF; turns on `india` |
 //!
 //! ```toml
@@ -160,6 +162,30 @@
 //! # }
 //! ```
 //!
+//! ## Invoicing
+//!
+//! [`billing`] builds invoices and credit notes, works out their tax under a [`TaxRegime`] and
+//! posts them as balanced journal entries.
+//!
+//! ```rust
+//! use accounting_core::{FlatRate, Invoice, LineItem, PostingAccounts, TaxDocument};
+//! use bigdecimal::BigDecimal;
+//! use chrono::NaiveDate;
+//!
+//! # fn main() -> Result<(), accounting_core::Error> {
+//! let line = LineItem::new("Consulting", BigDecimal::from(10), BigDecimal::from(100),
+//!     BigDecimal::from(20))?;
+//! let invoice = Invoice::new("INV-001", NaiveDate::from_ymd_opt(2025, 3, 1).unwrap(),
+//!     "Acme Ltd", vec![line], FlatRate::new("VAT"))?;
+//! assert_eq!(invoice.tax_breakdown()?.total, BigDecimal::from(1200));
+//!
+//! let accounts = PostingAccounts::new("1200", "4000").with_tax("VAT", "2200");
+//! let entries = invoice.to_entries(&accounts)?; // Dr 1200 1200, Cr 4000 1000, Cr 2200 200
+//! assert_eq!(entries.len(), 3);
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! ## Reconciliation
 //!
 //! [`reconciliation::ReconciliationEngine`] matches ledger records against bank statements and
@@ -211,6 +237,7 @@
 //! - `api_pagination_patterns.rs` - REST API and GraphQL integration patterns
 //! - `web_integration.rs` - Web framework integration examples
 //! - `reconciliation.rs` - Reconciling a ledger account against a bank statement
+//! - `invoice.rs` - A VAT invoice and a credit note, posted to the ledger
 //! - `gst_calculations.rs` - CGST/SGST/IGST maths (needs the `india` feature)
 //! - `gst_invoice.rs` - GSTIN validation, HSN/SAC rate lookup and B2B GST invoices (needs `india`)
 //! - `gstr1_export.rs` - Aggregating a month of invoices into GSTR-1 and exporting it as JSON
@@ -241,7 +268,11 @@ pub mod traits;
 pub mod types;
 pub mod utils;
 
-pub use billing::{apportion, Discount, DiscountError, PostingAccounts, PostingLeg};
+pub use billing::{
+    apportion, BillableLine, BillingError, CreditNote, Discount, DiscountError, FlatRate, Invoice,
+    LineItem, NoTax, PostingAccounts, PostingLeg, TaxBreakdown, TaxComponent, TaxDocument,
+    TaxRegime,
+};
 pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};
 #[cfg(feature = "india")]
 pub use invoice::{state_label, state_name, InvoiceDetails, PaymentDetails};

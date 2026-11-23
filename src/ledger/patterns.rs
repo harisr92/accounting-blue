@@ -178,6 +178,10 @@ pub fn create_owner_investment(
 
 /// Create an invoice with tax (debit the total, credit revenue and tax payable)
 ///
+/// Use this when the tax is already worked out. To price lines, take discounts and work out the
+/// tax under a regime, build a [`billing::Invoice`](crate::billing::Invoice) and post it with
+/// [`Invoice::to_entries`](crate::billing::Invoice::to_entries).
+///
 /// # Errors
 ///
 /// Any double-entry rule from [`Transaction::validate`], e.g. a non-positive amount.

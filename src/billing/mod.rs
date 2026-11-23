@@ -1,8 +1,16 @@
 //! Invoicing that works in any country: invoices, credit notes, discounts and ledger posting
 //!
-//! Tax is pluggable: an invoice prices its lines and asks its tax regime for the tax on each.
-//! The Indian GST regime, with GSTIN, HSN/SAC codes and GSTR-1, builds on this module behind the
-//! `india` feature.
+//! Tax is pluggable. An [`Invoice`] prices its [`LineItem`]s with [`price_lines`] and asks its
+//! [`TaxRegime`] for the tax on each: [`NoTax`], [`FlatRate`] for a VAT or sales tax, or a regime
+//! of your own. The result is a [`TaxBreakdown`] of named [`TaxComponent`]s, which
+//! [`Invoice::to_entries`] posts to the accounts in [`PostingAccounts`]. A [`CreditNote`] against
+//! an invoice posts the reverse. [`validate_document`] runs the rules every document shares.
+//!
+//! The pieces are traits, so other document types can reuse them: anything that is a
+//! [`BillableLine`] can be priced, and anything that is a [`TaxDocument`] gets the subtotal,
+//! discount and breakdown arithmetic. The Indian GST invoice, with GSTIN, HSN/SAC codes,
+//! CGST/SGST/IGST and GSTR-1, is built this way in the `invoice` module behind the `india`
+//! feature.
 
 pub mod discount;
 pub mod document;
