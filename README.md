@@ -6,6 +6,7 @@ A Rust library for double-entry bookkeeping, financial reporting and reconciliat
 
 - **🏦 Double-entry Bookkeeping**: Complete transaction validation and balance tracking
 - **📊 Account Management**: Support for Assets, Liabilities, Equity, Income, and Expense accounts
+- **🧮 Invoicing**: Invoices, credit notes and discounts under a pluggable tax regime (none, a flat VAT or sales tax, or your own), posted to the ledger
 - **🧾 GST Calculations** (`india` feature): Indian GST compliance with CGST/SGST/IGST support, GSTIN and HSN/SAC codes
 - **📄 Invoice PDFs** (`pdf` feature): Print-ready A4 tax invoices with Indian digit grouping and the total in words
 - **📑 GSTR-1 Returns** (`india` feature): Aggregate B2B invoices into GSTR-1 and export it as GST portal JSON
@@ -86,6 +87,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+### Invoicing
+
+Invoices work in any country. Pick a tax regime: `NoTax`, `FlatRate` for a VAT or sales tax, or your own `TaxRegime`.
+
+```rust
+use accounting_core::{CreditNote, Document, FlatRate, Invoice, LineItem, SalesAccounts};
+use bigdecimal::BigDecimal;
+use chrono::NaiveDate;
+
+let line = LineItem::new("Consulting", BigDecimal::from(10), BigDecimal::from(100), BigDecimal::from(20))?;
+let invoice = Invoice::new("INV-001", NaiveDate::from_ymd_opt(2025, 3, 1).unwrap(), "Acme Ltd",
+    vec![line.clone()], FlatRate::new("VAT"))?;
+assert_eq!(invoice.tax_breakdown()?.total, BigDecimal::from(1200));
+
+// Dr receivable 1200, Cr sales 1000, Cr VAT payable 200
+let accounts = SalesAccounts::new("1200", "4000").with_output_tax("VAT", "2200");
+let entries = invoice.to_entries(&accounts)?;
+
+// A credit note against it posts the reverse
+let note = CreditNote::new(&invoice, "CN-001", NaiveDate::from_ymd_opt(2025, 3, 5).unwrap(), vec![line])?;
+```
+
+The Indian GST invoice (`india` feature) is built on the same core, with GST as its tax regime.
 
 ### GST Calculations
 
@@ -178,9 +203,12 @@ per gateway.
 - **`types`**: Core data structures (Account, Transaction, Entry, etc.)
 - **`traits`**: Storage and validation abstractions
 - **`ledger`**: Account management and transaction processing
-- **`tax`**: GST calculation engine
-- **`invoice`**: GSTINs, B2B GST invoices, HSN/SAC master data, compliance checks and printing
-- **`returns`**: GSTR-1 aggregation and export in the GST portal's JSON schema
+- **`document`**: What every trade document shares: lines, discounts, tax regimes, pricing, posting legs and validation
+- **`sales`**: Invoices and credit notes, and posting them to the receivable, revenue and output tax accounts
+- **`gst`** (`india` feature): Indian GST on top of `document` and `sales`
+  - **`gst::tax`**: GST calculation engine and the GST tax regime
+  - **`gst::invoice`**: GSTINs, B2B GST invoices and credit notes, HSN/SAC master data, compliance checks and printing
+  - **`gst::returns`**: GSTR-1 aggregation and export in the GST portal's JSON schema
 - **`reconciliation`**: Matching engine for bank statements and payment gateways
 - **`utils`**: Utilities including in-memory storage for testing
 
@@ -239,6 +267,9 @@ cargo run --example gst_invoice_pdf --features pdf
 # Aggregate a month of invoices into GSTR-1 and print the portal JSON
 cargo run --example gstr1_export --features india
 
+# A VAT invoice and a credit note, posted to the ledger
+cargo run --example invoice
+
 # Bank reconciliation
 cargo run --example reconciliation
 ```
@@ -289,7 +320,7 @@ With the `india` feature, the library supports Indian GST with:
 - **Exempt and non-GST supplies**: `GstLineItem::exempt` and `GstLineItem::non_gst` lines carry no GST, are reported in GSTR-1 Table 8, and an invoice of only such lines prints as a "Bill of Supply"
 
 ```rust,ignore
-use accounting_core::invoice::{GstInvoice, Recipient, StateCode, SupplyKind};
+use accounting_core::gst::invoice::{GstInvoice, Recipient, StateCode, SupplyKind};
 
 let buyer = Recipient::unregistered(StateCode::parse("07")?); // Delhi, no GSTIN
 let invoice = GstInvoice::new("INV-104", date, seller_gstin, buyer, items)?;
@@ -306,7 +337,7 @@ accounting-core = { version = "0.4", features = ["pdf"] }
 ```
 
 ```rust,ignore
-use accounting_core::invoice::{InvoiceParties, InvoiceParty, PdfOptions};
+use accounting_core::gst::invoice::{InvoiceParties, InvoiceParty, PdfOptions};
 
 let parties = InvoiceParties::new(
     InvoiceParty::new("Acme Services", vec!["Mumbai".into()], seller_gstin),
@@ -324,8 +355,8 @@ The PDF prints no footer note unless `PdfOptions::footer_note` sets one. `GstLin
 `Gstr1Return::build` aggregates a filer's invoices for one month into GSTR-1. It fills Table 4A (B2B supplies by buyer GSTIN, one item per rate), Table 5 (B2CL: inter-state supplies over ₹1 lakh to unregistered buyers, by place of supply), Table 7 (B2CS: all other supplies to unregistered buyers, summed by place of supply and rate), Table 8 (nil-rated, exempt and non-GST lines, for registered and unregistered buyers), Table 9B (credit notes: `cdnr` for registered buyers, `cdnur` against B2CL invoices), Table 12 (the HSN/SAC summary by code and rate) and Table 13 (documents issued). A credit note against a B2CS invoice is subtracted from Table 7, and every credit note is subtracted from Tables 8 and 12. `to_json` writes the portal's offline-tool schema, with amounts as numbers rounded to paise.
 
 ```rust,ignore
-use accounting_core::invoice::HsnMaster;
-use accounting_core::returns::{Gstr1Return, ReturnPeriod};
+use accounting_core::gst::invoice::HsnMaster;
+use accounting_core::gst::returns::{Gstr1Return, ReturnPeriod};
 
 let gstr1 = Gstr1Return::build(&seller_gstin, ReturnPeriod::new(2024, 11)?, &invoices, &credit_notes, HsnMaster::global())?;
 std::fs::write("gstr1.json", gstr1.to_json()?)?;

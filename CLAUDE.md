@@ -11,13 +11,32 @@ Rust library for double-entry bookkeeping, financial reports and bank/gateway re
 | `src/traits.rs` | Ports: `AccountStore`, `TransactionStore` (data access only), and the validator traits |
 | `src/ledger/` | `Ledger` orchestrator (the imperative shell), account and transaction operations, pure `balances` |
 | `src/reports/` | Pure report builders (balance sheet, income statement, cash flow, integrity) and their DTOs |
-| `src/tax/gst.rs` | GST rates and calculations (`india` feature) |
-| `src/invoice/` | GSTIN, GST invoices, HSN/SAC master data, the pure print model (`india` feature), and the PDF renderer behind the `pdf` feature (implies `india`) |
-| `src/returns/` | GST returns built from invoices: the pure GSTR-1 builder, its portal-schema DTOs and JSON export, and `ReturnPeriod` (`india` feature) |
+| `src/money.rs` | Money rounding and percentages: the crate's one rounding rule |
+| `src/document/` | What every trade document shares: lines, the `Document` trait and pricing engine, discounts, tax regimes (`NoTax`, `FlatRate`), posting legs and shared validation |
+| `src/sales/` | Sales documents: `Invoice`, `CreditNote`, and posting them through `SalesAccounts` (receivable, revenue, output tax) |
+| `src/gst/` | Indian GST, behind the `india` feature: `tax`, `invoice` and `returns` below |
+| `src/gst/tax/gst.rs` | GST rates and calculations, and `GstRegime`, the GST `TaxRegime` |
+| `src/gst/invoice/` | GSTIN, GST invoices and credit notes built on `document` and `sales`, HSN/SAC master data, the pure print model, and the PDF renderer behind the `pdf` feature (implies `india`) |
+| `src/gst/returns/` | GST returns built from invoices: the pure GSTR-1 builder, its portal-schema DTOs and JSON export, and `ReturnPeriod` |
 | `src/reconciliation/` | Pure matching engine, split by pass, with scoring and the report |
 | `src/utils/` | `MemoryStorage`, `MemoryReconciliationStorage`, validation rules, Indian amount formatting (`india` feature) |
 | `src/**/tests/` | Unit test module for its directory: `mod.rs` plus one `<module>_test.rs` per module (see [Tests](#tests)) |
 | `tests/` | Integration tests over the public API |
+
+## Vocabulary
+
+Name types, fields and docs by the side of trade they belong to. Don't use "bill" or "invoice" for anything shared by both sides; shared machinery is a "document".
+
+| | Sales | Purchases |
+|---|---|---|
+| Main document | Invoice, issued to a customer | Bill, received from a supplier |
+| Correction that reduces it | Credit note, issued to the customer | Debit note, issued to the supplier |
+| Other party | Customer | Supplier |
+| Amount owed | Receivable | Payable |
+| Value before tax | Revenue | Expense |
+| Tax | Output tax | Input tax |
+
+Exception: under GST (Section 34(3) of the CGST Act) a seller issues a debit note to raise an invoice's value. It lives in `gst` as `GstDebitNote`, and the general core never has a sales-side debit note.
 
 ## Coding standards
 
@@ -39,9 +58,13 @@ Rust library for double-entry bookkeeping, financial reports and bank/gateway re
 |------|------|
 | Debit/credit sign rule | `AccountType::balance_effect` and `EntryType::signed` |
 | Pagination | `PaginationOption::paginate` |
+| Rounding money | `money::round_money` (`gst::tax::round_to_paise` re-exports it) |
 | Choosing a GST rate by supply type | `GstRate::for_supply` |
-| Validation rules | `utils::validation` |
-| Discount amounts and sharing an invoice discount across lines | `invoice::discount` |
+| Validation rules | `utils::validation`; rules every document shares: `document::validation` |
+| Discount amounts and sharing an invoice discount across lines | `document::discount` |
+| Pricing lines and documents | `DocumentLine` (`document::line`), `Document` and `price_lines` (`document::pricing`) |
+| Tax on a line | a `TaxRegime` impl: `NoTax`, `FlatRate`, `GstRegime` |
+| Turning legs into journal entries | `document::posting::legs_to_entries`; sales legs and accounts: `sales::posting` |
 | Printing amounts (Indian grouping, amount in words) | `utils::formatting` |
 
 If you are about to copy a block, extract it into its home instead.
@@ -88,14 +111,14 @@ If you are about to copy a block, extract it into its home instead.
   | Module | Test file |
   |--------|-----------|
   | `src/reconciliation/scoring.rs` | `src/reconciliation/tests/scoring_test.rs` |
-  | `src/tax/gst.rs` | `src/tax/tests/gst_test.rs` |
+  | `src/gst/tax/gst.rs` | `src/gst/tax/tests/gst_test.rs` |
   | `src/types.rs` (declared in `lib.rs`) | `src/tests/types_test.rs` |
   | `src/ledger/mod.rs` (a directory module) | `src/tests/ledger_test.rs` |
   | `src/reconciliation/engine/mod.rs` (a directory module) | `src/reconciliation/tests/engine_test.rs` |
 
   A module's tests live in the `tests/` folder of the module that declares it. For a directory module, that is the folder next to its directory, not inside it.
 - Test files import what they test explicitly, e.g. `use crate::reconciliation::scoring::*;` plus any types and crates they need. They are no longer children of the code under test, so they can't use `use super::*;`.
-- If a test needs a private helper, make it `pub(super)`. That makes it visible to the parent module, which is where the `tests/` folder lives, and to nothing outside it. Don't use `pub(crate)` or `pub` for this. Examples: `scoring::score_amount`, `invoice::types::gstin_checksum`.
+- If a test needs a private helper, make it `pub(super)`. That makes it visible to the parent module, which is where the `tests/` folder lives, and to nothing outside it. Don't use `pub(crate)` or `pub` for this. Examples: `scoring::score_amount`, `gst::invoice::types::gstin_checksum`.
 - One `<module>_test.rs` per source module. Don't add extra modules such as `display_tests`; group related tests inside that one file instead.
 - Tests that exercise several modules through the public API go in the top-level `tests/` directory as integration tests. Examples of public API usage go in doc comments, which run as doctests.
 - Name test functions `test_<behaviour>`, describing the behaviour rather than the function under test.
@@ -115,7 +138,7 @@ cargo test --features india      # adds GST, invoice and GSTR-1 tests
 cargo test --all-features        # adds the `pdf` renderer's tests
 cargo doc --no-deps
 cargo doc --no-deps --all-features
-for ex in basic_ledger reconciliation pagination_demo api_pagination_patterns web_integration; do
+for ex in basic_ledger invoice reconciliation pagination_demo api_pagination_patterns web_integration; do
   cargo run -q --example "$ex" > /dev/null || echo "FAILED: $ex"
 done
 for ex in gst_calculations gst_invoice gstr1_export; do
@@ -124,4 +147,4 @@ done
 cargo run -q --features pdf --example gst_invoice_pdf > /dev/null || echo "FAILED: gst_invoice_pdf"
 ```
 
-Core code (`ledger`, `reports`, `reconciliation`, `types`, `traits`, `utils` outside `formatting`) must never depend on `tax`, `invoice` or `returns`. Indian code may depend on the core. Gate any new Indian-only module, re-export, error variant or test file with `#[cfg(feature = "india")]`.
+Core code (`ledger`, `reports`, `reconciliation`, `document`, `sales`, `money`, `types`, `traits`, `utils` outside `formatting`) must never depend on `gst`. New tax systems go in as a `TaxRegime`, not as branches in `document` or `sales`. Indian code may depend on the core. Gate any new Indian-only module, re-export, error variant or test file with `#[cfg(feature = "india")]`.

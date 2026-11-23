@@ -1,7 +1,7 @@
 //! Tests for the HSN/SAC master data and default-rate line items
 #![cfg(feature = "india")]
 
-use accounting_core::invoice::{
+use accounting_core::gst::invoice::{
     GstInvoice, GstLineItem, Gstin, HsnMaster, HsnSacKind, InvoiceError,
 };
 use bigdecimal::BigDecimal;

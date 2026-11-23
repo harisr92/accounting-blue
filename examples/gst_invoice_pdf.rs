@@ -6,7 +6,7 @@
 //! address, notes, and payment details with a UPI QR code. Pass the path of a TrueType font that has the ₹ glyph (for example
 //! Noto Sans) as the first argument to print amounts with the rupee sign.
 
-use accounting_core::invoice::{
+use accounting_core::gst::invoice::{
     render_pdf, Discount, GstInvoice, GstLineItem, Gstin, InvoiceDetails, InvoiceParties,
     InvoiceParty, InvoicePrint, PaymentDetails, PdfFont, PdfOptions,
 };

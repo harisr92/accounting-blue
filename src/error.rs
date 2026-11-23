@@ -6,15 +6,16 @@
 
 use bigdecimal::BigDecimal;
 
+use crate::document::{DiscountError, DocumentError, LineError};
 #[cfg(feature = "pdf")]
-use crate::invoice::PdfError;
+use crate::gst::invoice::PdfError;
 #[cfg(feature = "india")]
-use crate::invoice::{DiscountError, InvoiceError, PostingError};
+use crate::gst::invoice::{InvoiceError, PostingError};
+#[cfg(feature = "india")]
+use crate::gst::returns::Gstr1Error;
+#[cfg(feature = "india")]
+use crate::gst::tax::GstError;
 use crate::reconciliation::ReconciliationError;
-#[cfg(feature = "india")]
-use crate::returns::Gstr1Error;
-#[cfg(feature = "india")]
-use crate::tax::GstError;
 
 /// Boxed error from a storage backend, kept as the `source` of a storage failure
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -33,8 +34,13 @@ pub enum Error {
     #[cfg(feature = "india")]
     #[error(transparent)]
     Invoice(#[from] InvoiceError),
+    /// An invoice or credit note could not be built, priced or posted
+    #[error(transparent)]
+    Document(#[from] DocumentError),
+    /// A line item is invalid
+    #[error(transparent)]
+    Line(#[from] LineError),
     /// A discount does not fit the value it comes off
-    #[cfg(feature = "india")]
     #[error(transparent)]
     Discount(#[from] DiscountError),
     /// An invoice could not be posted to the ledger

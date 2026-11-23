@@ -68,6 +68,7 @@ jobs:
           cargo run --features india --example gst_calculations
           cargo run --features india --example gst_invoice
           cargo run --features india --example gstr1_export
+          cargo run --example invoice
           cargo run --example reconciliation
           cargo run --example pagination_demo
           cargo run --example api_pagination_patterns

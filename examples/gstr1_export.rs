@@ -1,10 +1,10 @@
 //! GSTR-1 example: aggregate a month of B2B, B2CL and B2CS invoices and a credit note into the
 //! return of outward supplies and export it as JSON in the GST portal's offline-tool schema
 
-use accounting_core::invoice::{
-    CreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode,
+use accounting_core::gst::invoice::{
+    GstCreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode,
 };
-use accounting_core::returns::{Gstr1Return, ReturnPeriod};
+use accounting_core::gst::returns::{Gstr1Return, ReturnPeriod};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 use std::str::FromStr;
@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     // The Karnataka buyer returns one of the two laptops on INV/24-25/102
-    let credit_notes = vec![CreditNote::new(
+    let credit_notes = vec![GstCreditNote::new(
         &invoices[1],
         "CN/24-25/001",
         date(20)?,

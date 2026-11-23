@@ -2,9 +2,9 @@
 //!
 //! [`format_inr`] groups digits the Indian way (`12,34,567.89`) and [`amount_in_words`] spells an
 //! amount out in crore, lakh and thousand, as printed on a tax invoice. Both round to the paisa
-//! with [`round_to_paise`] first, so they agree with the invoice totals.
+//! with [`round_money`] first, so they agree with the invoice totals.
 
-use crate::tax::round_to_paise;
+use crate::money::round_money;
 use bigdecimal::{BigDecimal, Signed};
 
 /// Digits below a crore: one crore is 1,00,00,000
@@ -108,7 +108,7 @@ pub fn amount_in_words(amount: &BigDecimal) -> String {
 
 /// The whole rupees and the two paise digits of `amount`, rounded to the paisa, without a sign
 fn split_rupees(amount: &BigDecimal) -> (String, String) {
-    let plain = round_to_paise(&amount.abs()).to_plain_string();
+    let plain = round_money(&amount.abs()).to_plain_string();
     match plain.split_once('.') {
         Some((rupees, paise)) => (rupees.to_string(), paise.to_string()),
         None => (plain, "00".to_string()),
