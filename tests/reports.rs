@@ -1,7 +1,7 @@
 //! Financial reports and GST posting patterns, end to end through the `Ledger`
 
 use accounting_core::{
-    patterns, utils::MemoryStorage, AccountType, BillPaymentWithGstParams, InvoiceWithGstParams,
+    patterns, utils::MemoryStorage, AccountType, BillPaymentWithTaxParams, InvoiceWithTaxParams,
     Ledger, LedgerError, LedgerResult, TransactionBuilder,
 };
 use bigdecimal::BigDecimal;
@@ -206,28 +206,28 @@ async fn test_gst_sale_and_purchase_post_to_the_tax_accounts() -> LedgerResult<(
         )?)
         .await?;
     ledger
-        .record_transaction(patterns::create_invoice_with_gst(InvoiceWithGstParams {
+        .record_transaction(patterns::create_invoice_with_tax(InvoiceWithTaxParams {
             id: "inv-1".to_string(),
             date: date(1, 10),
             description: "Invoice INV-1".to_string(),
             receivables_account_id: id("accounts_receivable"),
             revenue_account_id: id("sales_revenue"),
-            gst_payable_account_id: "2200".to_string(),
+            tax_payable_account_id: "2200".to_string(),
             base_amount: BigDecimal::from(10_000),
-            gst_amount: BigDecimal::from(1_800),
+            tax_amount: BigDecimal::from(1_800),
         })?)
         .await?;
     ledger
-        .record_transaction(patterns::create_bill_payment_with_gst(
-            BillPaymentWithGstParams {
+        .record_transaction(patterns::create_bill_payment_with_tax(
+            BillPaymentWithTaxParams {
                 id: "bill-1".to_string(),
                 date: date(1, 20),
                 description: "Office rent".to_string(),
                 expense_account_id: id("rent_expense"),
-                gst_recoverable_account_id: "1400".to_string(),
+                tax_recoverable_account_id: "1400".to_string(),
                 cash_or_payables_account_id: id("cash"),
                 base_amount: BigDecimal::from(5_000),
-                gst_amount: BigDecimal::from(900),
+                tax_amount: BigDecimal::from(900),
             },
         )?)
         .await?;
@@ -261,27 +261,27 @@ async fn test_gst_sale_and_purchase_post_to_the_tax_accounts() -> LedgerResult<(
 
 #[test]
 fn test_gst_patterns_reject_a_zero_tax_leg() {
-    let invoice = patterns::create_invoice_with_gst(InvoiceWithGstParams {
+    let invoice = patterns::create_invoice_with_tax(InvoiceWithTaxParams {
         id: "inv-0".to_string(),
         date: date(1, 10),
         description: "Exempt supply".to_string(),
         receivables_account_id: "1200".to_string(),
         revenue_account_id: "4000".to_string(),
-        gst_payable_account_id: "2200".to_string(),
+        tax_payable_account_id: "2200".to_string(),
         base_amount: BigDecimal::from(1_000),
-        gst_amount: BigDecimal::from(0),
+        tax_amount: BigDecimal::from(0),
     });
     assert!(matches!(invoice, Err(LedgerError::NonPositiveAmount)));
 
-    let bill = patterns::create_bill_payment_with_gst(BillPaymentWithGstParams {
+    let bill = patterns::create_bill_payment_with_tax(BillPaymentWithTaxParams {
         id: "bill-0".to_string(),
         date: date(1, 20),
         description: "Exempt purchase".to_string(),
         expense_account_id: "6000".to_string(),
-        gst_recoverable_account_id: "1400".to_string(),
+        tax_recoverable_account_id: "1400".to_string(),
         cash_or_payables_account_id: "1000".to_string(),
         base_amount: BigDecimal::from(1_000),
-        gst_amount: BigDecimal::from(0),
+        tax_amount: BigDecimal::from(0),
     });
     assert!(matches!(bill, Err(LedgerError::NonPositiveAmount)));
 }

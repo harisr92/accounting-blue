@@ -27,7 +27,7 @@ use crate::utils::validation::{DefaultAccountValidator, DefaultTransactionValida
 
 pub use accounts::STANDARD_CHART;
 pub use builder::TransactionBuilder;
-pub use patterns::{BillPaymentWithGstParams, InvoiceWithGstParams};
+pub use patterns::{BillPaymentWithTaxParams, InvoiceWithTaxParams};
 
 /// Main ledger system that orchestrates all accounting operations
 pub struct Ledger<S: LedgerStorage> {

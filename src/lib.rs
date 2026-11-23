@@ -236,7 +236,7 @@ pub use invoice::{
 #[cfg(feature = "pdf")]
 pub use invoice::{PdfError, PdfFont, PdfOptions};
 pub use ledger::{
-    patterns, BillPaymentWithGstParams, InvoiceWithGstParams, Ledger, TransactionBuilder,
+    patterns, BillPaymentWithTaxParams, InvoiceWithTaxParams, Ledger, TransactionBuilder,
     STANDARD_CHART,
 };
 pub use reports::{
