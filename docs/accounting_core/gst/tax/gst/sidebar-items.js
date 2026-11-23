@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CGST_CODE","IGST_CODE","SGST_CODE"],"enum":["GstCategory","GstError"],"struct":["GstCalculation","GstCalculator","GstRate","GstRegime"]};

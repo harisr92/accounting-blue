@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["error","invoice","ledger","reconciliation","reports","returns","tax","traits","types","utils"]};
+window.SIDEBAR_ITEMS = {"mod":["document","error","gst","ledger","money","reconciliation","reports","sales","traits","types","utils"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_TAX_RATE"],"enum":["TaxError"],"fn":["check_rate"],"struct":["FlatRate","NoTax","TaxBreakdown","TaxComponent"],"trait":["TaxRegime"]};

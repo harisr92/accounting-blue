@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["PAISE_SCALE"],"enum":["GstCategory","GstError"],"fn":["percent_of","round_to_paise"],"struct":["GstCalculation","GstCalculator","GstRate"]};

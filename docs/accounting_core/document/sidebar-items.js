@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["discount","error","line","posting","pricing","tax","validation"]};

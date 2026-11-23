@@ -2,9 +2,9 @@
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! [`format_inr`] groups digits the Indian way (`12,34,567.89`) and [`amount_in_words`] spells an
 <a href=#4 id=4 data-nosnippet>4</a>//! amount out in crore, lakh and thousand, as printed on a tax invoice. Both round to the paisa
-<a href=#5 id=5 data-nosnippet>5</a>//! with [`round_to_paise`] first, so they agree with the invoice totals.
+<a href=#5 id=5 data-nosnippet>5</a>//! with [`round_money`] first, so they agree with the invoice totals.
 <a href=#6 id=6 data-nosnippet>6</a>
-<a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span><span class="kw">crate</span>::tax::round_to_paise;
+<a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span><span class="kw">crate</span>::money::round_money;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>bigdecimal::{BigDecimal, Signed};
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="doccomment">/// Digits below a crore: one crore is 1,00,00,000
@@ -108,7 +108,7 @@
 <a href=#108 id=108 data-nosnippet>108</a>
 <a href=#109 id=109 data-nosnippet>109</a><span class="doccomment">/// The whole rupees and the two paise digits of `amount`, rounded to the paisa, without a sign
 <a href=#110 id=110 data-nosnippet>110</a></span><span class="kw">fn </span>split_rupees(amount: <span class="kw-2">&amp;</span>BigDecimal) -&gt; (String, String) {
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>plain = round_to_paise(<span class="kw-2">&amp;</span>amount.abs()).to_plain_string();
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>plain = round_money(<span class="kw-2">&amp;</span>amount.abs()).to_plain_string();
 <a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">match </span>plain.split_once(<span class="string">'.'</span>) {
 <a href=#113 id=113 data-nosnippet>113</a>        <span class="prelude-val">Some</span>((rupees, paise)) =&gt; (rupees.to_string(), paise.to_string()),
 <a href=#114 id=114 data-nosnippet>114</a>        <span class="prelude-val">None </span>=&gt; (plain, <span class="string">"00"</span>.to_string()),

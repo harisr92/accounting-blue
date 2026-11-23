@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MONEY_SCALE"],"fn":["percent_of","round_money"]};

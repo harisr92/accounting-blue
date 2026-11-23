@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Severity","ValidationIssue"],"fn":["date_rule","discount_rule","line_fields_rule","lines_present_rule","validate_document","zero_value_rule"],"struct":["ValidationReport"],"trait":["Issue"]};

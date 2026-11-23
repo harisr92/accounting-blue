@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PostingError"],"fn":["gst_legs","posting_legs"],"struct":["InvoiceAccounts"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ComplianceIssue"],"fn":["validate_credit_note","validate_invoice"],"type":["InvoiceValidationReport"]};

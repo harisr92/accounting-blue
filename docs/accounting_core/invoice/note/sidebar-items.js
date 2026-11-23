@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["credit_note_deadline"],"struct":["CreditNote","OriginalInvoice"]};

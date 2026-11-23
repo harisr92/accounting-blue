@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["sales_entries","sales_legs"],"struct":["SalesAccounts"]};

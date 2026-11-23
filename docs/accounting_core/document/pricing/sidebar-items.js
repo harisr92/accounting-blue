@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["line_values","price_lines"],"struct":["PricedLines"],"trait":["Document"]};

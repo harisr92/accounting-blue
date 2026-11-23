@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PostingError","PostingLeg"],"fn":["legs_to_entries"]};
