@@ -11,11 +11,12 @@ pub mod invoice;
 pub mod note;
 pub mod posting;
 pub mod tax;
+pub mod validation;
 
 pub use discount::{apportion, Discount, DiscountError};
 pub use document::{
-    check_line_fields, line_values, price_lines, BillableLine, LineError, LineItem, PricedLines,
-    TaxDocument,
+    check_line, check_line_fields, line_values, price_lines, BillableLine, LineError, LineItem,
+    PricedLines, TaxDocument,
 };
 pub use error::BillingError;
 pub use invoice::Invoice;
@@ -24,6 +25,7 @@ pub use posting::{breakdown_entries, posting_legs, PostingAccounts, PostingError
 pub use tax::{
     check_rate, FlatRate, NoTax, TaxBreakdown, TaxComponent, TaxError, TaxRegime, MAX_TAX_RATE,
 };
+pub use validation::{validate_document, Issue, Severity, ValidationIssue, ValidationReport};
 
 #[cfg(test)]
 mod tests;

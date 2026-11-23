@@ -3,9 +3,11 @@
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use super::print::{PartyError, PartyRole};
 use crate::billing::discount::{Discount, DiscountError};
-use crate::billing::{BillableLine, TaxBreakdown, TaxComponent, TaxDocument, TaxRegime};
+use crate::billing::{
+    check_line_fields, BillableLine, LineError, TaxBreakdown, TaxComponent, TaxDocument, TaxRegime,
+};
 use crate::tax::gst::{GstCalculation, GstError, GstRegime, CGST_CODE, IGST_CODE, SGST_CODE};
-use bigdecimal::{BigDecimal, Signed, Zero};
+use bigdecimal::{BigDecimal, Zero};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -738,15 +740,8 @@ impl GstLineItem {
 
     /// The rules for the description, quantity, price and rate, leaving out the discount
     pub(super) fn check_fields(&self) -> Result<(), LineItemError> {
-        if self.description.trim().is_empty() {
-            Err(LineItemError::EmptyDescription)
-        } else if !self.quantity.is_positive() {
-            Err(LineItemError::NonPositiveQuantity)
-        } else if self.unit_price.is_negative() {
-            Err(LineItemError::NegativeUnitPrice)
-        } else if self.gst_rate.is_negative() || self.gst_rate > MAX_GST_RATE {
-            Err(LineItemError::RateOutOfRange(self.gst_rate.clone()))
-        } else if !self.treatment.is_taxable() && !self.gst_rate.is_zero() {
+        check_line_fields(self)?;
+        if !self.treatment.is_taxable() && !self.gst_rate.is_zero() {
             Err(LineItemError::RateOnUntaxedSupply {
                 treatment: self.treatment,
                 rate: self.gst_rate.clone(),
@@ -839,6 +834,10 @@ impl GstLineItem {
 }
 
 impl BillableLine for GstLineItem {
+    fn description(&self) -> &str {
+        &self.description
+    }
+
     fn quantity(&self) -> &BigDecimal {
         &self.quantity
     }
@@ -1210,6 +1209,19 @@ pub enum LineItemError {
     /// The line's discount is out of range or more than its value
     #[error("{0}")]
     InvalidDiscount(DiscountError),
+}
+
+impl From<LineError> for LineItemError {
+    /// The GST line error for a rule every line shares
+    fn from(error: LineError) -> Self {
+        match error {
+            LineError::EmptyDescription => Self::EmptyDescription,
+            LineError::NonPositiveQuantity => Self::NonPositiveQuantity,
+            LineError::NegativeUnitPrice => Self::NegativeUnitPrice,
+            LineError::RateOutOfRange(rate) => Self::RateOutOfRange(rate),
+            LineError::InvalidDiscount(discount) => Self::InvalidDiscount(discount),
+        }
+    }
 }
 
 /// Invoice-related errors

@@ -17,18 +17,11 @@ use super::note::CreditNote;
 use super::types::{invoice_number_error, GstDocument, GstInvoice, GstLineItem};
 use super::types::{InvoiceNumberError, LineItemError, Recipient, SupplyKind};
 use crate::billing::discount::DiscountError;
-use crate::tax::round_to_paise;
-use bigdecimal::{BigDecimal, Zero};
+use crate::billing::validation::{self as rules, Issue, ValidationIssue, ValidationReport};
+use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 
-/// How serious a [`ComplianceIssue`] is
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Severity {
-    /// The invoice must not be issued or posted
-    Error,
-    /// The invoice is valid, but something looks unusual
-    Warning,
-}
+pub use crate::billing::Severity;
 
 /// One rule an invoice breaks
 ///
@@ -160,45 +153,31 @@ impl ComplianceIssue {
     }
 }
 
-/// Every issue [`validate_invoice`] found, in rule order
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct InvoiceValidationReport {
-    issues: Vec<ComplianceIssue>,
+/// Every compliance issue found in a GST invoice or credit note
+pub type InvoiceValidationReport = ValidationReport<ComplianceIssue>;
+
+impl Issue for ComplianceIssue {
+    fn severity(&self) -> Severity {
+        ComplianceIssue::severity(self)
+    }
 }
 
-impl InvoiceValidationReport {
-    /// All issues
-    #[must_use]
-    pub fn issues(&self) -> &[ComplianceIssue] {
-        &self.issues
-    }
-
-    /// Issues of severity [`Severity::Error`]
-    pub fn errors(&self) -> impl Iterator<Item = &ComplianceIssue> {
-        self.of_severity(Severity::Error)
-    }
-
-    /// Issues of severity [`Severity::Warning`]
-    pub fn warnings(&self) -> impl Iterator<Item = &ComplianceIssue> {
-        self.of_severity(Severity::Warning)
-    }
-
-    fn of_severity(&self, severity: Severity) -> impl Iterator<Item = &ComplianceIssue> {
-        self.issues
-            .iter()
-            .filter(move |issue| issue.severity() == severity)
-    }
-
-    /// Whether the invoice has no errors (warnings are allowed)
-    #[must_use]
-    pub fn is_compliant(&self) -> bool {
-        self.errors().next().is_none()
-    }
-
-    /// Consume the report, returning its issues
-    #[must_use]
-    pub fn into_issues(self) -> Vec<ComplianceIssue> {
-        self.issues
+impl From<ValidationIssue> for ComplianceIssue {
+    /// The GST issue for a rule every document shares
+    fn from(issue: ValidationIssue) -> Self {
+        match issue {
+            ValidationIssue::NoLines => Self::NoLineItems,
+            ValidationIssue::InvalidLine { line, reason } => Self::InvalidLineItem {
+                line,
+                reason: reason.into(),
+            },
+            ValidationIssue::InvalidDiscount(reason) => Self::InvalidDiscount(reason),
+            ValidationIssue::FutureDate { date, as_of } => Self::FutureDate {
+                invoice_date: date,
+                as_of,
+            },
+            ValidationIssue::ZeroValueLine { line } => Self::ZeroValueLine { line },
+        }
     }
 }
 
@@ -316,9 +295,7 @@ fn report(
     master: &HsnMaster,
 ) -> InvoiceValidationReport {
     let warnings = WARNING_RULES.iter().flat_map(|rule| rule(document, master));
-    InvoiceValidationReport {
-        issues: errors.into_iter().chain(warnings).collect(),
-    }
+    InvoiceValidationReport::new(errors.into_iter().chain(warnings).collect())
 }
 
 /// Only the error-severity issues, which need no HSN/SAC master
@@ -365,11 +342,7 @@ fn invoice_number_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<Com
 }
 
 fn line_items_present_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<ComplianceIssue> {
-    if document.line_items().is_empty() {
-        vec![ComplianceIssue::NoLineItems]
-    } else {
-        Vec::new()
-    }
+    shared(rules::lines_present_rule(document))
 }
 
 /// The HSN/SAC shape rule [`GstLineItem::new`] applies to each line
@@ -393,23 +366,11 @@ fn line_fields_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<Compli
 
 /// The discount off the subtotal must fit it, as [`GstInvoice::with_discount`] requires
 fn discount_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<ComplianceIssue> {
-    document
-        .check_discount()
-        .err()
-        .map(ComplianceIssue::InvalidDiscount)
-        .into_iter()
-        .collect()
+    shared(rules::discount_rule(document))
 }
 
 fn date_rule(document: &dyn GstDocument, as_of: NaiveDate) -> Vec<ComplianceIssue> {
-    if document.date() > as_of {
-        vec![ComplianceIssue::FutureDate {
-            invoice_date: document.date(),
-            as_of,
-        }]
-    } else {
-        Vec::new()
-    }
+    shared(rules::date_rule(document, as_of))
 }
 
 fn parties_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<ComplianceIssue> {
@@ -458,11 +419,12 @@ fn hsn_master_rule(document: &dyn GstDocument, master: &HsnMaster) -> Vec<Compli
 }
 
 fn zero_value_rule(document: &dyn GstDocument, _master: &HsnMaster) -> Vec<ComplianceIssue> {
-    per_line(document, |line, item| {
-        round_to_paise(&item.taxable_value())
-            .is_zero()
-            .then_some(ComplianceIssue::ZeroValueLine { line })
-    })
+    shared(rules::zero_value_rule(document))
+}
+
+/// The GST issues for issues a shared rule found
+fn shared(issues: Vec<ValidationIssue>) -> Vec<ComplianceIssue> {
+    issues.into_iter().map(ComplianceIssue::from).collect()
 }
 
 fn note_date_rule(note: &CreditNote) -> Vec<ComplianceIssue> {

@@ -18,6 +18,9 @@ use serde::{Deserialize, Serialize};
 
 /// A line priced as quantity × unit price, less its own discount, at a tax rate
 pub trait BillableLine {
+    /// What is supplied
+    fn description(&self) -> &str;
+
     /// Quantity supplied
     fn quantity(&self) -> &BigDecimal;
 
@@ -175,16 +178,15 @@ impl LineItem {
 
     /// The field rules, then the discount
     fn check(&self) -> Result<(), LineError> {
-        check_line_fields(&self.description, self)?;
-        self.discount.as_ref().map_or(Ok(()), |discount| {
-            discount
-                .check(&self.gross_value())
-                .map_err(LineError::InvalidDiscount)
-        })
+        check_line(self)
     }
 }
 
 impl BillableLine for LineItem {
+    fn description(&self) -> &str {
+        &self.description
+    }
+
     fn quantity(&self) -> &BigDecimal {
         &self.quantity
     }
@@ -202,14 +204,29 @@ impl BillableLine for LineItem {
     }
 }
 
+/// Check a line's description, quantity, unit price and rate, then its discount
+///
+/// # Errors
+///
+/// As [`check_line_fields`], then [`LineError::InvalidDiscount`] for a discount out of range or
+/// more than the line's [`BillableLine::gross_value`].
+pub fn check_line<L: BillableLine + ?Sized>(line: &L) -> Result<(), LineError> {
+    check_line_fields(line)?;
+    line.discount().map_or(Ok(()), |discount| {
+        discount
+            .check(&line.gross_value())
+            .map_err(LineError::InvalidDiscount)
+    })
+}
+
 /// Check a line's description, quantity, unit price and rate, leaving out its discount
 ///
 /// # Errors
 ///
 /// The [`LineError`] naming the first rule broken: an empty description, a quantity that is not
 /// positive, a negative unit price, or a rate outside 0-100.
-pub fn check_line_fields(description: &str, line: &impl BillableLine) -> Result<(), LineError> {
-    if description.trim().is_empty() {
+pub fn check_line_fields<L: BillableLine + ?Sized>(line: &L) -> Result<(), LineError> {
+    if line.description().trim().is_empty() {
         Err(LineError::EmptyDescription)
     } else if !line.quantity().is_positive() {
         Err(LineError::NonPositiveQuantity)

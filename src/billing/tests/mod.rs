@@ -6,3 +6,4 @@ mod invoice_test;
 mod note_test;
 mod posting_test;
 mod tax_test;
+mod validation_test;
