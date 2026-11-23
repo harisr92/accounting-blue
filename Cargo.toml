@@ -1,9 +1,9 @@
 [package]
 name = "accounting-core"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["Harin <harikri@protonmail.com>"]
-description = "Core accounting functionality with double-entry bookkeeping, GST calculations, and financial reporting"
+description = "Double-entry bookkeeping, financial reporting and reconciliation, with optional Indian GST support"
 license = "MIT OR Apache-2.0"
 keywords = ["accounting", "bookkeeping", "finance", "gst", "ledger"]
 categories = ["finance"]
@@ -18,21 +18,28 @@ bigdecimal = { version = "0.4", features = ["serde"] }
 thiserror = "2.0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 async-trait = "0.1"
-serde_json = "1.0"
+# GSTR-1 JSON export and the HSN/SAC master, behind the `india` feature
+serde_json = { version = "1.0", optional = true }
 # PDF export, behind the `pdf` feature (needs Rust 1.88)
 printpdf = { version = "0.12", default-features = false, features = ["png", "jpeg"], optional = true }
 # UPI QR codes on the PDF, behind the `pdf` feature
 qrcode = { version = "0.14", default-features = false, optional = true }
 
 [dev-dependencies]
+serde_json = "1.0"
 # Decodes the UPI QR code in the PDF tests
 rqrr = "0.9"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = []
-# Render GST invoices to PDF with printpdf
-pdf = ["dep:printpdf", "dep:qrcode"]
+# Indian GST: rates and maths, GSTIN, HSN/SAC master, GST invoices and credit notes, GSTR-1
+india = ["dep:serde_json"]
+# Render GST invoices to PDF with printpdf (implies `india`)
+pdf = ["india", "dep:printpdf", "dep:qrcode"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -49,14 +56,17 @@ path = "examples/basic_ledger.rs"
 [[example]]
 name = "gst_calculations"
 path = "examples/gst_calculations.rs"
+required-features = ["india"]
 
 [[example]]
 name = "gst_invoice"
 path = "examples/gst_invoice.rs"
+required-features = ["india"]
 
 [[example]]
 name = "gstr1_export"
 path = "examples/gstr1_export.rs"
+required-features = ["india"]
 
 [[example]]
 name = "reconciliation"

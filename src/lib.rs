@@ -1,18 +1,28 @@
 //! # Accounting Core
 //!
-//! A comprehensive accounting library providing double-entry bookkeeping,
-//! GST calculations, and financial reporting capabilities.
+//! A country-neutral accounting library providing double-entry bookkeeping, financial
+//! reporting and reconciliation. Indian GST support is an opt-in Cargo feature.
 //!
 //! ## Features
 //!
 //! - **Double-entry bookkeeping**: Complete transaction validation and balance tracking
 //! - **Account management**: Support for Assets, Liabilities, Equity, Income, and Expense accounts
 //! - **Paginated responses**: Efficient pagination for large datasets with comprehensive metadata
-//! - **GST calculations**: Indian GST compliance with CGST/SGST/IGST support
-//! - **GST returns**: GSTR-1 aggregation and export in the GST portal's JSON schema
 //! - **Financial reporting**: Balance sheets, income statements, and trial balance generation
 //! - **Reconciliation**: Bank statement and payment gateway reconciliation
 //! - **Storage abstraction**: Database-agnostic design with trait-based storage
+//!
+//! ## Optional features
+//!
+//! | Feature | Adds |
+//! |---------|------|
+//! | `india` | Indian GST: rates and CGST/SGST/IGST maths (`tax`), GSTIN, HSN/SAC master data, GST invoices and credit notes (`invoice`), GSTR-1 returns (`returns`), and Indian amount formatting (`utils::formatting`) |
+//! | `pdf` | Renders GST invoices to PDF; turns on `india` |
+//!
+//! ```toml
+//! [dependencies]
+//! accounting-core = { version = "0.4", features = ["india"] }
+//! ```
 //!
 //! ## Quick Start
 //!
@@ -200,10 +210,12 @@
 //! - `pagination_demo.rs` - Complete pagination functionality walkthrough
 //! - `api_pagination_patterns.rs` - REST API and GraphQL integration patterns
 //! - `web_integration.rs` - Web framework integration examples
-//! - `gst_invoice.rs` - GSTIN validation, HSN/SAC rate lookup and B2B GST invoices
-//! - `gst_invoice_pdf.rs` - Rendering a GST invoice to PDF (needs the `pdf` feature)
-//! - `gstr1_export.rs` - Aggregating a month of invoices into GSTR-1 and exporting it as JSON
 //! - `reconciliation.rs` - Reconciling a ledger account against a bank statement
+//! - `gst_calculations.rs` - CGST/SGST/IGST maths (needs the `india` feature)
+//! - `gst_invoice.rs` - GSTIN validation, HSN/SAC rate lookup and B2B GST invoices (needs `india`)
+//! - `gstr1_export.rs` - Aggregating a month of invoices into GSTR-1 and exporting it as JSON
+//!   (needs `india`)
+//! - `gst_invoice_pdf.rs` - Rendering a GST invoice to PDF (needs the `pdf` feature)
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -214,18 +226,23 @@
 #![cfg_attr(not(test), warn(clippy::too_many_lines))]
 
 pub mod error;
+#[cfg(feature = "india")]
 pub mod invoice;
 pub mod ledger;
 pub mod reconciliation;
 pub mod reports;
+#[cfg(feature = "india")]
 pub mod returns;
+#[cfg(feature = "india")]
 pub mod tax;
 pub mod traits;
 pub mod types;
 pub mod utils;
 
 pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};
+#[cfg(feature = "india")]
 pub use invoice::{state_label, state_name, InvoiceDetails, PaymentDetails};
+#[cfg(feature = "india")]
 pub use invoice::{
     validate_credit_note, validate_invoice, ComplianceIssue, CreditNote, Discount, GstBreakdown,
     GstDocument, GstInvoice, GstLineItem, Gstin, HsnMaster, HsnSacEntry, HsnSacKind,
@@ -236,13 +253,15 @@ pub use invoice::{
 #[cfg(feature = "pdf")]
 pub use invoice::{PdfError, PdfFont, PdfOptions};
 pub use ledger::{
-    patterns, BillPaymentWithGstParams, InvoiceWithGstParams, Ledger, TransactionBuilder,
+    patterns, BillPaymentWithTaxParams, InvoiceWithTaxParams, Ledger, TransactionBuilder,
     STANDARD_CHART,
 };
 pub use reports::{
     BalanceSheet, CashFlowItem, CashFlowStatement, IncomeStatement, LedgerIntegrityReport,
 };
+#[cfg(feature = "india")]
 pub use returns::{Gstr1Error, Gstr1Return, ReturnPeriod};
+#[cfg(feature = "india")]
 pub use tax::{GstCalculation, GstCalculator, GstCategory, GstError, GstRate};
 pub use traits::{
     AccountStore, AccountValidator, LedgerStorage, TransactionStore, TransactionValidator,

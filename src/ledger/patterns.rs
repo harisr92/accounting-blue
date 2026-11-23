@@ -7,9 +7,9 @@ use crate::error::LedgerResult;
 use crate::ledger::builder::TransactionBuilder;
 use crate::types::Transaction;
 
-/// Parameters for creating an invoice with GST
+/// Parameters for creating an invoice with sales tax (GST, VAT, ...)
 #[derive(Debug, Clone)]
-pub struct InvoiceWithGstParams {
+pub struct InvoiceWithTaxParams {
     /// Transaction id
     pub id: String,
     /// Transaction date
@@ -20,17 +20,17 @@ pub struct InvoiceWithGstParams {
     pub receivables_account_id: String,
     /// Account credited with the base amount
     pub revenue_account_id: String,
-    /// Account credited with the GST
-    pub gst_payable_account_id: String,
-    /// Amount before GST
+    /// Account credited with the tax
+    pub tax_payable_account_id: String,
+    /// Amount before tax
     pub base_amount: BigDecimal,
-    /// GST charged
-    pub gst_amount: BigDecimal,
+    /// Tax charged
+    pub tax_amount: BigDecimal,
 }
 
-/// Parameters for creating a bill payment with GST
+/// Parameters for creating a bill payment with recoverable tax (GST input credit, VAT, ...)
 #[derive(Debug, Clone)]
-pub struct BillPaymentWithGstParams {
+pub struct BillPaymentWithTaxParams {
     /// Transaction id
     pub id: String,
     /// Transaction date
@@ -39,14 +39,14 @@ pub struct BillPaymentWithGstParams {
     pub description: String,
     /// Account debited with the base amount
     pub expense_account_id: String,
-    /// Account debited with the recoverable GST
-    pub gst_recoverable_account_id: String,
+    /// Account debited with the recoverable tax
+    pub tax_recoverable_account_id: String,
     /// Account credited with the total (cash or payables)
     pub cash_or_payables_account_id: String,
-    /// Amount before GST
+    /// Amount before tax
     pub base_amount: BigDecimal,
-    /// GST paid
-    pub gst_amount: BigDecimal,
+    /// Tax paid
+    pub tax_amount: BigDecimal,
 }
 
 /// One side of a two-entry transaction
@@ -176,19 +176,19 @@ pub fn create_owner_investment(
     transfer(id, date, description, debit, credit, amount)
 }
 
-/// Create an invoice with GST (debit the total, credit revenue and GST payable)
+/// Create an invoice with tax (debit the total, credit revenue and tax payable)
 ///
 /// # Errors
 ///
 /// Any double-entry rule from [`Transaction::validate`], e.g. a non-positive amount.
-pub fn create_invoice_with_gst(params: InvoiceWithGstParams) -> LedgerResult<Transaction> {
-    let total_amount = &params.base_amount + &params.gst_amount;
+pub fn create_invoice_with_tax(params: InvoiceWithTaxParams) -> LedgerResult<Transaction> {
+    let total_amount = &params.base_amount + &params.tax_amount;
 
     TransactionBuilder::new(params.id, params.date, params.description)
         .debit(
             params.receivables_account_id,
             total_amount,
-            Some("Total including GST".to_string()),
+            Some("Total including tax".to_string()),
         )
         .credit(
             params.revenue_account_id,
@@ -196,20 +196,20 @@ pub fn create_invoice_with_gst(params: InvoiceWithGstParams) -> LedgerResult<Tra
             Some("Revenue amount".to_string()),
         )
         .credit(
-            params.gst_payable_account_id,
-            params.gst_amount,
-            Some("GST payable".to_string()),
+            params.tax_payable_account_id,
+            params.tax_amount,
+            Some("Tax payable".to_string()),
         )
         .build()
 }
 
-/// Create a bill payment with GST (debit expense and GST recoverable, credit the total)
+/// Create a bill payment with tax (debit expense and tax recoverable, credit the total)
 ///
 /// # Errors
 ///
 /// Any double-entry rule from [`Transaction::validate`], e.g. a non-positive amount.
-pub fn create_bill_payment_with_gst(params: BillPaymentWithGstParams) -> LedgerResult<Transaction> {
-    let total_amount = &params.base_amount + &params.gst_amount;
+pub fn create_bill_payment_with_tax(params: BillPaymentWithTaxParams) -> LedgerResult<Transaction> {
+    let total_amount = &params.base_amount + &params.tax_amount;
 
     TransactionBuilder::new(params.id, params.date, params.description)
         .debit(
@@ -218,9 +218,9 @@ pub fn create_bill_payment_with_gst(params: BillPaymentWithGstParams) -> LedgerR
             Some("Expense amount".to_string()),
         )
         .debit(
-            params.gst_recoverable_account_id,
-            params.gst_amount,
-            Some("GST recoverable".to_string()),
+            params.tax_recoverable_account_id,
+            params.tax_amount,
+            Some("Tax recoverable".to_string()),
         )
         .credit(
             params.cash_or_payables_account_id,

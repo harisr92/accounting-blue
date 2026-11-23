@@ -1,6 +1,6 @@
 # accounting-core
 
-Rust library for double-entry bookkeeping, Indian GST (tax maths and B2B invoices), financial reports and bank/gateway reconciliation. Money is `bigdecimal::BigDecimal` everywhere. Storage is pluggable behind async traits, and `MemoryStorage` is the reference implementation.
+Rust library for double-entry bookkeeping, financial reports and bank/gateway reconciliation, with Indian GST (tax maths, B2B invoices, GSTR-1, invoice PDFs) behind the opt-in `india` feature. Money is `bigdecimal::BigDecimal` everywhere. Storage is pluggable behind async traits, and `MemoryStorage` is the reference implementation.
 
 ## Layout
 
@@ -11,11 +11,11 @@ Rust library for double-entry bookkeeping, Indian GST (tax maths and B2B invoice
 | `src/traits.rs` | Ports: `AccountStore`, `TransactionStore` (data access only), and the validator traits |
 | `src/ledger/` | `Ledger` orchestrator (the imperative shell), account and transaction operations, pure `balances` |
 | `src/reports/` | Pure report builders (balance sheet, income statement, cash flow, integrity) and their DTOs |
-| `src/tax/gst.rs` | GST rates and calculations |
-| `src/invoice/` | GSTIN, GST invoices, HSN/SAC master data, the pure print model, and the PDF renderer behind the `pdf` feature |
-| `src/returns/` | GST returns built from invoices: the pure GSTR-1 builder, its portal-schema DTOs and JSON export, and `ReturnPeriod` |
+| `src/tax/gst.rs` | GST rates and calculations (`india` feature) |
+| `src/invoice/` | GSTIN, GST invoices, HSN/SAC master data, the pure print model (`india` feature), and the PDF renderer behind the `pdf` feature (implies `india`) |
+| `src/returns/` | GST returns built from invoices: the pure GSTR-1 builder, its portal-schema DTOs and JSON export, and `ReturnPeriod` (`india` feature) |
 | `src/reconciliation/` | Pure matching engine, split by pass, with scoring and the report |
-| `src/utils/` | `MemoryStorage`, `MemoryReconciliationStorage`, validation rules, Indian amount formatting |
+| `src/utils/` | `MemoryStorage`, `MemoryReconciliationStorage`, validation rules, Indian amount formatting (`india` feature) |
 | `src/**/tests/` | Unit test module for its directory: `mod.rs` plus one `<module>_test.rs` per module (see [Tests](#tests)) |
 | `tests/` | Integration tests over the public API |
 
@@ -107,14 +107,21 @@ Run all of these before handing work off. CI runs the same checks.
 
 ```bash
 cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings                  # core only, no Indian tax
+cargo clippy --all-targets --features india -- -D warnings
 cargo clippy --all-targets --all-features -- -D warnings
-cargo clippy --all-targets -- -D warnings    # without the optional `pdf` feature
-cargo test                       # unit, integration and doc tests
+cargo test                       # core unit, integration and doc tests
+cargo test --features india      # adds GST, invoice and GSTR-1 tests
 cargo test --all-features        # adds the `pdf` renderer's tests
+cargo doc --no-deps
 cargo doc --no-deps --all-features
-for ex in basic_ledger gst_calculations gst_invoice gstr1_export reconciliation \
-          pagination_demo api_pagination_patterns web_integration; do
+for ex in basic_ledger reconciliation pagination_demo api_pagination_patterns web_integration; do
   cargo run -q --example "$ex" > /dev/null || echo "FAILED: $ex"
+done
+for ex in gst_calculations gst_invoice gstr1_export; do
+  cargo run -q --features india --example "$ex" > /dev/null || echo "FAILED: $ex"
 done
 cargo run -q --features pdf --example gst_invoice_pdf > /dev/null || echo "FAILED: gst_invoice_pdf"
 ```
+
+Core code (`ledger`, `reports`, `reconciliation`, `types`, `traits`, `utils` outside `formatting`) must never depend on `tax`, `invoice` or `returns`. Indian code may depend on the core. Gate any new Indian-only module, re-export, error variant or test file with `#[cfg(feature = "india")]`.
