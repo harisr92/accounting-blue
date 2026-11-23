@@ -7,5 +7,6 @@ mod note_test;
 mod pdf_test;
 mod posting_test;
 mod print_test;
+mod state_test;
 mod types_test;
 mod validation_test;

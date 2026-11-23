@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- GST state names (`accounting_core::invoice::state`): `GST_STATES` lists every state code the GST portal uses with its name (01 Jammu and Kashmir to 38 Ladakh, 97 Other Territory, 99 Centre Jurisdiction). `state_name(code)` looks a code up, and `state_label(code)` prints it as `29 - Karnataka`, or the bare code when it names no state.
 - `tax::round_to_paise` and `tax::PAISE_SCALE`: money rounding to the paisa, half-up (0.025 becomes 0.03). This is the one rounding rule in the crate.
 - Invoice compliance checks (`accounting_core::invoice::validation`):
   - `validate_invoice(&invoice, as_of, &HsnMaster)` returns an `InvoiceValidationReport` listing every `ComplianceIssue` it finds, each with a `Severity`. Use `is_compliant()`, `errors()` and `warnings()` to read it.

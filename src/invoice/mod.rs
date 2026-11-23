@@ -27,6 +27,8 @@
 //! total in words. With the `pdf` feature, `GstInvoice::to_pdf` renders that view as an A4 PDF
 //! (see the `pdf` module).
 //!
+//! [`state_label`] names a GST state code, as in `29 - Karnataka`, from the [`GST_STATES`] table.
+//!
 //! [`CreditNote::new`] builds a credit note against an invoice, to reduce its value or tax after a
 //! return, a discount or over-billing. [`validate_credit_note`] checks it, including the Section
 //! 34(2) deadline, and [`CreditNote::to_entries`] posts it as the reverse of an invoice. Invoices
@@ -75,6 +77,7 @@ pub mod note;
 pub mod pdf;
 pub mod posting;
 pub mod print;
+pub mod state;
 pub mod types;
 pub mod validation;
 
@@ -92,6 +95,7 @@ pub use print::{
     RowCapacity, TaxLine, BILL_OF_SUPPLY_TITLE, DISCOUNT_LABEL, EXEMPT_RATE_LABEL,
     NON_GST_RATE_LABEL, TAX_INVOICE_TITLE, UNREGISTERED_DETAILS_THRESHOLD_RUPEES,
 };
+pub use state::{state_label, state_name, GST_STATES};
 pub use types::{
     b2cl_threshold, b2cl_threshold_revised_from, GstBreakdown, GstDocument, GstInvoice,
     GstLineItem, Gstin, GstinError, InvoiceError, InvoiceNumberError, LineItemError, Recipient,
