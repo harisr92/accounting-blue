@@ -2,8 +2,8 @@
 
 use accounting_core::document::validate_document;
 use accounting_core::{
-    utils::MemoryStorage, AccountType, CreditNote, Discount, Entry, FlatRate, Invoice, Ledger,
-    LineItem, PostingAccounts, TaxDocument, TransactionBuilder,
+    utils::MemoryStorage, AccountType, CreditNote, Discount, Document, Entry, FlatRate, Invoice,
+    Ledger, LineItem, PostingAccounts, TransactionBuilder,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;

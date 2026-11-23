@@ -10,8 +10,8 @@
 //! so a regime with rules of its own, such as Indian GST, can run them alongside its own.
 
 use crate::document::discount::DiscountError;
-use crate::document::line::{check_line, BillableLine, LineError};
-use crate::document::pricing::TaxDocument;
+use crate::document::line::{check_line, DocumentLine, LineError};
+use crate::document::pricing::Document;
 use crate::money::round_money;
 use bigdecimal::Zero;
 use chrono::NaiveDate;
@@ -153,10 +153,7 @@ impl<I: Issue> ValidationReport<I> {
 /// # }
 /// ```
 #[must_use]
-pub fn validate_document<D: TaxDocument + ?Sized>(
-    document: &D,
-    as_of: NaiveDate,
-) -> ValidationReport {
+pub fn validate_document<D: Document + ?Sized>(document: &D, as_of: NaiveDate) -> ValidationReport {
     ValidationReport::new(
         [
             lines_present_rule(document),
@@ -173,7 +170,7 @@ pub fn validate_document<D: TaxDocument + ?Sized>(
 
 /// A document needs at least one line
 #[must_use]
-pub fn lines_present_rule<D: TaxDocument + ?Sized>(document: &D) -> Vec<ValidationIssue> {
+pub fn lines_present_rule<D: Document + ?Sized>(document: &D) -> Vec<ValidationIssue> {
     if document.lines().is_empty() {
         vec![ValidationIssue::NoLines]
     } else {
@@ -183,7 +180,7 @@ pub fn lines_present_rule<D: TaxDocument + ?Sized>(document: &D) -> Vec<Validati
 
 /// Each line must pass the rules it was built with: [`check_line`]
 #[must_use]
-pub fn line_fields_rule<D: TaxDocument + ?Sized>(document: &D) -> Vec<ValidationIssue> {
+pub fn line_fields_rule<D: Document + ?Sized>(document: &D) -> Vec<ValidationIssue> {
     per_line(document, |line, item| {
         check_line(item)
             .err()
@@ -193,7 +190,7 @@ pub fn line_fields_rule<D: TaxDocument + ?Sized>(document: &D) -> Vec<Validation
 
 /// The discount off the subtotal must fit it
 #[must_use]
-pub fn discount_rule<D: TaxDocument + ?Sized>(document: &D) -> Vec<ValidationIssue> {
+pub fn discount_rule<D: Document + ?Sized>(document: &D) -> Vec<ValidationIssue> {
     document
         .check_discount()
         .err()
@@ -204,7 +201,7 @@ pub fn discount_rule<D: TaxDocument + ?Sized>(document: &D) -> Vec<ValidationIss
 
 /// A document may not be dated after the day it is checked on
 #[must_use]
-pub fn date_rule<D: TaxDocument + ?Sized>(document: &D, as_of: NaiveDate) -> Vec<ValidationIssue> {
+pub fn date_rule<D: Document + ?Sized>(document: &D, as_of: NaiveDate) -> Vec<ValidationIssue> {
     if document.date() > as_of {
         vec![ValidationIssue::FutureDate {
             date: document.date(),
@@ -217,7 +214,7 @@ pub fn date_rule<D: TaxDocument + ?Sized>(document: &D, as_of: NaiveDate) -> Vec
 
 /// Warn about lines whose taxable value rounds to zero, such as a zero unit price
 #[must_use]
-pub fn zero_value_rule<D: TaxDocument + ?Sized>(document: &D) -> Vec<ValidationIssue> {
+pub fn zero_value_rule<D: Document + ?Sized>(document: &D) -> Vec<ValidationIssue> {
     per_line(document, |line, item| {
         round_money(&item.taxable_value())
             .is_zero()
@@ -226,7 +223,7 @@ pub fn zero_value_rule<D: TaxDocument + ?Sized>(document: &D) -> Vec<ValidationI
 }
 
 /// The issues `check` finds on each line, numbered from 0
-fn per_line<D: TaxDocument + ?Sized>(
+fn per_line<D: Document + ?Sized>(
     document: &D,
     check: impl Fn(usize, &D::Line) -> Option<ValidationIssue>,
 ) -> Vec<ValidationIssue> {

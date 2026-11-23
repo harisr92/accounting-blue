@@ -2,13 +2,13 @@
 //!
 //! An [`Invoice`] is a numbered, dated bill to a customer: [`LineItem`]s, an optional discount off
 //! the subtotal, and the [`TaxRegime`] its lines are taxed under. Its pricing comes from
-//! [`TaxDocument`], and [`Invoice::to_entries`] posts it to the ledger.
+//! [`Document`], and [`Invoice::to_entries`] posts it to the ledger.
 
 use crate::document::discount::Discount;
 use crate::document::error::BillingError;
 use crate::document::line::LineItem;
 use crate::document::posting::{breakdown_entries, PostingAccounts, PostingLeg};
-use crate::document::pricing::TaxDocument;
+use crate::document::pricing::Document;
 use crate::document::tax::{TaxError, TaxRegime};
 use crate::types::Entry;
 use chrono::NaiveDate;
@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 /// # Example
 ///
 /// ```
-/// use accounting_core::document::{FlatRate, LineItem, PostingAccounts, TaxDocument};
+/// use accounting_core::document::{FlatRate, LineItem, PostingAccounts, Document};
 /// use accounting_core::sales::Invoice;
 /// use bigdecimal::BigDecimal;
 /// use chrono::NaiveDate;
@@ -116,7 +116,7 @@ impl<R: TaxRegime<Error = TaxError> + Clone> Invoice<R> {
     /// # Errors
     ///
     /// [`BillingError::InvalidDiscount`] if the discount is out of range or more than the
-    /// [`TaxDocument::subtotal`].
+    /// [`Document::subtotal`].
     pub fn with_discount(self, discount: Discount) -> Result<Self, BillingError> {
         let invoice = Self {
             discount: Some(discount),
@@ -134,7 +134,7 @@ impl<R: TaxRegime<Error = TaxError> + Clone> Invoice<R> {
     /// # Errors
     ///
     /// [`BillingError::Posting`] if the total is zero or a tax has no account, or any error from
-    /// [`TaxDocument::tax_breakdown`].
+    /// [`Document::tax_breakdown`].
     pub fn to_entries(&self, accounts: &PostingAccounts) -> Result<Vec<Entry>, BillingError> {
         Ok(breakdown_entries(
             &self.tax_breakdown()?,
@@ -144,7 +144,7 @@ impl<R: TaxRegime<Error = TaxError> + Clone> Invoice<R> {
     }
 }
 
-impl<R: TaxRegime<Error = TaxError> + Clone> TaxDocument for Invoice<R> {
+impl<R: TaxRegime<Error = TaxError> + Clone> Document for Invoice<R> {
     type Line = LineItem;
     type Regime = R;
     type Error = BillingError;

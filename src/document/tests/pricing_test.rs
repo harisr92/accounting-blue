@@ -1,7 +1,7 @@
 //! Tests for lines, documents and the pricing engine
 
 use crate::document::discount::{Discount, DiscountError};
-use crate::document::line::{BillableLine, LineItem};
+use crate::document::line::{DocumentLine, LineItem};
 use crate::document::pricing::*;
 use crate::document::tax::{FlatRate, TaxBreakdown, TaxComponent, TaxError};
 use bigdecimal::BigDecimal;
@@ -40,7 +40,7 @@ impl From<TaxError> for DocError {
     }
 }
 
-impl TaxDocument for Doc {
+impl Document for Doc {
     type Line = LineItem;
     type Regime = FlatRate;
     type Error = DocError;

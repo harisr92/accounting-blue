@@ -168,7 +168,7 @@
 //! their tax under a [`TaxRegime`] and posts them as balanced journal entries.
 //!
 //! ```rust
-//! use accounting_core::{FlatRate, Invoice, LineItem, PostingAccounts, TaxDocument};
+//! use accounting_core::{FlatRate, Invoice, LineItem, PostingAccounts, Document};
 //! use bigdecimal::BigDecimal;
 //! use chrono::NaiveDate;
 //!
@@ -266,8 +266,8 @@ pub mod types;
 pub mod utils;
 
 pub use document::{
-    apportion, BillableLine, BillingError, Discount, DiscountError, FlatRate, LineItem, NoTax,
-    PostingAccounts, PostingLeg, TaxBreakdown, TaxComponent, TaxDocument, TaxRegime,
+    apportion, BillingError, Discount, DiscountError, Document, DocumentLine, FlatRate, LineItem,
+    NoTax, PostingAccounts, PostingLeg, TaxBreakdown, TaxComponent, TaxRegime,
 };
 pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};
 #[cfg(feature = "india")]

@@ -1,24 +1,24 @@
 //! Pricing a document's lines under a tax regime
 //!
-//! A [`TaxDocument`] is a numbered, dated list of lines with an optional discount off the
+//! A [`Document`] is a numbered, dated list of lines with an optional discount off the
 //! subtotal, taxed under a [`TaxRegime`]. [`price_lines`] is the one pricing engine every
 //! document shares: it rounds each line, shares the document discount across the lines by value
 //! with [`apportion`], and asks the regime for the tax on what is left.
 
 use crate::document::discount::{apportion, Discount, DiscountError};
-use crate::document::line::BillableLine;
+use crate::document::line::DocumentLine;
 use crate::document::tax::{TaxBreakdown, TaxRegime};
 use crate::money::round_money;
 use bigdecimal::{BigDecimal, Zero};
 use chrono::NaiveDate;
 
-/// A numbered, dated document of billable lines, taxed under one regime
+/// A numbered, dated document of lines, taxed under one regime
 ///
 /// The provided methods hold the arithmetic every document shares: the subtotal, the discount
 /// off it, and the tax breakdown of each line and of the whole document.
-pub trait TaxDocument {
+pub trait Document {
     /// The document's line type
-    type Line: BillableLine;
+    type Line: DocumentLine;
 
     /// The regime that taxes the document's lines
     type Regime: TaxRegime;
@@ -45,12 +45,12 @@ pub trait TaxDocument {
     fn regime(&self) -> Self::Regime;
 
     /// Sum of the lines' taxable values after their own discounts, each rounded, before the
-    /// [`TaxDocument::document_discount`]
+    /// [`Document::document_discount`]
     fn subtotal(&self) -> BigDecimal {
         line_values(self.lines()).iter().sum()
     }
 
-    /// Amount the [`TaxDocument::document_discount`] takes off the subtotal; zero when there is
+    /// Amount the [`Document::document_discount`] takes off the subtotal; zero when there is
     /// none
     fn discount_amount(&self) -> BigDecimal {
         self.document_discount()
@@ -59,7 +59,7 @@ pub trait TaxDocument {
             })
     }
 
-    /// Check the [`TaxDocument::document_discount`] can come off the subtotal
+    /// Check the [`Document::document_discount`] can come off the subtotal
     ///
     /// # Errors
     ///
@@ -83,7 +83,7 @@ pub trait TaxDocument {
     ///
     /// # Errors
     ///
-    /// As [`TaxDocument::line_tax_breakdowns`].
+    /// As [`Document::line_tax_breakdowns`].
     fn tax_breakdown(&self) -> Result<TaxBreakdown, Self::Error> {
         Ok(self.line_tax_breakdowns()?.iter().sum())
     }
@@ -91,7 +91,7 @@ pub trait TaxDocument {
 
 /// Each line's taxable value after its own discount, rounded
 #[must_use]
-pub fn line_values<L: BillableLine>(lines: &[L]) -> Vec<BigDecimal> {
+pub fn line_values<L: DocumentLine>(lines: &[L]) -> Vec<BigDecimal> {
     lines
         .iter()
         .map(|line| round_money(&line.taxable_value()))
@@ -112,13 +112,13 @@ pub struct PricedLines {
 
 /// Price `document`'s lines: share its discount across them by value and tax what is left
 ///
-/// The breakdown methods of [`TaxDocument`] and any print model read this, so the line values and
+/// The breakdown methods of [`Document`] and any print model read this, so the line values and
 /// the subtotal are worked out once.
 ///
 /// # Errors
 ///
-/// As [`TaxDocument::line_tax_breakdowns`].
-pub fn price_lines<D: TaxDocument + ?Sized>(document: &D) -> Result<PricedLines, D::Error> {
+/// As [`Document::line_tax_breakdowns`].
+pub fn price_lines<D: Document + ?Sized>(document: &D) -> Result<PricedLines, D::Error> {
     let values = line_values(document.lines());
     let subtotal: BigDecimal = values.iter().sum();
     let discount = document

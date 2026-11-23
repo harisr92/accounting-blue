@@ -9,7 +9,7 @@
 use crate::document::error::BillingError;
 use crate::document::line::LineItem;
 use crate::document::posting::{breakdown_entries, PostingAccounts};
-use crate::document::pricing::TaxDocument;
+use crate::document::pricing::Document;
 use crate::document::tax::{TaxError, TaxRegime};
 use crate::sales::invoice::{check_document, Invoice};
 use crate::types::Entry;
@@ -78,7 +78,7 @@ impl<R: TaxRegime<Error = TaxError> + Clone> CreditNote<R> {
     /// [`BillingError::EmptyNumber`] or [`BillingError::NoLines`],
     /// [`BillingError::NoteBeforeOriginal`] for a note dated before the invoice,
     /// [`BillingError::CreditExceedsInvoice`] for a note worth more than the invoice, or any
-    /// error from [`TaxDocument::tax_breakdown`].
+    /// error from [`Document::tax_breakdown`].
     pub fn new(
         invoice: &Invoice<R>,
         number: impl Into<String>,
@@ -130,7 +130,7 @@ impl<R: TaxRegime<Error = TaxError> + Clone> CreditNote<R> {
     }
 }
 
-impl<R: TaxRegime<Error = TaxError> + Clone> TaxDocument for CreditNote<R> {
+impl<R: TaxRegime<Error = TaxError> + Clone> Document for CreditNote<R> {
     type Line = LineItem;
     type Regime = R;
     type Error = BillingError;

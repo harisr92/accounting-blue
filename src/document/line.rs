@@ -1,8 +1,8 @@
 //! Document lines: what is supplied, how many, at what price and tax rate
 //!
-//! A [`BillableLine`] is anything priced as quantity × unit price less a [`Discount`], at a tax
+//! A [`DocumentLine`] is anything priced as quantity × unit price less a [`Discount`], at a tax
 //! rate. [`LineItem`] is the plain line this module ships; the Indian `GstLineItem` is another
-//! [`BillableLine`] that also carries an HSN/SAC code. [`check_line`] holds the rules every line
+//! [`DocumentLine`] that also carries an HSN/SAC code. [`check_line`] holds the rules every line
 //! must pass.
 
 use crate::document::discount::{Discount, DiscountError};
@@ -11,7 +11,7 @@ use bigdecimal::{BigDecimal, Signed, Zero};
 use serde::{Deserialize, Serialize};
 
 /// A line priced as quantity × unit price, less its own discount, at a tax rate
-pub trait BillableLine {
+pub trait DocumentLine {
     /// What is supplied
     fn description(&self) -> &str;
 
@@ -32,7 +32,7 @@ pub trait BillableLine {
         self.quantity() * self.unit_price()
     }
 
-    /// Amount the line's discount takes off its [`BillableLine::gross_value`], rounded to the
+    /// Amount the line's discount takes off its [`DocumentLine::gross_value`], rounded to the
     /// minor unit; zero when it has none
     fn discount_amount(&self) -> BigDecimal {
         self.discount().map_or_else(BigDecimal::zero, |discount| {
@@ -43,8 +43,8 @@ pub trait BillableLine {
     /// Taxable value of the line: quantity × unit price less the line's discount, exactly
     ///
     /// This is not rounded, and is before any share of a document discount;
-    /// [`TaxDocument::line_tax_breakdowns`](crate::document::TaxDocument::line_tax_breakdowns) takes that share off and rounds, so its
-    /// `taxable_value` is the amount that is invoiced and posted.
+    /// [`Document::line_tax_breakdowns`](crate::document::Document::line_tax_breakdowns) takes
+    /// that share off and rounds, so its `taxable_value` is the amount that is invoiced and posted.
     fn taxable_value(&self) -> BigDecimal {
         self.gross_value() - self.discount_amount()
     }
@@ -115,7 +115,7 @@ impl LineItem {
     /// # Example
     ///
     /// ```
-    /// use accounting_core::document::{BillableLine, Discount, LineItem};
+    /// use accounting_core::document::{DocumentLine, Discount, LineItem};
     /// use bigdecimal::BigDecimal;
     ///
     /// # fn main() -> Result<(), accounting_core::document::LineError> {
@@ -150,7 +150,7 @@ impl LineItem {
     /// # Errors
     ///
     /// [`LineError::InvalidDiscount`] if the discount is out of range or more than the line's
-    /// [`BillableLine::gross_value`].
+    /// [`DocumentLine::gross_value`].
     pub fn with_discount(self, discount: Discount) -> Result<Self, LineError> {
         let item = Self {
             discount: Some(discount),
@@ -176,7 +176,7 @@ impl LineItem {
     }
 }
 
-impl BillableLine for LineItem {
+impl DocumentLine for LineItem {
     fn description(&self) -> &str {
         &self.description
     }
@@ -203,8 +203,8 @@ impl BillableLine for LineItem {
 /// # Errors
 ///
 /// As [`check_line_fields`], then [`LineError::InvalidDiscount`] for a discount out of range or
-/// more than the line's [`BillableLine::gross_value`].
-pub fn check_line<L: BillableLine + ?Sized>(line: &L) -> Result<(), LineError> {
+/// more than the line's [`DocumentLine::gross_value`].
+pub fn check_line<L: DocumentLine + ?Sized>(line: &L) -> Result<(), LineError> {
     check_line_fields(line)?;
     line.discount().map_or(Ok(()), |discount| {
         discount
@@ -219,7 +219,7 @@ pub fn check_line<L: BillableLine + ?Sized>(line: &L) -> Result<(), LineError> {
 ///
 /// The [`LineError`] naming the first rule broken: an empty description, a quantity that is not
 /// positive, a negative unit price, or a rate outside 0-100.
-pub fn check_line_fields<L: BillableLine + ?Sized>(line: &L) -> Result<(), LineError> {
+pub fn check_line_fields<L: DocumentLine + ?Sized>(line: &L) -> Result<(), LineError> {
     if line.description().trim().is_empty() {
         Err(LineError::EmptyDescription)
     } else if !line.quantity().is_positive() {

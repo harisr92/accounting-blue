@@ -13,7 +13,7 @@ use super::types::{
     gst_regime, supply_kind_for, validate_invoice_number, GstDocument, GstInvoice, GstLineItem,
     Gstin, InvoiceError, Recipient, SupplyKind,
 };
-use crate::document::TaxDocument;
+use crate::document::Document;
 use crate::gst::tax::GstRegime;
 use bigdecimal::BigDecimal;
 use chrono::{Datelike, NaiveDate};
@@ -206,7 +206,7 @@ impl GstCreditNote {
     }
 }
 
-impl TaxDocument for GstCreditNote {
+impl Document for GstCreditNote {
     type Line = GstLineItem;
     type Regime = GstRegime;
     type Error = InvoiceError;

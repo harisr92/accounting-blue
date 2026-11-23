@@ -5,8 +5,8 @@
 
 use accounting_core::utils::MemoryStorage;
 use accounting_core::{
-    AccountType, CreditNote, Discount, Entry, FlatRate, Invoice, Ledger, LineItem, PostingAccounts,
-    TaxDocument, TransactionBuilder,
+    AccountType, CreditNote, Discount, Document, Entry, FlatRate, Invoice, Ledger, LineItem,
+    PostingAccounts, TransactionBuilder,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;

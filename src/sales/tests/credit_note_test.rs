@@ -3,7 +3,7 @@
 use crate::document::error::BillingError;
 use crate::document::line::LineItem;
 use crate::document::posting::PostingAccounts;
-use crate::document::pricing::TaxDocument;
+use crate::document::pricing::Document;
 use crate::document::tax::FlatRate;
 use crate::sales::credit_note::*;
 use crate::sales::invoice::Invoice;
