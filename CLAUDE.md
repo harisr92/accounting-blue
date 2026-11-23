@@ -36,6 +36,8 @@ Name types, fields and docs by the side of trade they belong to. Don't use "bill
 | Value before tax | Revenue | Expense |
 | Tax | Output tax | Input tax |
 
+Exception: under GST (Section 34(3) of the CGST Act) a seller issues a debit note to raise an invoice's value. It lives in `gst` as `GstDebitNote`, and the general core never has a sales-side debit note.
+
 ## Coding standards
 
 ### Functional core, imperative shell
