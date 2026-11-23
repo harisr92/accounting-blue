@@ -1,7 +1,7 @@
 //! Tests for the checks every document must pass
 
 use crate::document::discount::{Discount, DiscountError};
-use crate::document::pricing::{LineError, LineItem};
+use crate::document::line::{LineError, LineItem};
 use crate::document::tax::FlatRate;
 use crate::document::validation::*;
 use crate::sales::invoice::Invoice;

@@ -6,8 +6,9 @@
 
 use crate::document::discount::Discount;
 use crate::document::error::BillingError;
+use crate::document::line::LineItem;
 use crate::document::posting::{breakdown_entries, PostingAccounts, PostingLeg};
-use crate::document::pricing::{LineItem, TaxDocument};
+use crate::document::pricing::TaxDocument;
 use crate::document::tax::{TaxError, TaxRegime};
 use crate::types::Entry;
 use chrono::NaiveDate;

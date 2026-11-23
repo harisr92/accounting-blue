@@ -7,8 +7,9 @@
 //! invoice was worth. [`CreditNote::to_entries`] posts it as the reverse of an invoice.
 
 use crate::document::error::BillingError;
+use crate::document::line::LineItem;
 use crate::document::posting::{breakdown_entries, PostingAccounts};
-use crate::document::pricing::{LineItem, TaxDocument};
+use crate::document::pricing::TaxDocument;
 use crate::document::tax::{TaxError, TaxRegime};
 use crate::sales::invoice::{check_document, Invoice};
 use crate::types::Entry;

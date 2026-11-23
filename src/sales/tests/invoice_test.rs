@@ -2,8 +2,9 @@
 
 use crate::document::discount::Discount;
 use crate::document::error::BillingError;
+use crate::document::line::LineItem;
 use crate::document::posting::{PostingAccounts, PostingError};
-use crate::document::pricing::{LineItem, TaxDocument};
+use crate::document::pricing::TaxDocument;
 use crate::document::tax::{FlatRate, NoTax};
 use crate::sales::invoice::*;
 use crate::types::EntryType;

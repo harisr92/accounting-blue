@@ -10,7 +10,8 @@
 //! so a regime with rules of its own, such as Indian GST, can run them alongside its own.
 
 use crate::document::discount::DiscountError;
-use crate::document::pricing::{check_line, BillableLine, LineError, TaxDocument};
+use crate::document::line::{check_line, BillableLine, LineError};
+use crate::document::pricing::TaxDocument;
 use crate::money::round_money;
 use bigdecimal::Zero;
 use chrono::NaiveDate;
