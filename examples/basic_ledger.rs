@@ -1,9 +1,7 @@
 //! Basic ledger usage example
 
 use accounting_core::utils::MemoryStorage;
-use accounting_core::{
-    patterns, AccountType, GstCalculator, GstCategory, Ledger, TransactionBuilder,
-};
+use accounting_core::{patterns, AccountType, InvoiceWithTaxParams, Ledger, TransactionBuilder};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 
@@ -69,56 +67,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ledger.record_transaction(equipment_purchase).await?;
     println!("  ✓ Recorded: Equipment purchase of ₹15,000");
 
-    // Create GST payable account for sales
-    let gst_account = ledger
+    // Create a tax payable account for sales
+    let tax_account = ledger
         .create_account(
-            "gst_payable".to_string(),
-            "GST Payable".to_string(),
+            "tax_payable".to_string(),
+            "Sales Tax Payable".to_string(),
             AccountType::Liability,
             None,
         )
         .await?;
 
-    // Make a sale with GST
-    println!("\n🧾 Processing Sale with GST...");
-    let gst_calculator = GstCalculator::new(false); // intra-state
-    let sale_calculation = gst_calculator.calculate_by_category(
-        BigDecimal::from(10000),
-        GstCategory::Higher, // 18%
-        None,
-    )?;
+    // Make a sale with 18% sales tax. With the `india` feature, `GstCalculator` works out the
+    // CGST/SGST/IGST split; see the `gst_calculations` example.
+    println!("\n🧾 Processing Sale with Tax...");
+    let base_amount = BigDecimal::from(10000);
+    let tax_amount = BigDecimal::from(1800);
+    println!("  Sale Amount: ₹{base_amount}");
+    println!("  Tax (18%):   ₹{tax_amount}");
+    println!("  Total:       ₹{}", &base_amount + &tax_amount);
 
-    println!("  Sale Amount: ₹{}", sale_calculation.base_amount);
-    println!("  CGST (9%):   ₹{}", sale_calculation.cgst_amount);
-    println!("  SGST (9%):   ₹{}", sale_calculation.sgst_amount);
-    println!("  Total GST:   ₹{}", sale_calculation.total_gst_amount);
-    println!("  Total:       ₹{}", sale_calculation.total_amount);
-
-    // Record the sale transaction
-    let sale_transaction = TransactionBuilder::new(
-        "txn003".to_string(),
-        NaiveDate::from_ymd_opt(2024, 1, 10).unwrap(),
-        "Sale of goods with GST".to_string(),
-    )
-    .debit(
-        accounts["accounts_receivable"].id.clone(),
-        sale_calculation.total_amount.clone(),
-        None,
-    )
-    .credit(
-        accounts["sales_revenue"].id.clone(),
-        sale_calculation.base_amount.clone(),
-        None,
-    )
-    .credit(
-        gst_account.id.clone(),
-        sale_calculation.total_gst_amount.clone(),
-        None,
-    )
-    .build()?;
+    let sale_transaction = patterns::create_invoice_with_tax(InvoiceWithTaxParams {
+        id: "txn003".to_string(),
+        date: NaiveDate::from_ymd_opt(2024, 1, 10).unwrap(),
+        description: "Sale of goods with tax".to_string(),
+        receivables_account_id: accounts["accounts_receivable"].id.clone(),
+        revenue_account_id: accounts["sales_revenue"].id.clone(),
+        tax_payable_account_id: tax_account.id.clone(),
+        base_amount,
+        tax_amount,
+    })?;
 
     ledger.record_transaction(sale_transaction).await?;
-    println!("  ✓ Recorded: Sale transaction with GST");
+    println!("  ✓ Recorded: Sale transaction with tax");
 
     // Pay some expenses
     let rent_payment = patterns::create_expense_payment(
