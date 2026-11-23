@@ -10,9 +10,11 @@
 //! tax arithmetic as an invoice.
 
 use super::types::{
-    supply_kind_for, validate_invoice_number, GstDocument, GstInvoice, GstLineItem, Gstin,
-    InvoiceError, Recipient, SupplyKind,
+    gst_regime, supply_kind_for, validate_invoice_number, GstDocument, GstInvoice, GstLineItem,
+    Gstin, InvoiceError, Recipient, SupplyKind,
 };
+use crate::billing::TaxDocument;
+use crate::tax::GstRegime;
 use bigdecimal::BigDecimal;
 use chrono::{Datelike, NaiveDate};
 use serde::{Deserialize, Serialize};
@@ -204,7 +206,11 @@ impl CreditNote {
     }
 }
 
-impl GstDocument for CreditNote {
+impl TaxDocument for CreditNote {
+    type Line = GstLineItem;
+    type Regime = GstRegime;
+    type Error = InvoiceError;
+
     fn number(&self) -> &str {
         &self.note_number
     }
@@ -213,6 +219,16 @@ impl GstDocument for CreditNote {
         self.note_date
     }
 
+    fn lines(&self) -> &[GstLineItem] {
+        &self.line_items
+    }
+
+    fn regime(&self) -> GstRegime {
+        gst_regime(self)
+    }
+}
+
+impl GstDocument for CreditNote {
     fn supply_date(&self) -> NaiveDate {
         self.original.date
     }
@@ -223,10 +239,6 @@ impl GstDocument for CreditNote {
 
     fn buyer(&self) -> &Recipient {
         &self.buyer
-    }
-
-    fn line_items(&self) -> &[GstLineItem] {
-        &self.line_items
     }
 }
 

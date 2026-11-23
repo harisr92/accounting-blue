@@ -1,5 +1,6 @@
 //! GST (Goods and Services Tax) calculation engine for Indian tax compliance
 
+use crate::billing::{TaxBreakdown, TaxComponent, TaxRegime};
 use bigdecimal::{BigDecimal, Signed, Zero};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -321,6 +322,62 @@ impl GstCalculator {
             total_amount,
             self.category_rate(category, is_inter_state),
         )
+    }
+}
+
+/// Code of the central GST component in a [`TaxBreakdown`]
+pub const CGST_CODE: &str = "CGST";
+/// Code of the state GST component in a [`TaxBreakdown`]
+pub const SGST_CODE: &str = "SGST";
+/// Code of the integrated GST component in a [`TaxBreakdown`]
+pub const IGST_CODE: &str = "IGST";
+
+/// Indian GST as a [`TaxRegime`]: CGST + SGST on an intra-state supply, IGST on an inter-state one
+///
+/// Each line is taxed with [`GstCalculation::calculate`] at [`GstRate::for_supply`] for its total
+/// rate, so the rounding is GST's: the base is rounded to paise first, then each component.
+///
+/// # Example
+///
+/// ```
+/// use accounting_core::billing::TaxRegime;
+/// use accounting_core::tax::{GstRegime, CGST_CODE, IGST_CODE};
+/// use bigdecimal::BigDecimal;
+///
+/// # fn main() -> Result<(), accounting_core::tax::GstError> {
+/// let (base, rate) = (BigDecimal::from(1000), BigDecimal::from(18));
+/// let intra = GstRegime { inter_state: false }.line_tax(&base, &rate)?;
+/// assert_eq!(intra.tax(CGST_CODE), BigDecimal::from(90));
+/// let inter = GstRegime { inter_state: true }.line_tax(&base, &rate)?;
+/// assert_eq!(inter.tax(IGST_CODE), BigDecimal::from(180));
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GstRegime {
+    /// Whether the place of supply is in a different state from the seller's registration
+    pub inter_state: bool,
+}
+
+impl TaxRegime for GstRegime {
+    type Error = GstError;
+
+    fn line_tax(
+        &self,
+        taxable_value: &BigDecimal,
+        rate: &BigDecimal,
+    ) -> Result<TaxBreakdown, GstError> {
+        let rate = GstRate::for_supply(rate.clone(), self.inter_state);
+        let calculation = GstCalculation::calculate(taxable_value.clone(), rate)?;
+        let components = if self.inter_state {
+            vec![TaxComponent::new(IGST_CODE, calculation.igst_amount)]
+        } else {
+            vec![
+                TaxComponent::new(CGST_CODE, calculation.cgst_amount),
+                TaxComponent::new(SGST_CODE, calculation.sgst_amount),
+            ]
+        };
+        Ok(TaxBreakdown::new(calculation.base_amount, components))
     }
 }
 

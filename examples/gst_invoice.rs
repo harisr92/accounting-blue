@@ -2,8 +2,8 @@
 //! invoices, discounts, compliance checks and the ledger posting
 
 use accounting_core::invoice::{
-    validate_invoice, Discount, GstBreakdown, GstDocument, GstInvoice, GstLineItem, Gstin,
-    HsnMaster, InvoiceAccounts, InvoiceValidationReport, Severity,
+    validate_invoice, Discount, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster,
+    InvoiceAccounts, InvoiceValidationReport, Severity,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;

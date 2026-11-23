@@ -7,10 +7,9 @@
 
 use super::payment::{non_blank, upi_uri, PaymentDetails};
 use super::state::state_label;
-use super::types::{
-    price_lines, GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError, SupplyTreatment,
-};
+use super::types::{GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError, SupplyTreatment};
 use crate::billing::discount::Discount;
+use crate::billing::price_lines;
 use crate::utils::formatting::{amount_in_words, format_inr};
 use bigdecimal::{BigDecimal, Signed, Zero};
 use chrono::NaiveDate;
@@ -419,7 +418,9 @@ impl InvoicePrint {
         parties: &InvoiceParties,
     ) -> Result<Self, InvoiceError> {
         let priced = price_lines(invoice)?;
-        let totals: GstBreakdown = priced.breakdowns.iter().sum();
+        let breakdowns: Vec<GstBreakdown> =
+            priced.breakdowns.iter().map(GstBreakdown::from).collect();
+        let totals: GstBreakdown = breakdowns.iter().sum();
         parties.check_with_value(invoice, &totals.taxable_value)?;
         let discount = invoice
             .discount
@@ -428,7 +429,7 @@ impl InvoicePrint {
         let rows = invoice
             .line_items
             .iter()
-            .zip(&priced.breakdowns)
+            .zip(&breakdowns)
             .enumerate()
             .map(|(index, (item, breakdown))| print_row(index + 1, item, breakdown))
             .collect();
