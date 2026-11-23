@@ -79,9 +79,13 @@ impl PaymentDetails {
 
 /// `field` trimmed, or `None` when it is blank
 fn trim(field: Option<String>) -> Option<String> {
-    field
-        .map(|text| text.trim().to_string())
-        .filter(|text| !text.is_empty())
+    field.as_deref().and_then(non_blank)
+}
+
+/// `text` trimmed, or `None` when it is blank
+pub(super) fn non_blank(text: &str) -> Option<String> {
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_string())
 }
 
 /// A UPI payment link asking `upi_id` for `amount` rupees, with `note` as the transaction note
@@ -89,14 +93,19 @@ fn trim(field: Option<String>) -> Option<String> {
 /// The amount is rounded to the paisa and written with two decimals. Every value is
 /// percent-encoded, so the link is safe to put in a QR code as is.
 #[must_use]
-pub fn upi_uri(upi_id: &str, payee_name: &str, amount: &BigDecimal, note: &str) -> String {
+pub fn upi_uri(
+    upi_id: impl Into<String>,
+    payee_name: impl Into<String>,
+    amount: &BigDecimal,
+    note: impl Into<String>,
+) -> String {
     let amount = round_to_paise(amount).with_scale(PAISE_SCALE);
     format!(
         "upi://pay?pa={}&pn={}&am={}&cu={UPI_CURRENCY}&tn={}",
-        percent_encode(upi_id),
-        percent_encode(payee_name),
+        percent_encode(&upi_id.into()),
+        percent_encode(&payee_name.into()),
         amount.to_plain_string(),
-        percent_encode(note),
+        percent_encode(&note.into()),
     )
 }
 

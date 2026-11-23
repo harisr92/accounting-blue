@@ -1319,6 +1319,28 @@ fn test_hsn_summary_reports_the_line_unit_and_splits_rows_by_unit() {
 }
 
 #[test]
+fn test_hsn_summary_reports_units_in_upper_case_and_groups_them_regardless_of_case() {
+    let gstr1 = build(&[invoice(
+        "INV-001",
+        day(1),
+        BUYER_SAME_STATE,
+        vec![
+            line("3917", "10", "20", "18").with_unit("nos"),
+            line("3917", "4", "20", "18").with_unit("NOS"),
+        ],
+    )])
+    .unwrap();
+
+    let rows: Vec<_> = gstr1
+        .hsn
+        .b2b
+        .iter()
+        .map(|row| (row.uqc.as_str(), row.quantity.clone()))
+        .collect();
+    assert_eq!(rows, [("NOS", dec("14"))]);
+}
+
+#[test]
 fn test_services_report_na_even_with_a_unit() {
     let gstr1 = build(&[invoice(
         "INV-001",

@@ -54,9 +54,12 @@ const SIGNATURE_WIDTH: f32 = 50.0;
 const QR_SIZE: f32 = 26.0;
 /// Width the QR code and its caption take at the right of the payment block
 const QR_COLUMN: f32 = 40.0;
+/// Modules of blank margin (quiet zone) a scanner needs around a QR code, kept clear of the
+/// caption
+const QR_QUIET_MODULES: f32 = 4.0;
 /// Caption under the UPI QR code
 const QR_CAPTION: &str = "Scan to pay with any UPI app";
-/// Width of each line of the invoice details, right-aligned at the margin
+/// Width each line of the invoice details wraps to, right-aligned at the margin
 const DETAILS_WIDTH: f32 = 80.0;
 /// Space between the Bill To and Ship To columns
 const COLUMN_GAP: f32 = 6.0;
@@ -325,8 +328,8 @@ impl<'a> Layout<'a> {
         ]
         .into_iter()
         .flatten()
-        .map(|line| self.fit(&self.fonts.regular, BODY_SIZE, &line, DETAILS_WIDTH))
         .collect();
+        let lines = self.wrapped(DETAILS_WIDTH, &lines);
         let title = text(
             &self.fonts.bold,
             TITLE_SIZE,
@@ -571,7 +574,8 @@ impl<'a> Layout<'a> {
     fn qr_code(&self, modules: &[Vec<bool>], top: f32) -> Block {
         let centre = LEFT + WORDS_WIDTH - QR_COLUMN / 2.0;
         let code_top = top + 1.0;
-        let caption_y = code_top + QR_SIZE + LINE_HEIGHT - 0.5;
+        let quiet_zone = QR_QUIET_MODULES * QR_SIZE / modules.len().max(1) as f32;
+        let caption_y = code_top + QR_SIZE + quiet_zone + LINE_HEIGHT / 2.0;
         let caption = grey_text(
             &self.fonts.regular,
             SMALL_SIZE,

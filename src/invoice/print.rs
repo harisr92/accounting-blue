@@ -6,7 +6,7 @@
 //! is. The PDF renderer (behind the `pdf` feature) only lays this model out on the page.
 
 use super::discount::Discount;
-use super::payment::{upi_uri, PaymentDetails};
+use super::payment::{non_blank, upi_uri, PaymentDetails};
 use super::state::state_label;
 use super::types::{
     price_lines, GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError, SupplyTreatment,
@@ -681,12 +681,6 @@ fn tax_lines(totals: &GstBreakdown) -> Vec<TaxLine> {
         amount: format_inr(amount),
     })
     .collect()
-}
-
-/// `text` trimmed, or `None` when it is blank
-fn non_blank(text: &str) -> Option<String> {
-    let text = text.trim();
-    (!text.is_empty()).then(|| text.to_string())
 }
 
 /// A number without trailing zeros or exponent, e.g. `10` or `2.5`

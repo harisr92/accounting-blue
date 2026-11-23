@@ -564,6 +564,22 @@ fn test_details_are_printed_in_the_header_and_above_the_terms() {
 }
 
 #[test]
+fn test_long_place_of_supply_wraps_rather_than_being_cut_short() {
+    let print = InvoicePrint {
+        place_of_supply: "26 - Dadra and Nagar Haveli and Daman and Diu".into(),
+        ..InvoicePrint::from_invoice(&invoice(1), &parties()).unwrap()
+    };
+    let page = &pages(&render_pdf(&print, &PdfOptions::default()).unwrap())[0];
+
+    assert!(
+        page.contains("Dadra and Nagar Haveli"),
+        "missing state in:\n{page}"
+    );
+    assert!(page.contains("Diu"), "state name cut short in:\n{page}");
+    assert!(!page.contains("..."), "unexpected ellipsis in:\n{page}");
+}
+
+#[test]
 fn test_invoice_without_a_delivery_address_prints_no_ship_to() {
     let page = &pages(
         &invoice(1)

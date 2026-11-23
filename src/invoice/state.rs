@@ -60,7 +60,8 @@ pub const GST_STATES: &[(&str, &str)] = &[
 
 /// The name of the state or territory with GST code `code`, if there is one
 #[must_use]
-pub fn state_name(code: &str) -> Option<&'static str> {
+pub fn state_name(code: impl Into<String>) -> Option<&'static str> {
+    let code = code.into();
     GST_STATES
         .iter()
         .find(|(known, _)| *known == code)
@@ -69,6 +70,10 @@ pub fn state_name(code: &str) -> Option<&'static str> {
 
 /// `code` with its name, as in `29 - Karnataka`; the bare code when it names no state
 #[must_use]
-pub fn state_label(code: &str) -> String {
-    state_name(code).map_or_else(|| code.to_string(), |name| format!("{code} - {name}"))
+pub fn state_label(code: impl Into<String>) -> String {
+    let code = code.into();
+    match state_name(code.as_str()) {
+        Some(name) => format!("{code} - {name}"),
+        None => code,
+    }
 }

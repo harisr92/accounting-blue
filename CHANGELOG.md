@@ -145,6 +145,8 @@
 - `GstLineItem` has a new public field `unit`, so code that builds it as a struct literal must set it. The PDF item table's Qty column is 3 mm wider and the Description column 3 mm narrower.
 - `InvoicePrint` has new fields `due_date`, `reference`, `ship_to` and `notes`, so code that builds it as a struct literal must set them.
 - `InvoicePrint` has new fields `payment`, `upi_uri` and `total_amount`, so code that builds it as a struct literal must set them.
+- `InvoicePrint` JSON must now carry `buyer_state` and `total_amount`, so print models serialised by 0.2 no longer deserialise; rebuild them with `InvoicePrint::from_invoice`.
+- GSTR-1's HSN summary reports a line's unit in upper case (`nos` is reported, and grouped, as `NOS`). The PDF wraps a long invoice details line, such as "Place of Supply: 26 - Dadra and Nagar Haveli and Daman and Diu", instead of cutting it short.
 - `PdfError` has a new `QrCode { reason }` variant, so an exhaustive `match` on it needs an arm.
 
 ## 0.2.0

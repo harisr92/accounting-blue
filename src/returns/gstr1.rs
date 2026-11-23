@@ -1079,11 +1079,7 @@ fn hsn_rows(priced: &[&PricedDocument], master: &HsnMaster) -> Vec<HsnRow> {
         })
         .fold(BTreeMap::new(), |mut rows, (item, breakdown, quantity)| {
             let totals: &mut HsnTotals = rows
-                .entry((
-                    item.hsn_sac.clone(),
-                    uqc(item).to_string(),
-                    item.gst_rate.normalized(),
-                ))
+                .entry((item.hsn_sac.clone(), uqc(item), item.gst_rate.normalized()))
                 .or_default();
             if totals.first_description.is_empty() {
                 totals.first_description.clone_from(&item.description);
@@ -1100,12 +1096,17 @@ fn hsn_rows(priced: &[&PricedDocument], master: &HsnMaster) -> Vec<HsnRow> {
         .collect()
 }
 
-/// The unit quantity code a line reports: its unit, or [`GOODS_UQC`], for goods, and
-/// [`SERVICES_UQC`] for services
-fn uqc(item: &GstLineItem) -> &str {
+/// The unit quantity code a line reports: its unit in upper case, as the portal's UQC codes
+/// are, or [`GOODS_UQC`], for goods, and [`SERVICES_UQC`] for services
+fn uqc(item: &GstLineItem) -> String {
     match HsnSacKind::of_code(&item.hsn_sac) {
-        HsnSacKind::Hsn => item.unit.as_deref().unwrap_or(GOODS_UQC),
-        HsnSacKind::Sac => SERVICES_UQC,
+        HsnSacKind::Hsn => item
+            .unit
+            .as_deref()
+            .map(str::trim)
+            .filter(|unit| !unit.is_empty())
+            .map_or_else(|| GOODS_UQC.to_string(), str::to_ascii_uppercase),
+        HsnSacKind::Sac => SERVICES_UQC.to_string(),
     }
 }
 
