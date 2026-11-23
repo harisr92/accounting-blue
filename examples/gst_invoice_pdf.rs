@@ -2,11 +2,13 @@
 //!
 //! Run with `cargo run --example gst_invoice_pdf --features pdf`. Two PDFs are written to the
 //! system temp directory: one without a logo, and one with the sample logo in
-//! `examples/assets/logo.png`. Pass the path of a TrueType font that has the ₹ glyph (for example
+//! `examples/assets/logo.png`. Both show units on the lines, a due date, a reference, a delivery
+//! address, notes, and payment details with a UPI QR code. Pass the path of a TrueType font that has the ₹ glyph (for example
 //! Noto Sans) as the first argument to print amounts with the rupee sign.
 
 use accounting_core::invoice::{
-    Discount, GstInvoice, GstLineItem, Gstin, InvoiceParties, InvoiceParty, PdfFont, PdfOptions,
+    render_pdf, Discount, GstInvoice, GstLineItem, Gstin, InvoiceDetails, InvoiceParties,
+    InvoiceParty, InvoicePrint, PaymentDetails, PdfFont, PdfOptions,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -33,6 +35,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             BigDecimal::from_str("68500.00")?,
             BigDecimal::from(18),
         )?
+        // The unit prints after the quantity, as in "2 NOS"
+        .with_unit("NOS")
         // A line discount, printed in the Disc. column
         .with_discount(Discount::Percent(BigDecimal::from(5)))?,
         GstLineItem::new(
@@ -41,7 +45,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             BigDecimal::from(25),
             BigDecimal::from_str("349.50")?,
             BigDecimal::from(5),
-        )?,
+        )?
+        .with_unit("PCS"),
     ];
 
     let invoice = GstInvoice::new(
@@ -70,6 +75,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     );
 
+    // Print-only details: due date, the buyer's reference, a delivery address and notes
+    let details = InvoiceDetails {
+        due_date: NaiveDate::from_ymd_opt(2025, 7, 30),
+        reference: Some("PO-GLX-7781".into()),
+        ship_to: Some(InvoiceParty::unregistered(
+            "Globex Technologies - Warehouse",
+            vec![
+                "Plot 18, Hosur Road".into(),
+                "Bengaluru, Karnataka 560068".into(),
+            ],
+        )),
+        notes: vec!["Thank you for your business.".into()],
+    };
+    // Where to pay; the UPI ID adds a QR code for the invoice total
+    let payment = PaymentDetails {
+        bank_name: Some("HDFC Bank".into()),
+        account_number: Some("50100012345678".into()),
+        ifsc: Some("HDFC0001234".into()),
+        upi_id: Some("acmeservices@okhdfc".into()),
+        ..PaymentDetails::default()
+    };
+    let print = InvoicePrint::from_invoice(&invoice, &parties)?
+        .with_details(&details)
+        .with_payment(payment);
+
     let mut options = PdfOptions {
         terms: vec![
             "Payment due within 30 days of the invoice date.".into(),
@@ -86,10 +116,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Without a logo the seller block starts at the left margin
-    write_pdf(
-        &invoice.to_pdf(&parties, &options)?,
-        "gst_invoice_example.pdf",
-    )?;
+    write_pdf(&render_pdf(&print, &options)?, "gst_invoice_example.pdf")?;
 
     // With a logo it is drawn top left, scaled to fit, and the seller block moves right of it
     let with_logo = PdfOptions {
@@ -97,7 +124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..options
     };
     write_pdf(
-        &invoice.to_pdf(&parties, &with_logo)?,
+        &render_pdf(&print, &with_logo)?,
         "gst_invoice_example_logo.pdf",
     )?;
     Ok(())

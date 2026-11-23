@@ -624,9 +624,27 @@ fn test_payment_details_are_printed_on_the_last_page() {
         "A/c No: 50100012345678",
         "IFSC: HDFC0001234",
         "UPI: acme@okhdfc",
+        "Scan to pay with any UPI app",
     ] {
         assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
     }
+}
+
+#[test]
+fn test_no_qr_code_without_a_upi_link() {
+    let bank_only = PaymentDetails {
+        upi_id: None,
+        ..payment()
+    };
+    let print = InvoicePrint::from_invoice(&invoice(1), &parties())
+        .unwrap()
+        .with_payment(bank_only);
+    let page = &pages(&render_pdf(&print, &PdfOptions::default()).unwrap())[0];
+    assert!(page.contains("IFSC: HDFC0001234"));
+    assert!(
+        !page.contains("Scan to pay"),
+        "no QR caption expected in:\n{page}"
+    );
 }
 
 #[test]

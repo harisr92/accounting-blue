@@ -2,8 +2,10 @@
 //!
 //! [`render_pdf`] lays an [`InvoicePrint`] out on A4 pages and returns the PDF bytes;
 //! [`GstInvoice::to_pdf`] builds the print model and renders it in one call. The page shows the
-//! logo if one is given, the seller and invoice details, the buyer, the item table, the tax summary
-//! with the total in words, any terms, a signature line, and page numbers with any footer note the caller sets. Item
+//! logo if one is given, the seller and invoice details, the buyer (and the delivery address when
+//! there is one), the item table, the tax summary with the total in words, any notes, the payment
+//! details with a UPI QR code when the print model has a UPI link, any terms, a signature line,
+//! and page numbers with any footer note the caller sets. Item
 //! tables longer than a page continue on the next one, and descriptions too long for their
 //! column are cut short with an ellipsis.
 //!
@@ -55,6 +57,7 @@
 mod draw;
 mod fonts;
 mod layout;
+mod qr;
 mod text;
 
 use super::print::{paginate_rows, InvoiceParties, InvoicePrint};
@@ -63,6 +66,7 @@ use draw::{Image, PAGE_HEIGHT, PAGE_WIDTH};
 use fonts::{Face, Fonts};
 use layout::Layout;
 use printpdf::{Mm, Op, PdfDocument, PdfPage, PdfSaveOptions, RawImage, TextItem};
+use qr::qr_modules;
 use std::fmt;
 
 /// Currency label printed before amounts when the built-in font is used
@@ -157,6 +161,12 @@ pub enum PdfError {
         /// The first character that can't be drawn
         ch: char,
     },
+    /// The UPI payment link could not be encoded as a QR code
+    #[error("the UPI payment link cannot be drawn as a QR code: {reason}")]
+    QrCode {
+        /// Why encoding failed, such as a link too long for a QR code
+        reason: String,
+    },
     /// The notes and terms, once wrapped, don't fit below the totals on one page
     #[error("the notes and terms take {lines} lines but at most {max_lines} fit below the totals")]
     TermsTooLong {
@@ -173,7 +183,8 @@ pub enum PdfError {
 ///
 /// [`PdfError::InvalidFont`] if custom font bytes don't parse, [`PdfError::MissingGlyph`] if the
 /// font can't draw a character on the page, [`PdfError::InvalidLogo`] if the logo can't be
-/// decoded, [`PdfError::TermsTooLong`] if the terms don't fit on the last page, and
+/// decoded, [`PdfError::QrCode`] if the UPI payment link can't be drawn as a QR code,
+/// [`PdfError::TermsTooLong`] if the notes and terms don't fit on the last page, and
 /// [`PdfError::BuiltinFontMetrics`] if the built-in font metrics are unavailable.
 pub fn render_pdf(print: &InvoicePrint, options: &PdfOptions) -> Result<Vec<u8>, PdfError> {
     let mut document = PdfDocument::new(&format!("{} {}", print.title, print.invoice_number));
@@ -183,7 +194,8 @@ pub fn render_pdf(print: &InvoicePrint, options: &PdfOptions) -> Result<Vec<u8>,
         .as_deref()
         .map(|bytes| load_logo(&mut document, bytes))
         .transpose()?;
-    let layout = Layout::new(&fonts, print, options, logo.as_ref());
+    let qr = print.upi_uri.as_deref().map(qr_modules).transpose()?;
+    let layout = Layout::new(&fonts, print, options, logo.as_ref(), qr.as_deref());
     layout.check_terms_fit()?;
 
     let pages = paginate_rows(&print.rows, layout.capacity());

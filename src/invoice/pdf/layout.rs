@@ -7,6 +7,7 @@ use super::draw::{
     grey_text, image, page_setup, rule, text, Align, Image, PAGE_HEIGHT, PAGE_WIDTH,
 };
 use super::fonts::{Face, Fonts};
+use super::qr::qr_ops;
 use super::text::{fit, wrap};
 use super::{PdfError, PdfOptions};
 use crate::invoice::payment::PaymentDetails;
@@ -49,6 +50,12 @@ const WORDS_WIDTH: f32 = 105.0;
 const TOTALS_LABEL_X: f32 = 128.0;
 const SIGNATURE_HEIGHT: f32 = 22.0;
 const SIGNATURE_WIDTH: f32 = 50.0;
+/// Side of the UPI QR code
+const QR_SIZE: f32 = 26.0;
+/// Width the QR code and its caption take at the right of the payment block
+const QR_COLUMN: f32 = 40.0;
+/// Caption under the UPI QR code
+const QR_CAPTION: &str = "Scan to pay with any UPI app";
 /// Width of each line of the invoice details, right-aligned at the margin
 const DETAILS_WIDTH: f32 = 80.0;
 /// Space between the Bill To and Ship To columns
@@ -170,6 +177,7 @@ pub(super) struct Layout<'a> {
     print: &'a InvoicePrint,
     options: &'a PdfOptions,
     logo: Option<&'a Image>,
+    qr: Option<&'a [Vec<bool>]>,
 }
 
 impl<'a> Layout<'a> {
@@ -178,12 +186,14 @@ impl<'a> Layout<'a> {
         print: &'a InvoicePrint,
         options: &'a PdfOptions,
         logo: Option<&'a Image>,
+        qr: Option<&'a [Vec<bool>]>,
     ) -> Self {
         Self {
             fonts,
             print,
             options,
             logo,
+            qr,
         }
     }
 
@@ -541,15 +551,37 @@ impl<'a> Layout<'a> {
         ([notes, payment, terms].concat(), bottom)
     }
 
-    /// "Payment details" with the bank account and UPI ID, or nothing when there are none
+    /// "Payment details" with the bank account and UPI ID, and the UPI QR code beside them when
+    /// there is one; nothing when there are no payment details
     fn payment(&self, top: f32) -> Block {
-        let lines = self
-            .print
-            .payment
-            .as_ref()
-            .map(payment_lines)
-            .unwrap_or_default();
-        self.section(top, "Payment details", &lines, WORDS_WIDTH)
+        let Some(payment) = &self.print.payment else {
+            return (Vec::new(), top);
+        };
+        let lines = payment_lines(payment);
+        let Some(modules) = self.qr else {
+            return self.section(top, "Payment details", &lines, WORDS_WIDTH);
+        };
+        let (details, details_bottom) =
+            self.section(top, "Payment details", &lines, WORDS_WIDTH - QR_COLUMN);
+        let (code, code_bottom) = self.qr_code(modules, top);
+        ([details, code].concat(), details_bottom.max(code_bottom))
+    }
+
+    /// The QR code centred in the right of the payment block, with [`QR_CAPTION`] under it
+    fn qr_code(&self, modules: &[Vec<bool>], top: f32) -> Block {
+        let centre = LEFT + WORDS_WIDTH - QR_COLUMN / 2.0;
+        let code_top = top + 1.0;
+        let caption_y = code_top + QR_SIZE + LINE_HEIGHT - 0.5;
+        let caption = grey_text(
+            &self.fonts.regular,
+            SMALL_SIZE,
+            MUTED,
+            (centre, caption_y),
+            Align::Center,
+            QR_CAPTION,
+        );
+        let code = qr_ops(modules, (centre - QR_SIZE / 2.0, code_top), QR_SIZE);
+        ([code, caption].concat(), caption_y)
     }
 
     /// A bold `heading` and `lines` wrapped to `width` below it, or nothing when `lines` is

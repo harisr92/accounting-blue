@@ -21,14 +21,18 @@ async-trait = "0.1"
 serde_json = "1.0"
 # PDF export, behind the `pdf` feature (needs Rust 1.88)
 printpdf = { version = "0.12", default-features = false, features = ["png", "jpeg"], optional = true }
+# UPI QR codes on the PDF, behind the `pdf` feature
+qrcode = { version = "0.14", default-features = false, optional = true }
 
 [dev-dependencies]
+# Decodes the UPI QR code in the PDF tests
+rqrr = "0.9"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = []
 # Render GST invoices to PDF with printpdf
-pdf = ["dep:printpdf"]
+pdf = ["dep:printpdf", "dep:qrcode"]
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- A UPI QR code on the PDF: when the print model has a `upi_uri`, the payment block draws it as a vector QR code (error correction M) captioned "Scan to pay with any UPI app". It needs the new `qrcode` dependency, pulled in by the `pdf` feature. `PdfError` has a new `QrCode` variant for a link too long to encode.
 - Payment details on invoices (`accounting_core::invoice::payment`): `PaymentDetails { payee_name, bank_name, account_number, ifsc, upi_id, amount_due }`, applied with `InvoicePrint::with_payment(details)`. Blank fields are unset, the payee defaults to the seller, and details with no bank or UPI field print nothing. `InvoicePrint` gains `payment`, `upi_uri` and `total_amount` (the unformatted total). `upi_uri(upi_id, payee_name, amount, note)` builds a percent-encoded `upi://pay` link with a two-decimal amount; the print model carries one for the amount due (`amount_due`, or the invoice total when unset) when there is a UPI ID and that amount is above zero. The PDF prints a "Payment details" block between the notes and the terms on the last page.
 - Print-only invoice details: `InvoiceDetails { due_date, reference, ship_to, notes }`, applied with `InvoicePrint::with_details(&details)`. `InvoicePrint` gains `due_date` (`dd-mm-yyyy`), `reference`, `ship_to` and `notes`, all empty from `from_invoice`; blank references and notes are left out. The PDF prints the due date and reference with the invoice details, a "Ship To" block beside "Bill To" when there is a delivery address (its GSTIN only when it has one), and the notes above the terms on the last page. `PdfError::TermsTooLong` now counts the notes and terms together.
 - Units on invoice lines: `GstLineItem::unit: Option<String>` (free text, set with `with_unit`; a blank unit is none). The printed quantity reads `5 BKT` when a line has a unit, and GSTR-1's HSN summary reports it as the unit quantity code, grouping rows by HSN/SAC code, unit and rate so quantities in different units are never added. Goods without a unit still report `OTH`, and services `NA`.
@@ -144,6 +145,7 @@
 - `GstLineItem` has a new public field `unit`, so code that builds it as a struct literal must set it. The PDF item table's Qty column is 3 mm wider and the Description column 3 mm narrower.
 - `InvoicePrint` has new fields `due_date`, `reference`, `ship_to` and `notes`, so code that builds it as a struct literal must set them.
 - `InvoicePrint` has new fields `payment`, `upi_uri` and `total_amount`, so code that builds it as a struct literal must set them.
+- `PdfError` has a new `QrCode { reason }` variant, so an exhaustive `match` on it needs an arm.
 
 ## 0.2.0
 

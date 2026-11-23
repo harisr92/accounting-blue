@@ -2,7 +2,8 @@
 
 use super::fonts::Face;
 use printpdf::{
-    Color, Greyscale, Line, LinePoint, Mm, Op, Point, Pt, TextItem, XObjectId, XObjectTransform,
+    Color, Greyscale, Line, LinePoint, Mm, Op, PaintMode, Point, Polygon, PolygonRing, Pt,
+    TextItem, WindingOrder, XObjectId, XObjectTransform,
 };
 
 /// A4 width in millimetres
@@ -133,4 +134,27 @@ pub(super) fn image(
         },
     };
     (vec![op], drawn_height)
+}
+
+/// Filled squares of `side` millimetres, one for each top-left corner in `corners`, as one shape
+pub(super) fn filled_squares(corners: impl IntoIterator<Item = (f32, f32)>, side: f32) -> Op {
+    let rings = corners
+        .into_iter()
+        .map(|(x, y)| PolygonRing {
+            points: [(x, y), (x + side, y), (x + side, y + side), (x, y + side)]
+                .into_iter()
+                .map(|(x, y)| LinePoint {
+                    p: point(x, y),
+                    bezier: false,
+                })
+                .collect(),
+        })
+        .collect();
+    Op::DrawPolygon {
+        polygon: Polygon {
+            rings,
+            mode: PaintMode::Fill,
+            winding_order: WindingOrder::NonZero,
+        },
+    }
 }

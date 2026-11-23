@@ -286,7 +286,7 @@ Enable the `pdf` feature to render an invoice as an A4 PDF. It needs Rust 1.88 b
 
 ```toml
 [dependencies]
-accounting-core = { version = "0.2", features = ["pdf"] }
+accounting-core = { version = "0.3", features = ["pdf"] }
 ```
 
 ```rust,ignore
@@ -300,6 +300,8 @@ let pdf: Vec<u8> = invoice.to_pdf(&parties, &PdfOptions::default())?;
 ```
 
 The standard font has no `₹` glyph, so amounts are labelled `Rs.` by default. To print the rupee sign, pass a TrueType font that has it as `PdfFont::Custom` and set `currency_label` to `"₹"`. `InvoicePrint::from_invoice` gives the same formatted data without the `pdf` feature, for example to serialise as JSON. For an unregistered buyer, pass `InvoiceParty::unregistered(name, address)`. Below a taxable value of ₹50,000 (Rule 46), `InvoiceParty::walk_in()` prints the invoice without the buyer's name or address.
+
+The PDF prints no footer note unless `PdfOptions::footer_note` sets one. `GstLineItem::with_unit` prints a unit after the quantity ("5 BKT"). `InvoicePrint::with_details` adds a due date, a reference, a delivery address and notes, and `InvoicePrint::with_payment` adds bank details and, with a UPI ID, a QR code any UPI app can scan; render the result with `render_pdf`. Set `PaymentDetails::amount_due` to the balance still owed so the QR code of a part-paid invoice asks for that.
 
 ### GSTR-1
 
