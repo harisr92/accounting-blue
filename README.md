@@ -1,14 +1,14 @@
 # Accounting Core
 
-A comprehensive Rust library for double-entry bookkeeping, GST calculations, and financial reporting. Designed as the open-source foundation for accounting applications.
+A Rust library for double-entry bookkeeping, financial reporting and reconciliation, with optional Indian GST support. Designed as the open-source foundation for accounting applications.
 
 ## Features
 
 - **🏦 Double-entry Bookkeeping**: Complete transaction validation and balance tracking
 - **📊 Account Management**: Support for Assets, Liabilities, Equity, Income, and Expense accounts
-- **🧾 GST Calculations**: Indian GST compliance with CGST/SGST/IGST support
-- **📄 Invoice PDFs**: Print-ready A4 tax invoices with Indian digit grouping and the total in words (optional `pdf` feature)
-- **📑 GSTR-1 Returns**: Aggregate B2B invoices into GSTR-1 and export it as GST portal JSON
+- **🧾 GST Calculations** (`india` feature): Indian GST compliance with CGST/SGST/IGST support, GSTIN and HSN/SAC codes
+- **📄 Invoice PDFs** (`pdf` feature): Print-ready A4 tax invoices with Indian digit grouping and the total in words
+- **📑 GSTR-1 Returns** (`india` feature): Aggregate B2B invoices into GSTR-1 and export it as GST portal JSON
 - **📈 Financial Reporting**: Balance sheets, income statements, and trial balance generation
 - **🔗 Reconciliation**: Match ledger records against bank statements and payment gateways
 - **🔍 Storage Abstraction**: Database-agnostic design with trait-based storage
@@ -21,7 +21,19 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-accounting-core = "0.1.0"
+accounting-core = "0.4"
+```
+
+The core is country-neutral. Indian tax support is opt-in:
+
+| Feature | Adds |
+|---------|------|
+| `india` | GST rates and maths, GSTIN, HSN/SAC master data, GST invoices and credit notes, GSTR-1 returns, Indian amount formatting |
+| `pdf` | Renders GST invoices to PDF (needs Rust 1.88); turns on `india` |
+
+```toml
+[dependencies]
+accounting-core = { version = "0.4", features = ["india"] }
 ```
 
 ### Basic Usage
@@ -76,6 +88,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ### GST Calculations
+
+Needs the `india` feature.
 
 ```rust
 use accounting_core::{GstCalculator, GstCategory};
@@ -214,16 +228,16 @@ Run the examples to see the library in action:
 cargo run --example basic_ledger
 
 # GST calculation examples
-cargo run --example gst_calculations
+cargo run --example gst_calculations --features india
 
 # GSTIN validation, HSN/SAC rates and B2B invoices
-cargo run --example gst_invoice
+cargo run --example gst_invoice --features india
 
 # Render a GST invoice to PDF, without and with a logo (pass a TTF with the ₹ glyph to print the rupee sign)
 cargo run --example gst_invoice_pdf --features pdf
 
 # Aggregate a month of invoices into GSTR-1 and print the portal JSON
-cargo run --example gstr1_export
+cargo run --example gstr1_export --features india
 
 # Bank reconciliation
 cargo run --example reconciliation
@@ -234,7 +248,9 @@ cargo run --example reconciliation
 Run the test suite:
 
 ```bash
-cargo test
+cargo test                  # core only
+cargo test --features india # adds the GST, invoice and GSTR-1 tests
+cargo test --all-features   # adds the PDF renderer's tests
 ```
 
 ## Contributing
@@ -261,7 +277,7 @@ This library follows standard accounting principles:
 
 ## GST Compliance
 
-The library supports Indian GST with:
+With the `india` feature, the library supports Indian GST with:
 
 - **Intra-state transactions**: CGST + SGST
 - **Inter-state transactions**: IGST
@@ -286,7 +302,7 @@ Enable the `pdf` feature to render an invoice as an A4 PDF. It needs Rust 1.88 b
 
 ```toml
 [dependencies]
-accounting-core = { version = "0.3", features = ["pdf"] }
+accounting-core = { version = "0.4", features = ["pdf"] }
 ```
 
 ```rust,ignore
