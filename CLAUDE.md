@@ -115,7 +115,7 @@ cargo test --features india      # adds GST, invoice and GSTR-1 tests
 cargo test --all-features        # adds the `pdf` renderer's tests
 cargo doc --no-deps
 cargo doc --no-deps --all-features
-for ex in basic_ledger reconciliation pagination_demo api_pagination_patterns web_integration; do
+for ex in basic_ledger invoice reconciliation pagination_demo api_pagination_patterns web_integration; do
   cargo run -q --example "$ex" > /dev/null || echo "FAILED: $ex"
 done
 for ex in gst_calculations gst_invoice gstr1_export; do

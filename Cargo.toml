@@ -69,6 +69,10 @@ path = "examples/gstr1_export.rs"
 required-features = ["india"]
 
 [[example]]
+name = "invoice"
+path = "examples/invoice.rs"
+
+[[example]]
 name = "reconciliation"
 path = "examples/reconciliation.rs"
 

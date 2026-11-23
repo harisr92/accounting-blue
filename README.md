@@ -6,6 +6,7 @@ A Rust library for double-entry bookkeeping, financial reporting and reconciliat
 
 - **🏦 Double-entry Bookkeeping**: Complete transaction validation and balance tracking
 - **📊 Account Management**: Support for Assets, Liabilities, Equity, Income, and Expense accounts
+- **🧮 Invoicing**: Invoices, credit notes and discounts under a pluggable tax regime (none, a flat VAT or sales tax, or your own), posted to the ledger
 - **🧾 GST Calculations** (`india` feature): Indian GST compliance with CGST/SGST/IGST support, GSTIN and HSN/SAC codes
 - **📄 Invoice PDFs** (`pdf` feature): Print-ready A4 tax invoices with Indian digit grouping and the total in words
 - **📑 GSTR-1 Returns** (`india` feature): Aggregate B2B invoices into GSTR-1 and export it as GST portal JSON
@@ -86,6 +87,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+### Invoicing
+
+Invoices work in any country. Pick a tax regime: `NoTax`, `FlatRate` for a VAT or sales tax, or your own `TaxRegime`.
+
+```rust
+use accounting_core::{CreditNote, FlatRate, Invoice, LineItem, PostingAccounts, TaxDocument};
+use bigdecimal::BigDecimal;
+use chrono::NaiveDate;
+
+let line = LineItem::new("Consulting", BigDecimal::from(10), BigDecimal::from(100), BigDecimal::from(20))?;
+let invoice = Invoice::new("INV-001", NaiveDate::from_ymd_opt(2025, 3, 1).unwrap(), "Acme Ltd",
+    vec![line.clone()], FlatRate::new("VAT"))?;
+assert_eq!(invoice.tax_breakdown()?.total, BigDecimal::from(1200));
+
+// Dr receivable 1200, Cr sales 1000, Cr VAT payable 200
+let accounts = PostingAccounts::new("1200", "4000").with_tax("VAT", "2200");
+let entries = invoice.to_entries(&accounts)?;
+
+// A credit note against it posts the reverse
+let note = CreditNote::new(&invoice, "CN-001", NaiveDate::from_ymd_opt(2025, 3, 5).unwrap(), vec![line])?;
+```
+
+The Indian GST invoice (`india` feature) is built on the same core, with GST as its tax regime.
 
 ### GST Calculations
 
@@ -238,6 +263,9 @@ cargo run --example gst_invoice_pdf --features pdf
 
 # Aggregate a month of invoices into GSTR-1 and print the portal JSON
 cargo run --example gstr1_export --features india
+
+# A VAT invoice and a credit note, posted to the ledger
+cargo run --example invoice
 
 # Bank reconciliation
 cargo run --example reconciliation
