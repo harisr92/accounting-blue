@@ -1,4 +1,4 @@
-//! Credit notes against invoices under any tax regime
+//! Credit notes against sales invoices under any tax regime
 //!
 //! A seller issues a [`CreditNote`] to reduce the value of an invoice it issued: goods returned,
 //! a discount after the sale, or an amount over-billed. The note is built from the [`Invoice`] it
@@ -7,10 +7,10 @@
 //! invoice was worth. [`CreditNote::to_entries`] posts it as the reverse of an invoice.
 
 use crate::document::error::BillingError;
-use crate::document::invoice::{check_document, Invoice};
 use crate::document::posting::{breakdown_entries, PostingAccounts};
 use crate::document::pricing::{LineItem, TaxDocument};
 use crate::document::tax::{TaxError, TaxRegime};
+use crate::sales::invoice::{check_document, Invoice};
 use crate::types::Entry;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -32,7 +32,8 @@ pub struct OriginalDocument {
 /// # Example
 ///
 /// ```
-/// use accounting_core::document::{CreditNote, FlatRate, Invoice, LineItem, PostingAccounts};
+/// use accounting_core::document::{FlatRate, LineItem, PostingAccounts};
+/// use accounting_core::sales::{CreditNote, Invoice};
 /// use accounting_core::EntryType;
 /// use bigdecimal::BigDecimal;
 /// use chrono::NaiveDate;

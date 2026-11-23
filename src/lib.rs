@@ -164,8 +164,8 @@
 //!
 //! ## Invoicing
 //!
-//! [`document`] builds invoices and credit notes, works out their tax under a [`TaxRegime`] and
-//! posts them as balanced journal entries.
+//! [`sales`] builds invoices and credit notes on the shared [`document`] machinery, works out
+//! their tax under a [`TaxRegime`] and posts them as balanced journal entries.
 //!
 //! ```rust
 //! use accounting_core::{FlatRate, Invoice, LineItem, PostingAccounts, TaxDocument};
@@ -260,14 +260,14 @@ pub mod ledger;
 pub mod money;
 pub mod reconciliation;
 pub mod reports;
+pub mod sales;
 pub mod traits;
 pub mod types;
 pub mod utils;
 
 pub use document::{
-    apportion, BillableLine, BillingError, CreditNote, Discount, DiscountError, FlatRate, Invoice,
-    LineItem, NoTax, PostingAccounts, PostingLeg, TaxBreakdown, TaxComponent, TaxDocument,
-    TaxRegime,
+    apportion, BillableLine, BillingError, Discount, DiscountError, FlatRate, LineItem, NoTax,
+    PostingAccounts, PostingLeg, TaxBreakdown, TaxComponent, TaxDocument, TaxRegime,
 };
 pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};
 #[cfg(feature = "india")]
@@ -293,6 +293,7 @@ pub use ledger::{
 pub use reports::{
     BalanceSheet, CashFlowItem, CashFlowStatement, IncomeStatement, LedgerIntegrityReport,
 };
+pub use sales::{CreditNote, Invoice};
 pub use traits::{
     AccountStore, AccountValidator, LedgerStorage, TransactionStore, TransactionValidator,
 };

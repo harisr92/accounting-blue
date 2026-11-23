@@ -135,7 +135,8 @@ impl<I: Issue> ValidationReport<I> {
 /// # Example
 ///
 /// ```
-/// use accounting_core::document::{validate_document, FlatRate, Invoice, LineItem};
+/// use accounting_core::document::{validate_document, FlatRate, LineItem};
+/// use accounting_core::sales::Invoice;
 /// use bigdecimal::BigDecimal;
 /// use chrono::NaiveDate;
 ///

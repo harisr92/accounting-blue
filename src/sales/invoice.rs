@@ -1,4 +1,4 @@
-//! Invoices under any tax regime
+//! Sales invoices under any tax regime
 //!
 //! An [`Invoice`] is a numbered, dated bill to a customer: [`LineItem`]s, an optional discount off
 //! the subtotal, and the [`TaxRegime`] its lines are taxed under. Its pricing comes from
@@ -21,7 +21,8 @@ use serde::{Deserialize, Serialize};
 /// # Example
 ///
 /// ```
-/// use accounting_core::document::{FlatRate, Invoice, LineItem, PostingAccounts, TaxDocument};
+/// use accounting_core::document::{FlatRate, LineItem, PostingAccounts, TaxDocument};
+/// use accounting_core::sales::Invoice;
 /// use bigdecimal::BigDecimal;
 /// use chrono::NaiveDate;
 ///
