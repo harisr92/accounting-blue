@@ -11,8 +11,10 @@ Rust library for double-entry bookkeeping, financial reports and bank/gateway re
 | `src/traits.rs` | Ports: `AccountStore`, `TransactionStore` (data access only), and the validator traits |
 | `src/ledger/` | `Ledger` orchestrator (the imperative shell), account and transaction operations, pure `balances` |
 | `src/reports/` | Pure report builders (balance sheet, income statement, cash flow, integrity) and their DTOs |
-| `src/tax/gst.rs` | GST rates and calculations (`india` feature) |
-| `src/invoice/` | GSTIN, GST invoices, HSN/SAC master data, the pure print model (`india` feature), and the PDF renderer behind the `pdf` feature (implies `india`) |
+| `src/money.rs` | Money rounding and percentages: the crate's one rounding rule |
+| `src/billing/` | Country-neutral invoicing: lines, documents, the pricing engine, tax regimes (`NoTax`, `FlatRate`), invoices, credit notes, posting and shared validation |
+| `src/tax/gst.rs` | GST rates and calculations, and `GstRegime`, the GST `TaxRegime` (`india` feature) |
+| `src/invoice/` | GSTIN, GST invoices and credit notes built on `billing`, HSN/SAC master data, the pure print model (`india` feature), and the PDF renderer behind the `pdf` feature (implies `india`) |
 | `src/returns/` | GST returns built from invoices: the pure GSTR-1 builder, its portal-schema DTOs and JSON export, and `ReturnPeriod` (`india` feature) |
 | `src/reconciliation/` | Pure matching engine, split by pass, with scoring and the report |
 | `src/utils/` | `MemoryStorage`, `MemoryReconciliationStorage`, validation rules, Indian amount formatting (`india` feature) |
@@ -39,9 +41,13 @@ Rust library for double-entry bookkeeping, financial reports and bank/gateway re
 |------|------|
 | Debit/credit sign rule | `AccountType::balance_effect` and `EntryType::signed` |
 | Pagination | `PaginationOption::paginate` |
+| Rounding money | `money::round_money` (`tax::round_to_paise` re-exports it) |
 | Choosing a GST rate by supply type | `GstRate::for_supply` |
-| Validation rules | `utils::validation` |
-| Discount amounts and sharing an invoice discount across lines | `invoice::discount` |
+| Validation rules | `utils::validation`; rules every invoice shares: `billing::validation` |
+| Discount amounts and sharing an invoice discount across lines | `billing::discount` |
+| Pricing lines and documents | `BillableLine`, `TaxDocument` and `price_lines` in `billing::document` |
+| Tax on a line | a `TaxRegime` impl: `NoTax`, `FlatRate`, `GstRegime` |
+| Turning a breakdown into journal entries | `billing::posting` |
 | Printing amounts (Indian grouping, amount in words) | `utils::formatting` |
 
 If you are about to copy a block, extract it into its home instead.
@@ -124,4 +130,4 @@ done
 cargo run -q --features pdf --example gst_invoice_pdf > /dev/null || echo "FAILED: gst_invoice_pdf"
 ```
 
-Core code (`ledger`, `reports`, `reconciliation`, `types`, `traits`, `utils` outside `formatting`) must never depend on `tax`, `invoice` or `returns`. Indian code may depend on the core. Gate any new Indian-only module, re-export, error variant or test file with `#[cfg(feature = "india")]`.
+Core code (`ledger`, `reports`, `reconciliation`, `billing`, `money`, `types`, `traits`, `utils` outside `formatting`) must never depend on `tax`, `invoice` or `returns`. New tax systems go in as a `TaxRegime`, not as branches in `billing`. Indian code may depend on the core. Gate any new Indian-only module, re-export, error variant or test file with `#[cfg(feature = "india")]`.

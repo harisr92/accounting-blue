@@ -5,12 +5,28 @@
 ### Breaking
 - Indian tax support is now behind the opt-in `india` Cargo feature, so the default build is country-neutral (ledger, reports, reconciliation). Turn it on with `accounting-core = { version = "0.4", features = ["india"] }`. Without it:
   - the `tax`, `invoice` and `returns` modules, `utils::formatting` (`format_inr`, `amount_in_words`) and their root re-exports (`GstInvoice`, `Gstin`, `HsnMaster`, `GstCalculator`, `Gstr1Return`, `ReturnPeriod`, ...) are not compiled;
-  - `Error` has no `Gst`, `Invoice`, `Discount`, `Posting` or `Gstr1` variants;
+  - `Error` has no `Gst`, `Invoice`, `Posting` or `Gstr1` variants;
   - `serde_json` is no longer a dependency.
 - The `pdf` feature now turns on `india`.
 - The ledger's tax patterns are country-neutral and stay in the core: `InvoiceWithGstParams` → `InvoiceWithTaxParams`, `BillPaymentWithGstParams` → `BillPaymentWithTaxParams`, `create_invoice_with_gst` → `create_invoice_with_tax`, `create_bill_payment_with_gst` → `create_bill_payment_with_tax`. The fields `gst_payable_account_id`, `gst_recoverable_account_id` and `gst_amount` are now `tax_payable_account_id`, `tax_recoverable_account_id` and `tax_amount`, and the entry memos read "tax" instead of "GST".
+- GST invoices and credit notes are rebuilt on the new invoicing core (`billing`); their amounts are unchanged:
+  - `invoice::CreditNote` is now `GstCreditNote`, so the core `CreditNote` takes the plain name at the crate root.
+  - `PostingLeg` comes from `billing` and names taxes by code: `PostingLeg::CgstOutput`, `SgstOutput` and `IgstOutput` are now `PostingLeg::tax(CGST_CODE)` and so on, and `PostingLeg::ALL` is `invoice::gst_legs()`. `InvoiceAccounts::account_for` takes `&PostingLeg` and returns `Option<&str>`. `invoice::PostingError` gains a `Posting` variant.
+  - `GstDocument` now extends `billing::TaxDocument`. `number`, `date`, `subtotal`, `discount_amount`, `check_discount` and `document_discount` moved there, so bring `TaxDocument` into scope to call them on a document; `GstInvoice` keeps inherent `subtotal` and `discount_amount`.
+  - `Discount`, `DiscountError` and `apportion` moved to `billing::discount` (still re-exported from `invoice` and the crate root), and `Error::Discount` is always available.
+  - `InvoiceValidationReport` is now an alias of `billing::ValidationReport<ComplianceIssue>`, and `Severity` comes from `billing`.
+  - `tax::round_to_paise`, `percent_of` and `PAISE_SCALE` are re-exports of the new `money` module.
 
 ### Added
+- Country-neutral invoicing in the new `billing` module, compiled without any feature:
+  - `Invoice<R>` and `CreditNote<R>` (built from an invoice, not dated before it, not worth more than it) of `LineItem`s, with a `Discount` off the subtotal, taxed under a `TaxRegime` `R`.
+  - `TaxRegime` returns a `TaxBreakdown` of named `TaxComponent`s for a line. It ships with `NoTax` and `FlatRate` (one tax such as VAT at the line's rate), and `tax::GstRegime` (CGST + SGST or IGST) with `india`.
+  - `to_entries(&PostingAccounts)` posts a document as balanced journal entries: receivable, sales and one account per tax code; a credit note posts the reverse. `breakdown_entries` and `posting_legs` do it for any breakdown.
+  - The reusable pieces are traits: `BillableLine` prices a line, and `TaxDocument` gives a document its subtotal, discount and breakdowns through the one pricing engine `price_lines`.
+  - `validate_document` runs the rules every document shares (lines present, line fields, discount, future date, zero-value lines) into a `ValidationReport`; GST compliance runs the same rules.
+  - `BillingError` and `LineError`, both converted into `crate::Error`.
+- `money::{round_money, percent_of, MONEY_SCALE}`: the crate's one rounding rule, now in the core.
+- An `invoice` example and a `tests/billing.rs` integration test that run without features.
 - A UPI QR code on the PDF: when the print model has a `upi_uri`, the payment block draws it as a vector QR code (error correction M) captioned "Scan to pay with any UPI app". It needs the new `qrcode` dependency, pulled in by the `pdf` feature. `PdfError` has a new `QrCode` variant for a link too long to encode.
 - Payment details on invoices (`accounting_core::invoice::payment`): `PaymentDetails { payee_name, bank_name, account_number, ifsc, upi_id, amount_due }`, applied with `InvoicePrint::with_payment(details)`. Blank fields are unset, the payee defaults to the seller, and details with no bank or UPI field print nothing. `InvoicePrint` gains `payment`, `upi_uri` and `total_amount` (the unformatted total). `upi_uri(upi_id, payee_name, amount, note)` builds a percent-encoded `upi://pay` link with a two-decimal amount; the print model carries one for the amount due (`amount_due`, or the invoice total when unset) when there is a UPI ID and that amount is above zero. The PDF prints a "Payment details" block between the notes and the terms on the last page.
 - Print-only invoice details: `InvoiceDetails { due_date, reference, ship_to, notes }`, applied with `InvoicePrint::with_details(&details)`. `InvoicePrint` gains `due_date` (`dd-mm-yyyy`), `reference`, `ship_to` and `notes`, all empty from `from_invoice`; blank references and notes are left out. The PDF prints the due date and reference with the invoice details, a "Ship To" block beside "Bill To" when there is a delivery address (its GSTIN only when it has one), and the notes above the terms on the last page. `PdfError::TermsTooLong` now counts the notes and terms together.
