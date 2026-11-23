@@ -9,8 +9,8 @@
 //! [`LineItem`] is the plain line this module ships. The Indian `GstLineItem` is another
 //! [`BillableLine`] that also carries an HSN/SAC code.
 
-use crate::billing::discount::{apportion, Discount, DiscountError};
-use crate::billing::tax::{check_rate, TaxBreakdown, TaxRegime, MAX_TAX_RATE};
+use crate::document::discount::{apportion, Discount, DiscountError};
+use crate::document::tax::{check_rate, TaxBreakdown, TaxRegime, MAX_TAX_RATE};
 use crate::money::round_money;
 use bigdecimal::{BigDecimal, Signed, Zero};
 use chrono::NaiveDate;
@@ -121,10 +121,10 @@ impl LineItem {
     /// # Example
     ///
     /// ```
-    /// use accounting_core::billing::{BillableLine, Discount, LineItem};
+    /// use accounting_core::document::{BillableLine, Discount, LineItem};
     /// use bigdecimal::BigDecimal;
     ///
-    /// # fn main() -> Result<(), accounting_core::billing::LineError> {
+    /// # fn main() -> Result<(), accounting_core::document::LineError> {
     /// let line = LineItem::new("Consulting", BigDecimal::from(10), BigDecimal::from(150),
     ///     BigDecimal::from(20))?
     ///     .with_discount(Discount::Percent(BigDecimal::from(10)))?

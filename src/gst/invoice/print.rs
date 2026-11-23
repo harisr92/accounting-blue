@@ -8,8 +8,8 @@
 use super::payment::{non_blank, upi_uri, PaymentDetails};
 use super::state::state_label;
 use super::types::{GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError, SupplyTreatment};
-use crate::billing::discount::Discount;
-use crate::billing::price_lines;
+use crate::document::discount::Discount;
+use crate::document::price_lines;
 use crate::utils::formatting::{amount_in_words, format_inr};
 use bigdecimal::{BigDecimal, Signed, Zero};
 use chrono::NaiveDate;

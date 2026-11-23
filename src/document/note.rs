@@ -6,11 +6,11 @@
 //! an [`OriginalDocument`]. It may not be dated before the invoice, nor credit more than the
 //! invoice was worth. [`CreditNote::to_entries`] posts it as the reverse of an invoice.
 
-use crate::billing::document::{LineItem, TaxDocument};
-use crate::billing::error::BillingError;
-use crate::billing::invoice::{check_document, Invoice};
-use crate::billing::posting::{breakdown_entries, PostingAccounts};
-use crate::billing::tax::{TaxError, TaxRegime};
+use crate::document::error::BillingError;
+use crate::document::invoice::{check_document, Invoice};
+use crate::document::posting::{breakdown_entries, PostingAccounts};
+use crate::document::pricing::{LineItem, TaxDocument};
+use crate::document::tax::{TaxError, TaxRegime};
 use crate::types::Entry;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -32,7 +32,7 @@ pub struct OriginalDocument {
 /// # Example
 ///
 /// ```
-/// use accounting_core::billing::{CreditNote, FlatRate, Invoice, LineItem, PostingAccounts};
+/// use accounting_core::document::{CreditNote, FlatRate, Invoice, LineItem, PostingAccounts};
 /// use accounting_core::EntryType;
 /// use bigdecimal::BigDecimal;
 /// use chrono::NaiveDate;

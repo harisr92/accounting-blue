@@ -1,4 +1,4 @@
-use crate::billing::discount::{Discount, DiscountError};
+use crate::document::discount::{Discount, DiscountError};
 use crate::gst::invoice::hsn_lookup::HsnMaster;
 use crate::gst::invoice::note::GstCreditNote;
 use crate::gst::invoice::types::{GstInvoice, GstLineItem, Gstin, Recipient, StateCode};

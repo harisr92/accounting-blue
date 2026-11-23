@@ -9,7 +9,7 @@
 //! A credit note posts the same legs on the opposite sides, reversing the part of the invoice it
 //! credits.
 
-use crate::billing::tax::TaxBreakdown;
+use crate::document::tax::TaxBreakdown;
 use crate::types::{Entry, EntryType};
 use bigdecimal::{BigDecimal, Zero};
 use serde::{Deserialize, Serialize};
@@ -81,7 +81,7 @@ pub fn posting_legs(breakdown: &TaxBreakdown) -> Vec<(PostingLeg, BigDecimal)> {
 /// # Example
 ///
 /// ```
-/// use accounting_core::billing::{PostingAccounts, PostingLeg};
+/// use accounting_core::document::{PostingAccounts, PostingLeg};
 ///
 /// let accounts = PostingAccounts::new("receivable", "sales").with_tax("VAT", "vat-payable");
 /// assert_eq!(accounts.account_for(&PostingLeg::tax("VAT")), Some("vat-payable"));

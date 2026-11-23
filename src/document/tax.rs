@@ -58,7 +58,7 @@ impl TaxBreakdown {
     /// # Example
     ///
     /// ```
-    /// use accounting_core::billing::{TaxBreakdown, TaxComponent};
+    /// use accounting_core::document::{TaxBreakdown, TaxComponent};
     /// use bigdecimal::BigDecimal;
     ///
     /// let breakdown = TaxBreakdown::new(
@@ -193,10 +193,10 @@ impl TaxRegime for NoTax {
 /// # Example
 ///
 /// ```
-/// use accounting_core::billing::{FlatRate, TaxRegime};
+/// use accounting_core::document::{FlatRate, TaxRegime};
 /// use bigdecimal::BigDecimal;
 ///
-/// # fn main() -> Result<(), accounting_core::billing::TaxError> {
+/// # fn main() -> Result<(), accounting_core::document::TaxError> {
 /// let vat = FlatRate::new("VAT");
 /// let breakdown = vat.line_tax(&BigDecimal::from(1000), &BigDecimal::from(20))?;
 /// assert_eq!(breakdown.tax("VAT"), BigDecimal::from(200));

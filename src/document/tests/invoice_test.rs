@@ -1,11 +1,11 @@
 //! Tests for invoices under a tax regime
 
-use crate::billing::discount::Discount;
-use crate::billing::document::{LineItem, TaxDocument};
-use crate::billing::error::BillingError;
-use crate::billing::invoice::*;
-use crate::billing::posting::{PostingAccounts, PostingError};
-use crate::billing::tax::{FlatRate, NoTax};
+use crate::document::discount::Discount;
+use crate::document::error::BillingError;
+use crate::document::invoice::*;
+use crate::document::posting::{PostingAccounts, PostingError};
+use crate::document::pricing::{LineItem, TaxDocument};
+use crate::document::tax::{FlatRate, NoTax};
 use crate::types::EntryType;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;

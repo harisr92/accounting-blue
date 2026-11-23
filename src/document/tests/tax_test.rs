@@ -1,6 +1,6 @@
 //! Tests for tax regimes and breakdowns
 
-use crate::billing::tax::*;
+use crate::document::tax::*;
 use bigdecimal::BigDecimal;
 use std::str::FromStr;
 

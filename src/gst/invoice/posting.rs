@@ -11,13 +11,13 @@
 use super::note::GstCreditNote;
 use super::types::{GstBreakdown, GstDocument, GstInvoice, InvoiceError};
 use super::validation::{compliance_errors, credit_note_errors, ComplianceIssue};
-use crate::billing::{self, breakdown_entries, PostingAccounts, TaxBreakdown};
+use crate::document::{self, breakdown_entries, PostingAccounts, TaxBreakdown};
 use crate::gst::tax::{CGST_CODE, IGST_CODE, SGST_CODE};
 use crate::types::{Entry, EntryType};
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 
-pub use crate::billing::PostingLeg;
+pub use crate::document::PostingLeg;
 
 /// Every leg a GST invoice can post, debit first: receivable, sales, then CGST, SGST and IGST
 #[must_use]
@@ -34,10 +34,10 @@ pub fn gst_legs() -> [PostingLeg; 5] {
 /// Legs of the journal entry for `breakdown`, leaving out those with a zero amount
 ///
 /// An invoice only ever carries CGST + SGST or IGST, never both. See
-/// [`billing::posting_legs`].
+/// [`document::posting_legs`].
 #[must_use]
 pub fn posting_legs(breakdown: &GstBreakdown) -> Vec<(PostingLeg, BigDecimal)> {
-    billing::posting_legs(&TaxBreakdown::from(breakdown))
+    document::posting_legs(&TaxBreakdown::from(breakdown))
 }
 
 /// Why an invoice could not be posted to the ledger
@@ -54,15 +54,15 @@ pub enum PostingError {
     Invoice(#[from] InvoiceError),
     /// The breakdown could not be mapped onto the accounts
     #[error(transparent)]
-    Posting(billing::PostingError),
+    Posting(document::PostingError),
 }
 
-impl From<billing::PostingError> for PostingError {
+impl From<document::PostingError> for PostingError {
     /// [`PostingError::NothingToPost`] for a zero total, [`PostingError::Posting`] otherwise
-    fn from(error: billing::PostingError) -> Self {
+    fn from(error: document::PostingError) -> Self {
         match error {
-            billing::PostingError::NothingToPost => Self::NothingToPost,
-            other @ billing::PostingError::NoTaxAccount { .. } => Self::Posting(other),
+            document::PostingError::NothingToPost => Self::NothingToPost,
+            other @ document::PostingError::NoTaxAccount { .. } => Self::Posting(other),
         }
     }
 }

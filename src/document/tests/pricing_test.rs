@@ -1,8 +1,8 @@
-//! Tests for billable lines, documents and the pricing engine
+//! Tests for lines, documents and the pricing engine
 
-use crate::billing::discount::{Discount, DiscountError};
-use crate::billing::document::*;
-use crate::billing::tax::{FlatRate, TaxBreakdown, TaxComponent, TaxError};
+use crate::document::discount::{Discount, DiscountError};
+use crate::document::pricing::*;
+use crate::document::tax::{FlatRate, TaxBreakdown, TaxComponent, TaxError};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 use std::str::FromStr;

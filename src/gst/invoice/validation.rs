@@ -16,12 +16,12 @@ use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use super::note::GstCreditNote;
 use super::types::{invoice_number_error, GstDocument, GstInvoice, GstLineItem};
 use super::types::{InvoiceNumberError, LineItemError, Recipient, SupplyKind};
-use crate::billing::discount::DiscountError;
-use crate::billing::validation::{self as rules, Issue, ValidationIssue, ValidationReport};
+use crate::document::discount::DiscountError;
+use crate::document::validation::{self as rules, Issue, ValidationIssue, ValidationReport};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 
-pub use crate::billing::Severity;
+pub use crate::document::Severity;
 
 /// One rule an invoice breaks
 ///

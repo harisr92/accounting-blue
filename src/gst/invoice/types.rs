@@ -2,8 +2,8 @@
 
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use super::print::{PartyError, PartyRole};
-use crate::billing::discount::{Discount, DiscountError};
-use crate::billing::{
+use crate::document::discount::{Discount, DiscountError};
+use crate::document::{
     check_line_fields, BillableLine, LineError, TaxBreakdown, TaxComponent, TaxDocument, TaxRegime,
 };
 use crate::gst::tax::gst::{GstCalculation, GstError, GstRegime, CGST_CODE, IGST_CODE, SGST_CODE};

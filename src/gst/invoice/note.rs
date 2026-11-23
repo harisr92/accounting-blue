@@ -13,7 +13,7 @@ use super::types::{
     gst_regime, supply_kind_for, validate_invoice_number, GstDocument, GstInvoice, GstLineItem,
     Gstin, InvoiceError, Recipient, SupplyKind,
 };
-use crate::billing::TaxDocument;
+use crate::document::TaxDocument;
 use crate::gst::tax::GstRegime;
 use bigdecimal::BigDecimal;
 use chrono::{Datelike, NaiveDate};

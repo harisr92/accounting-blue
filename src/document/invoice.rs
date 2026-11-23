@@ -4,16 +4,16 @@
 //! the subtotal, and the [`TaxRegime`] its lines are taxed under. Its pricing comes from
 //! [`TaxDocument`], and [`Invoice::to_entries`] posts it to the ledger.
 
-use crate::billing::discount::Discount;
-use crate::billing::document::{LineItem, TaxDocument};
-use crate::billing::error::BillingError;
-use crate::billing::posting::{breakdown_entries, PostingAccounts, PostingLeg};
-use crate::billing::tax::{TaxError, TaxRegime};
+use crate::document::discount::Discount;
+use crate::document::error::BillingError;
+use crate::document::posting::{breakdown_entries, PostingAccounts, PostingLeg};
+use crate::document::pricing::{LineItem, TaxDocument};
+use crate::document::tax::{TaxError, TaxRegime};
 use crate::types::Entry;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
-/// An invoice taxed under the regime `R`, such as [`FlatRate`](crate::billing::FlatRate) for VAT
+/// An invoice taxed under the regime `R`, such as [`FlatRate`](crate::document::FlatRate) for VAT
 ///
 /// Deserialising goes through the same checks as [`Invoice::new`] and
 /// [`Invoice::with_discount`].
@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 /// # Example
 ///
 /// ```
-/// use accounting_core::billing::{FlatRate, Invoice, LineItem, PostingAccounts, TaxDocument};
+/// use accounting_core::document::{FlatRate, Invoice, LineItem, PostingAccounts, TaxDocument};
 /// use bigdecimal::BigDecimal;
 /// use chrono::NaiveDate;
 ///

@@ -84,7 +84,7 @@ pub mod state;
 pub mod types;
 pub mod validation;
 
-pub use crate::billing::discount::{apportion, Discount, DiscountError};
+pub use crate::document::discount::{apportion, Discount, DiscountError};
 pub use hsn_lookup::{HsnMaster, HsnSacEntry, HsnSacKind};
 pub use note::{credit_note_deadline, GstCreditNote, OriginalInvoice};
 pub use payment::{upi_uri, PaymentDetails, UPI_CURRENCY};

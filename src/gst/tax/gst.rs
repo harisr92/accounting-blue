@@ -1,6 +1,6 @@
 //! GST (Goods and Services Tax) calculation engine for Indian tax compliance
 
-use crate::billing::{TaxBreakdown, TaxComponent, TaxRegime};
+use crate::document::{TaxBreakdown, TaxComponent, TaxRegime};
 use bigdecimal::{BigDecimal, Signed, Zero};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -340,7 +340,7 @@ pub const IGST_CODE: &str = "IGST";
 /// # Example
 ///
 /// ```
-/// use accounting_core::billing::TaxRegime;
+/// use accounting_core::document::TaxRegime;
 /// use accounting_core::gst::tax::{GstRegime, CGST_CODE, IGST_CODE};
 /// use bigdecimal::BigDecimal;
 ///

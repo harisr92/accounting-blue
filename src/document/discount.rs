@@ -22,7 +22,7 @@ const MAX_DISCOUNT_PERCENT: u32 = 100;
 /// # Example
 ///
 /// ```
-/// use accounting_core::billing::Discount;
+/// use accounting_core::document::Discount;
 /// use bigdecimal::BigDecimal;
 ///
 /// let base = BigDecimal::from(1999);
@@ -118,7 +118,7 @@ pub enum DiscountError {
 /// # Example
 ///
 /// ```
-/// use accounting_core::billing::apportion;
+/// use accounting_core::document::apportion;
 /// use bigdecimal::BigDecimal;
 ///
 /// let bases = [BigDecimal::from(1), BigDecimal::from(1), BigDecimal::from(1)];

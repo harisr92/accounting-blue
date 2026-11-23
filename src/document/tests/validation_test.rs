@@ -1,10 +1,10 @@
 //! Tests for the checks every document must pass
 
-use crate::billing::discount::{Discount, DiscountError};
-use crate::billing::document::{LineError, LineItem};
-use crate::billing::invoice::Invoice;
-use crate::billing::tax::FlatRate;
-use crate::billing::validation::*;
+use crate::document::discount::{Discount, DiscountError};
+use crate::document::invoice::Invoice;
+use crate::document::pricing::{LineError, LineItem};
+use crate::document::tax::FlatRate;
+use crate::document::validation::*;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 

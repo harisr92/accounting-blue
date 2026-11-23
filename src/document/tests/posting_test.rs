@@ -1,7 +1,7 @@
 //! Tests for posting breakdowns to the ledger
 
-use crate::billing::posting::*;
-use crate::billing::tax::{TaxBreakdown, TaxComponent};
+use crate::document::posting::*;
+use crate::document::tax::{TaxBreakdown, TaxComponent};
 use crate::types::EntryType;
 use bigdecimal::BigDecimal;
 

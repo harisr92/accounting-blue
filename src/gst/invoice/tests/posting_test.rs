@@ -1,4 +1,4 @@
-use crate::billing::discount::Discount;
+use crate::document::discount::Discount;
 use crate::gst::invoice::note::GstCreditNote;
 use crate::gst::invoice::posting::*;
 use crate::gst::invoice::types::{

@@ -164,7 +164,7 @@
 //!
 //! ## Invoicing
 //!
-//! [`billing`] builds invoices and credit notes, works out their tax under a [`TaxRegime`] and
+//! [`document`] builds invoices and credit notes, works out their tax under a [`TaxRegime`] and
 //! posts them as balanced journal entries.
 //!
 //! ```rust
@@ -252,7 +252,7 @@
 )]
 #![cfg_attr(not(test), warn(clippy::too_many_lines))]
 
-pub mod billing;
+pub mod document;
 pub mod error;
 #[cfg(feature = "india")]
 pub mod gst;
@@ -264,7 +264,7 @@ pub mod traits;
 pub mod types;
 pub mod utils;
 
-pub use billing::{
+pub use document::{
     apportion, BillableLine, BillingError, CreditNote, Discount, DiscountError, FlatRate, Invoice,
     LineItem, NoTax, PostingAccounts, PostingLeg, TaxBreakdown, TaxComponent, TaxDocument,
     TaxRegime,

@@ -1,4 +1,4 @@
-use crate::billing::discount::*;
+use crate::document::discount::*;
 use bigdecimal::BigDecimal;
 use std::str::FromStr;
 

@@ -6,7 +6,7 @@
 
 use bigdecimal::BigDecimal;
 
-use crate::billing::{BillingError, DiscountError, LineError};
+use crate::document::{BillingError, DiscountError, LineError};
 #[cfg(feature = "pdf")]
 use crate::gst::invoice::PdfError;
 #[cfg(feature = "india")]

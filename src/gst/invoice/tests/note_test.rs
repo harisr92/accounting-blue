@@ -1,4 +1,4 @@
-use crate::billing::TaxDocument;
+use crate::document::TaxDocument;
 use crate::gst::invoice::note::*;
 use crate::gst::invoice::types::{
     GstDocument, GstInvoice, GstLineItem, Gstin, InvoiceError, InvoiceNumberError, Recipient,

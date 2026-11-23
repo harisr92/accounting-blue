@@ -1,11 +1,11 @@
 //! Tests for credit notes against invoices
 
-use crate::billing::document::{LineItem, TaxDocument};
-use crate::billing::error::BillingError;
-use crate::billing::invoice::Invoice;
-use crate::billing::note::*;
-use crate::billing::posting::PostingAccounts;
-use crate::billing::tax::FlatRate;
+use crate::document::error::BillingError;
+use crate::document::invoice::Invoice;
+use crate::document::note::*;
+use crate::document::posting::PostingAccounts;
+use crate::document::pricing::{LineItem, TaxDocument};
+use crate::document::tax::FlatRate;
 use crate::types::EntryType;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;

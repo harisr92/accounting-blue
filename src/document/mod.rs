@@ -13,23 +13,23 @@
 //! feature.
 
 pub mod discount;
-pub mod document;
 pub mod error;
 pub mod invoice;
 pub mod note;
 pub mod posting;
+pub mod pricing;
 pub mod tax;
 pub mod validation;
 
 pub use discount::{apportion, Discount, DiscountError};
-pub use document::{
-    check_line, check_line_fields, line_values, price_lines, BillableLine, LineError, LineItem,
-    PricedLines, TaxDocument,
-};
 pub use error::BillingError;
 pub use invoice::Invoice;
 pub use note::{CreditNote, OriginalDocument};
 pub use posting::{breakdown_entries, posting_legs, PostingAccounts, PostingError, PostingLeg};
+pub use pricing::{
+    check_line, check_line_fields, line_values, price_lines, BillableLine, LineError, LineItem,
+    PricedLines, TaxDocument,
+};
 pub use tax::{
     check_rate, FlatRate, NoTax, TaxBreakdown, TaxComponent, TaxError, TaxRegime, MAX_TAX_RATE,
 };

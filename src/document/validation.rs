@@ -9,8 +9,8 @@
 //! [`Severity::Warning`] when it is valid but worth a second look. The rule functions are public
 //! so a regime with rules of its own, such as Indian GST, can run them alongside its own.
 
-use crate::billing::discount::DiscountError;
-use crate::billing::document::{check_line, BillableLine, LineError, TaxDocument};
+use crate::document::discount::DiscountError;
+use crate::document::pricing::{check_line, BillableLine, LineError, TaxDocument};
 use crate::money::round_money;
 use bigdecimal::Zero;
 use chrono::NaiveDate;
@@ -135,7 +135,7 @@ impl<I: Issue> ValidationReport<I> {
 /// # Example
 ///
 /// ```
-/// use accounting_core::billing::{validate_document, FlatRate, Invoice, LineItem};
+/// use accounting_core::document::{validate_document, FlatRate, Invoice, LineItem};
 /// use bigdecimal::BigDecimal;
 /// use chrono::NaiveDate;
 ///

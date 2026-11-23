@@ -1,4 +1,4 @@
-use crate::billing::discount::{Discount, DiscountError};
+use crate::document::discount::{Discount, DiscountError};
 use crate::gst::invoice::types::*;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;

@@ -1,8 +1,8 @@
 //! Why an invoice or credit note could not be built, priced or posted
 
-use crate::billing::discount::DiscountError;
-use crate::billing::posting::PostingError;
-use crate::billing::tax::TaxError;
+use crate::document::discount::DiscountError;
+use crate::document::posting::PostingError;
+use crate::document::tax::TaxError;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 
