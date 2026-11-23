@@ -18,7 +18,7 @@
 //!
 //! | Feature | Adds |
 //! |---------|------|
-//! | `india` | Indian GST on top of the invoicing core: rates and CGST/SGST/IGST maths (`tax`), GSTIN, HSN/SAC master data, GST invoices and credit notes (`invoice`), GSTR-1 returns (`returns`), and Indian amount formatting (`utils::formatting`) |
+//! | `india` | Indian GST on top of the invoicing core: rates and CGST/SGST/IGST maths (`gst::tax`), GSTIN, HSN/SAC master data, GST invoices and credit notes (`gst::invoice`), GSTR-1 returns (`gst::returns`), and Indian amount formatting (`utils::formatting`) |
 //! | `pdf` | Renders GST invoices to PDF; turns on `india` |
 //!
 //! ```toml

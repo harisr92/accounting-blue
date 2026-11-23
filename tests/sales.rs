@@ -1,4 +1,5 @@
-//! Invoices and credit notes under a VAT regime, posted through the `Ledger`, with no features
+//! Sales invoices and credit notes under a VAT regime, posted through the `Ledger`, with no
+//! features
 
 use accounting_core::document::validate_document;
 use accounting_core::{

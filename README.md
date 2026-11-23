@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 Invoices work in any country. Pick a tax regime: `NoTax`, `FlatRate` for a VAT or sales tax, or your own `TaxRegime`.
 
 ```rust
-use accounting_core::{CreditNote, FlatRate, Invoice, LineItem, PostingAccounts, TaxDocument};
+use accounting_core::{CreditNote, Document, FlatRate, Invoice, LineItem, SalesAccounts};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 
@@ -103,7 +103,7 @@ let invoice = Invoice::new("INV-001", NaiveDate::from_ymd_opt(2025, 3, 1).unwrap
 assert_eq!(invoice.tax_breakdown()?.total, BigDecimal::from(1200));
 
 // Dr receivable 1200, Cr sales 1000, Cr VAT payable 200
-let accounts = PostingAccounts::new("1200", "4000").with_tax("VAT", "2200");
+let accounts = SalesAccounts::new("1200", "4000").with_output_tax("VAT", "2200");
 let entries = invoice.to_entries(&accounts)?;
 
 // A credit note against it posts the reverse
@@ -203,9 +203,12 @@ per gateway.
 - **`types`**: Core data structures (Account, Transaction, Entry, etc.)
 - **`traits`**: Storage and validation abstractions
 - **`ledger`**: Account management and transaction processing
-- **`tax`**: GST calculation engine
-- **`invoice`**: GSTINs, B2B GST invoices, HSN/SAC master data, compliance checks and printing
-- **`returns`**: GSTR-1 aggregation and export in the GST portal's JSON schema
+- **`document`**: What every trade document shares: lines, discounts, tax regimes, pricing, posting legs and validation
+- **`sales`**: Invoices and credit notes, and posting them to the receivable, revenue and output tax accounts
+- **`gst`** (`india` feature): Indian GST on top of `document` and `sales`
+  - **`gst::tax`**: GST calculation engine and the GST tax regime
+  - **`gst::invoice`**: GSTINs, B2B GST invoices and credit notes, HSN/SAC master data, compliance checks and printing
+  - **`gst::returns`**: GSTR-1 aggregation and export in the GST portal's JSON schema
 - **`reconciliation`**: Matching engine for bank statements and payment gateways
 - **`utils`**: Utilities including in-memory storage for testing
 
