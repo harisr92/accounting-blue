@@ -5,8 +5,12 @@
 //! `india` feature.
 
 pub mod discount;
+pub mod tax;
 
 pub use discount::{apportion, Discount, DiscountError};
+pub use tax::{
+    check_rate, FlatRate, NoTax, TaxBreakdown, TaxComponent, TaxError, TaxRegime, MAX_TAX_RATE,
+};
 
 #[cfg(test)]
 mod tests;
