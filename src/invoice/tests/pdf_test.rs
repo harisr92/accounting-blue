@@ -85,6 +85,8 @@ fn test_invoice_renders_as_a_one_page_pdf() {
         "Acme Services Pvt Ltd",
         "Globex Ltd",
         "GSTIN: 29AAPFU0939F1ZR",
+        "Place of Supply: 29 - Karnataka",
+        "State: 29 - Karnataka",
         "Consulting, phase 2",
         "IGST",
         "Rs. 8,855.32",
@@ -325,7 +327,8 @@ fn test_unregistered_buyer_renders_without_a_gstin() {
     for expected in [
         "Ravi Kumar",
         "GSTIN: Unregistered",
-        "Place of Supply: State code 29",
+        "Place of Supply: 29 - Karnataka",
+        "State: 29 - Karnataka",
         "IGST",
     ] {
         assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
@@ -379,7 +382,7 @@ fn test_walk_in_buyer_renders_with_a_placeholder_name() {
     for expected in [
         "Walk-in customer",
         "GSTIN: Unregistered",
-        "Place of Supply: State code 27",
+        "Place of Supply: 27 - Maharashtra",
         "CGST",
     ] {
         assert!(page.contains(expected), "missing {expected:?} in:\n{page}");

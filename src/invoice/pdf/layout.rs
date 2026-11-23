@@ -272,7 +272,7 @@ impl<'a> Layout<'a> {
         let x = self.seller_x();
         let name = self.fit(&self.fonts.bold, NAME_SIZE, &seller.name, SELLER_WIDTH);
         let name_ops = text(&self.fonts.bold, NAME_SIZE, x, y, Align::Left, &name);
-        let (lines, bottom) = self.lines(x, y + 5.5, SELLER_WIDTH, &party_lines(seller));
+        let (lines, bottom) = self.lines(x, y + 5.5, SELLER_WIDTH, &party_lines(seller, None));
         ([name_ops, lines].concat(), bottom)
     }
 
@@ -296,7 +296,7 @@ impl<'a> Layout<'a> {
         let lines = [
             format!("Invoice No: {}", print.invoice_number),
             format!("Invoice Date: {}", print.invoice_date),
-            format!("Place of Supply: State code {}", print.place_of_supply),
+            format!("Place of Supply: {}", print.place_of_supply),
             format!("Supply: {supply}"),
         ];
         let title = text(
@@ -353,7 +353,7 @@ impl<'a> Layout<'a> {
             LEFT,
             y + 5.0 + LINE_HEIGHT + 0.5,
             width,
-            &party_lines(buyer),
+            &party_lines(buyer, Some(&self.print.buyer_state)),
         );
         ([label, name_ops, lines].concat(), bottom)
     }
@@ -613,8 +613,9 @@ impl<'a> Layout<'a> {
     }
 }
 
-/// Address lines followed by the GSTIN, or `GSTIN: Unregistered` for a party without one
-fn party_lines(party: &InvoiceParty) -> Vec<String> {
+/// Address lines, then `State: ` and `state` when given, then the GSTIN, or
+/// `GSTIN: Unregistered` for a party without one
+fn party_lines(party: &InvoiceParty, state: Option<&str>) -> Vec<String> {
     let identity = party.gstin.as_ref().map_or_else(
         || UNREGISTERED_GSTIN_LINE.to_string(),
         |gstin| format!("GSTIN: {gstin}"),
@@ -623,6 +624,7 @@ fn party_lines(party: &InvoiceParty) -> Vec<String> {
         .address
         .iter()
         .cloned()
+        .chain(state.map(|state| format!("State: {state}")))
         .chain(std::iter::once(identity))
         .collect()
 }

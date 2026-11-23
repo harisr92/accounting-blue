@@ -137,6 +137,7 @@
 
 - The crate version is now 0.3.0.
 - The PDF no longer prints a footer note by default. `DEFAULT_FOOTER_NOTE` ("E-Invoice Ready") is removed, and `PdfOptions::footer_note` is now `Option<String>`, `None` by default, printed as given on every page. Set `footer_note: Some(..)` to print one.
+- `InvoicePrint::place_of_supply` is now a state label such as `29 - Karnataka` instead of the bare code `29`, and the PDF prints "Place of Supply: 29 - Karnataka". `InvoicePrint` has a new `buyer_state` field, the buyer's state label, which the PDF prints under the Bill To address. Code that builds `InvoicePrint` as a struct literal must set it.
 
 ## 0.2.0
 

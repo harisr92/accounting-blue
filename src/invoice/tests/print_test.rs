@@ -75,7 +75,8 @@ fn test_intra_state_invoice_prints_cgst_and_sgst() {
     assert_eq!(print.title, "Tax Invoice");
     assert_eq!(print.invoice_number, "INV/2025-26/007");
     assert_eq!(print.invoice_date, "03-04-2025");
-    assert_eq!(print.place_of_supply, "27");
+    assert_eq!(print.place_of_supply, "27 - Maharashtra");
+    assert_eq!(print.buyer_state, "27 - Maharashtra");
     assert!(!print.is_inter_state);
     let labels: Vec<_> = print
         .tax_lines
@@ -93,7 +94,8 @@ fn test_inter_state_invoice_prints_igst_only() {
     let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_OTHER_STATE)).unwrap();
 
     assert!(print.is_inter_state);
-    assert_eq!(print.place_of_supply, "29");
+    assert_eq!(print.place_of_supply, "29 - Karnataka");
+    assert_eq!(print.buyer_state, "29 - Karnataka");
     assert_eq!(print.tax_lines.len(), 1);
     assert_eq!(print.tax_lines[0].label, "IGST");
     assert_eq!(print.tax_lines[0].amount, "540.18");
@@ -226,7 +228,8 @@ fn test_unregistered_buyer_prints_without_a_gstin() {
         InvoicePrint::from_invoice(&unregistered_invoice("29"), &unregistered_parties()).unwrap();
 
     assert_eq!(print.title, "Tax Invoice");
-    assert_eq!(print.place_of_supply, "29");
+    assert_eq!(print.place_of_supply, "29 - Karnataka");
+    assert_eq!(print.buyer_state, "29 - Karnataka");
     assert!(print.is_inter_state);
     assert_eq!(print.buyer.gstin, None);
     assert_eq!(print.tax_lines[0].label, "IGST");
@@ -305,7 +308,7 @@ fn test_walk_in_buyer_needs_no_details_below_rule_46_threshold() {
     assert!(!print.buyer.has_name());
     assert!(print.buyer.address.is_empty());
     assert_eq!(print.buyer.gstin, None);
-    assert_eq!(print.place_of_supply, "27");
+    assert_eq!(print.place_of_supply, "27 - Maharashtra");
     // Tax takes the invoice value past 50,000; Rule 46 looks at the taxable value
     assert_eq!(print.total, "58,999.99");
 }

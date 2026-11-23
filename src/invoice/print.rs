@@ -6,6 +6,7 @@
 //! is. The PDF renderer (behind the `pdf` feature) only lays this model out on the page.
 
 use super::discount::Discount;
+use super::state::state_label;
 use super::types::{
     price_lines, GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError, SupplyTreatment,
 };
@@ -286,9 +287,13 @@ pub struct InvoicePrint {
     pub invoice_number: String,
     /// Date of issue, `dd-mm-yyyy`
     pub invoice_date: String,
-    /// State code of the place of supply: the buyer's GSTIN state for a B2B supply, or the
-    /// state named on the invoice for an unregistered buyer
+    /// Place of supply as a state label, such as `29 - Karnataka` (see [`state_label`]): the
+    /// buyer's GSTIN state for a B2B supply, or the state named on the invoice for an
+    /// unregistered buyer
     pub place_of_supply: String,
+    /// The buyer's state as a label, printed under its address: its GSTIN state, or the place
+    /// of supply for an unregistered buyer
+    pub buyer_state: String,
     /// Whether IGST applies rather than CGST + SGST
     pub is_inter_state: bool,
     /// Supplier
@@ -388,7 +393,13 @@ impl InvoicePrint {
             title: title(invoice).to_string(),
             invoice_number: invoice.invoice_number.clone(),
             invoice_date: invoice.invoice_date.format(PRINT_DATE_FORMAT).to_string(),
-            place_of_supply: invoice.buyer.place_of_supply().to_string(),
+            place_of_supply: state_label(invoice.buyer.place_of_supply()),
+            buyer_state: state_label(
+                invoice
+                    .buyer
+                    .gstin()
+                    .map_or_else(|| invoice.buyer.place_of_supply(), Gstin::state_code),
+            ),
             is_inter_state: invoice.is_inter_state(),
             seller: parties.seller.clone(),
             buyer: parties.buyer.clone(),
