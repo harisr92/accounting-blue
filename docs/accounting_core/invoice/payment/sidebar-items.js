@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["UPI_CURRENCY"],"fn":["upi_uri"],"struct":["PaymentDetails"]};
