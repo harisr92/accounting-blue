@@ -214,18 +214,23 @@
 #![cfg_attr(not(test), warn(clippy::too_many_lines))]
 
 pub mod error;
+#[cfg(feature = "india")]
 pub mod invoice;
 pub mod ledger;
 pub mod reconciliation;
 pub mod reports;
+#[cfg(feature = "india")]
 pub mod returns;
+#[cfg(feature = "india")]
 pub mod tax;
 pub mod traits;
 pub mod types;
 pub mod utils;
 
 pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};
+#[cfg(feature = "india")]
 pub use invoice::{state_label, state_name, InvoiceDetails, PaymentDetails};
+#[cfg(feature = "india")]
 pub use invoice::{
     validate_credit_note, validate_invoice, ComplianceIssue, CreditNote, Discount, GstBreakdown,
     GstDocument, GstInvoice, GstLineItem, Gstin, HsnMaster, HsnSacEntry, HsnSacKind,
@@ -242,7 +247,9 @@ pub use ledger::{
 pub use reports::{
     BalanceSheet, CashFlowItem, CashFlowStatement, IncomeStatement, LedgerIntegrityReport,
 };
+#[cfg(feature = "india")]
 pub use returns::{Gstr1Error, Gstr1Return, ReturnPeriod};
+#[cfg(feature = "india")]
 pub use tax::{GstCalculation, GstCalculator, GstCategory, GstError, GstRate};
 pub use traits::{
     AccountStore, AccountValidator, LedgerStorage, TransactionStore, TransactionValidator,
