@@ -8,7 +8,7 @@ use chrono::NaiveDate;
 
 /// Why an invoice or credit note could not be built, priced or posted
 #[derive(Debug, thiserror::Error)]
-pub enum BillingError {
+pub enum DocumentError {
     /// The document number is empty or only whitespace
     #[error("a document number cannot be empty")]
     EmptyNumber,

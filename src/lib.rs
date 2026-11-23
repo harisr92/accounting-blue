@@ -266,7 +266,7 @@ pub mod types;
 pub mod utils;
 
 pub use document::{
-    apportion, BillingError, Discount, DiscountError, Document, DocumentLine, FlatRate, LineItem,
+    apportion, Discount, DiscountError, Document, DocumentError, DocumentLine, FlatRate, LineItem,
     NoTax, PostingAccounts, PostingLeg, TaxBreakdown, TaxComponent, TaxRegime,
 };
 pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};

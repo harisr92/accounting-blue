@@ -6,7 +6,7 @@
 //! an [`OriginalDocument`]. It may not be dated before the invoice, nor credit more than the
 //! invoice was worth. [`CreditNote::to_entries`] posts it as the reverse of an invoice.
 
-use crate::document::error::BillingError;
+use crate::document::error::DocumentError;
 use crate::document::line::LineItem;
 use crate::document::posting::{breakdown_entries, PostingAccounts};
 use crate::document::pricing::Document;
@@ -75,19 +75,19 @@ impl<R: TaxRegime<Error = TaxError> + Clone> CreditNote<R> {
     ///
     /// # Errors
     ///
-    /// [`BillingError::EmptyNumber`] or [`BillingError::NoLines`],
-    /// [`BillingError::NoteBeforeOriginal`] for a note dated before the invoice,
-    /// [`BillingError::CreditExceedsInvoice`] for a note worth more than the invoice, or any
+    /// [`DocumentError::EmptyNumber`] or [`DocumentError::NoLines`],
+    /// [`DocumentError::NoteBeforeOriginal`] for a note dated before the invoice,
+    /// [`DocumentError::CreditExceedsInvoice`] for a note worth more than the invoice, or any
     /// error from [`Document::tax_breakdown`].
     pub fn new(
         invoice: &Invoice<R>,
         number: impl Into<String>,
         date: NaiveDate,
         lines: Vec<LineItem>,
-    ) -> Result<Self, BillingError> {
+    ) -> Result<Self, DocumentError> {
         let number = check_document(number.into(), &lines)?;
         if date < invoice.date {
-            return Err(BillingError::NoteBeforeOriginal {
+            return Err(DocumentError::NoteBeforeOriginal {
                 note_date: date,
                 original_date: invoice.date,
             });
@@ -106,7 +106,7 @@ impl<R: TaxRegime<Error = TaxError> + Clone> CreditNote<R> {
         };
         let credited = note.tax_breakdown()?.total;
         if credited > note.original.value {
-            return Err(BillingError::CreditExceedsInvoice {
+            return Err(DocumentError::CreditExceedsInvoice {
                 credited,
                 invoice_value: note.original.value,
             });
@@ -121,7 +121,7 @@ impl<R: TaxRegime<Error = TaxError> + Clone> CreditNote<R> {
     /// # Errors
     ///
     /// As [`Invoice::to_entries`].
-    pub fn to_entries(&self, accounts: &PostingAccounts) -> Result<Vec<Entry>, BillingError> {
+    pub fn to_entries(&self, accounts: &PostingAccounts) -> Result<Vec<Entry>, DocumentError> {
         Ok(breakdown_entries(
             &self.tax_breakdown()?,
             accounts,
@@ -133,7 +133,7 @@ impl<R: TaxRegime<Error = TaxError> + Clone> CreditNote<R> {
 impl<R: TaxRegime<Error = TaxError> + Clone> Document for CreditNote<R> {
     type Line = LineItem;
     type Regime = R;
-    type Error = BillingError;
+    type Error = DocumentError;
 
     fn number(&self) -> &str {
         &self.number

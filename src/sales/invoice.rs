@@ -5,7 +5,7 @@
 //! [`Document`], and [`Invoice::to_entries`] posts it to the ledger.
 
 use crate::document::discount::Discount;
-use crate::document::error::BillingError;
+use crate::document::error::DocumentError;
 use crate::document::line::LineItem;
 use crate::document::posting::{breakdown_entries, PostingAccounts, PostingLeg};
 use crate::document::pricing::Document;
@@ -74,7 +74,7 @@ struct RawInvoice<R> {
 }
 
 impl<R: TaxRegime<Error = TaxError> + Clone> TryFrom<RawInvoice<R>> for Invoice<R> {
-    type Error = BillingError;
+    type Error = DocumentError;
 
     fn try_from(raw: RawInvoice<R>) -> Result<Self, Self::Error> {
         let invoice = Self::new(raw.number, raw.date, raw.customer, raw.lines, raw.regime)?;
@@ -92,14 +92,14 @@ impl<R: TaxRegime<Error = TaxError> + Clone> Invoice<R> {
     ///
     /// # Errors
     ///
-    /// [`BillingError::EmptyNumber`] for a blank number, or [`BillingError::NoLines`].
+    /// [`DocumentError::EmptyNumber`] for a blank number, or [`DocumentError::NoLines`].
     pub fn new(
         number: impl Into<String>,
         date: NaiveDate,
         customer: impl Into<String>,
         lines: Vec<LineItem>,
         regime: R,
-    ) -> Result<Self, BillingError> {
+    ) -> Result<Self, DocumentError> {
         let number = check_document(number.into(), &lines)?;
         Ok(Self {
             number,
@@ -115,9 +115,9 @@ impl<R: TaxRegime<Error = TaxError> + Clone> Invoice<R> {
     ///
     /// # Errors
     ///
-    /// [`BillingError::InvalidDiscount`] if the discount is out of range or more than the
+    /// [`DocumentError::InvalidDiscount`] if the discount is out of range or more than the
     /// [`Document::subtotal`].
-    pub fn with_discount(self, discount: Discount) -> Result<Self, BillingError> {
+    pub fn with_discount(self, discount: Discount) -> Result<Self, DocumentError> {
         let invoice = Self {
             discount: Some(discount),
             ..self
@@ -133,9 +133,9 @@ impl<R: TaxRegime<Error = TaxError> + Clone> Invoice<R> {
     ///
     /// # Errors
     ///
-    /// [`BillingError::Posting`] if the total is zero or a tax has no account, or any error from
+    /// [`DocumentError::Posting`] if the total is zero or a tax has no account, or any error from
     /// [`Document::tax_breakdown`].
-    pub fn to_entries(&self, accounts: &PostingAccounts) -> Result<Vec<Entry>, BillingError> {
+    pub fn to_entries(&self, accounts: &PostingAccounts) -> Result<Vec<Entry>, DocumentError> {
         Ok(breakdown_entries(
             &self.tax_breakdown()?,
             accounts,
@@ -147,7 +147,7 @@ impl<R: TaxRegime<Error = TaxError> + Clone> Invoice<R> {
 impl<R: TaxRegime<Error = TaxError> + Clone> Document for Invoice<R> {
     type Line = LineItem;
     type Regime = R;
-    type Error = BillingError;
+    type Error = DocumentError;
 
     fn number(&self) -> &str {
         &self.number
@@ -171,12 +171,12 @@ impl<R: TaxRegime<Error = TaxError> + Clone> Document for Invoice<R> {
 }
 
 /// `number` trimmed, if it is not blank and `lines` is not empty
-pub(super) fn check_document(number: String, lines: &[LineItem]) -> Result<String, BillingError> {
+pub(super) fn check_document(number: String, lines: &[LineItem]) -> Result<String, DocumentError> {
     let number = number.trim().to_string();
     if number.is_empty() {
-        Err(BillingError::EmptyNumber)
+        Err(DocumentError::EmptyNumber)
     } else if lines.is_empty() {
-        Err(BillingError::NoLines)
+        Err(DocumentError::NoLines)
     } else {
         Ok(number)
     }

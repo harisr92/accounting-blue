@@ -6,7 +6,7 @@
 
 use bigdecimal::BigDecimal;
 
-use crate::document::{BillingError, DiscountError, LineError};
+use crate::document::{DiscountError, DocumentError, LineError};
 #[cfg(feature = "pdf")]
 use crate::gst::invoice::PdfError;
 #[cfg(feature = "india")]
@@ -36,7 +36,7 @@ pub enum Error {
     Invoice(#[from] InvoiceError),
     /// An invoice or credit note could not be built, priced or posted
     #[error(transparent)]
-    Billing(#[from] BillingError),
+    Document(#[from] DocumentError),
     /// A line item is invalid
     #[error(transparent)]
     Line(#[from] LineError),

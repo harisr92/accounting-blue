@@ -1,6 +1,6 @@
 //! Tests for credit notes against invoices
 
-use crate::document::error::BillingError;
+use crate::document::error::DocumentError;
 use crate::document::line::LineItem;
 use crate::document::posting::PostingAccounts;
 use crate::document::pricing::Document;
@@ -57,7 +57,7 @@ fn test_note_may_be_dated_the_same_day_but_not_before_its_invoice() {
     assert!(CreditNote::new(&invoice(), "CN-1", date(10), vec![chairs(1)]).is_ok());
     assert!(matches!(
         CreditNote::new(&invoice(), "CN-1", date(9), vec![chairs(1)]),
-        Err(BillingError::NoteBeforeOriginal { .. })
+        Err(DocumentError::NoteBeforeOriginal { .. })
     ));
 }
 
@@ -66,7 +66,7 @@ fn test_note_may_credit_the_whole_invoice_but_no_more() {
     assert!(CreditNote::new(&invoice(), "CN-1", date(12), vec![chairs(10)]).is_ok());
     assert!(matches!(
         CreditNote::new(&invoice(), "CN-1", date(12), vec![chairs(11)]),
-        Err(BillingError::CreditExceedsInvoice { .. })
+        Err(DocumentError::CreditExceedsInvoice { .. })
     ));
 }
 
@@ -74,11 +74,11 @@ fn test_note_may_credit_the_whole_invoice_but_no_more() {
 fn test_note_needs_a_number_and_lines() {
     assert!(matches!(
         CreditNote::new(&invoice(), "", date(12), vec![chairs(1)]),
-        Err(BillingError::EmptyNumber)
+        Err(DocumentError::EmptyNumber)
     ));
     assert!(matches!(
         CreditNote::new(&invoice(), "CN-1", date(12), vec![]),
-        Err(BillingError::NoLines)
+        Err(DocumentError::NoLines)
     ));
 }
 

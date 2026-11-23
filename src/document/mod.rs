@@ -20,7 +20,7 @@ pub mod tax;
 pub mod validation;
 
 pub use discount::{apportion, Discount, DiscountError};
-pub use error::BillingError;
+pub use error::DocumentError;
 pub use line::{check_line, check_line_fields, DocumentLine, LineError, LineItem};
 pub use posting::{breakdown_entries, posting_legs, PostingAccounts, PostingError, PostingLeg};
 pub use pricing::{line_values, price_lines, Document, PricedLines};

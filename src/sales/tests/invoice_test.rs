@@ -1,7 +1,7 @@
 //! Tests for invoices under a tax regime
 
 use crate::document::discount::Discount;
-use crate::document::error::BillingError;
+use crate::document::error::DocumentError;
 use crate::document::line::LineItem;
 use crate::document::posting::{PostingAccounts, PostingError};
 use crate::document::pricing::Document;
@@ -38,11 +38,11 @@ fn test_invoice_needs_a_number_and_lines() {
     let vat = FlatRate::new("VAT");
     assert!(matches!(
         Invoice::new("  ", date(), "Acme", vec![line(1, 1, 0)], vat.clone()),
-        Err(BillingError::EmptyNumber)
+        Err(DocumentError::EmptyNumber)
     ));
     assert!(matches!(
         Invoice::new("INV-1", date(), "Acme", vec![], vat),
-        Err(BillingError::NoLines)
+        Err(DocumentError::NoLines)
     ));
 }
 
@@ -75,7 +75,7 @@ fn test_invoice_discount_comes_off_before_tax() {
 fn test_discount_larger_than_the_subtotal_is_refused() {
     assert!(matches!(
         vat_invoice(vec![line(1, 10, 20)]).with_discount(Discount::Amount(BigDecimal::from(11))),
-        Err(BillingError::InvalidDiscount(_))
+        Err(DocumentError::InvalidDiscount(_))
     ));
 }
 
@@ -111,7 +111,7 @@ fn test_posting_a_tax_without_an_account_is_refused() {
     let result = vat_invoice(vec![line(1, 100, 20)]).to_entries(&PostingAccounts::new("ar", "s"));
     assert!(matches!(
         result,
-        Err(BillingError::Posting(PostingError::NoTaxAccount { .. }))
+        Err(DocumentError::Posting(PostingError::NoTaxAccount { .. }))
     ));
 }
 
