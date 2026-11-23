@@ -1,6 +1,6 @@
 use crate::billing::discount::{Discount, DiscountError};
 use crate::invoice::hsn_lookup::HsnMaster;
-use crate::invoice::note::CreditNote;
+use crate::invoice::note::GstCreditNote;
 use crate::invoice::types::{GstInvoice, GstLineItem, Gstin, Recipient, StateCode};
 use crate::invoice::types::{InvoiceNumberError, LineItemError};
 use crate::invoice::validation::*;
@@ -430,8 +430,8 @@ fn test_exempt_line_is_not_a_rate_mismatch() {
     ));
 }
 
-fn credit_note(on: NaiveDate) -> CreditNote {
-    CreditNote::new(&clean_invoice(), "CN-001", on, vec![item("998314", 18)]).unwrap()
+fn credit_note(on: NaiveDate) -> GstCreditNote {
+    GstCreditNote::new(&clean_invoice(), "CN-001", on, vec![item("998314", 18)]).unwrap()
 }
 
 #[test]
@@ -501,7 +501,7 @@ fn test_credit_note_after_the_section_34_deadline_is_an_error() {
 fn test_credit_note_rates_are_compared_as_of_its_original_invoice() {
     let mut original = clean_invoice();
     original.invoice_date = HsnMaster::global().effective_from().pred_opt().unwrap();
-    let note = CreditNote::new(&original, "CN-001", date(20), vec![item("7010", 5)]).unwrap();
+    let note = GstCreditNote::new(&original, "CN-001", date(20), vec![item("7010", 5)]).unwrap();
 
     let report = validate_credit_note(&note, date(30), HsnMaster::global());
     assert!(report.issues().is_empty());

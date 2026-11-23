@@ -1,6 +1,6 @@
 use crate::invoice::validation::ComplianceIssue;
 use crate::invoice::{
-    CreditNote, Discount, GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode,
+    Discount, GstCreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode,
     SupplyKind,
 };
 use crate::returns::gstr1::*;
@@ -1044,13 +1044,13 @@ fn credit(
     number: &str,
     date: NaiveDate,
     lines: Vec<GstLineItem>,
-) -> CreditNote {
-    CreditNote::new(invoice, number, date, lines).unwrap()
+) -> GstCreditNote {
+    GstCreditNote::new(invoice, number, date, lines).unwrap()
 }
 
 fn build_with_notes(
     invoices: &[GstInvoice],
-    notes: &[CreditNote],
+    notes: &[GstCreditNote],
 ) -> Result<Gstr1Return, Gstr1Error> {
     Gstr1Return::build(
         &gstin(SELLER),
@@ -1223,13 +1223,14 @@ fn test_invalid_credit_notes_are_rejected() {
         vec![line("998314", "1", "100", "18")],
     );
     let note = |number: &str, date| credit(&sale, number, date, sale.line_items.clone());
-    let reason = |notes: &[CreditNote]| match build_with_notes(std::slice::from_ref(&sale), notes) {
-        Err(Gstr1Error::InvalidCreditNote {
-            note_number,
-            reason,
-        }) => (note_number, reason),
-        other => panic!("expected InvalidCreditNote, got {other:?}"),
-    };
+    let reason =
+        |notes: &[GstCreditNote]| match build_with_notes(std::slice::from_ref(&sale), notes) {
+            Err(Gstr1Error::InvalidCreditNote {
+                note_number,
+                reason,
+            }) => (note_number, reason),
+            other => panic!("expected InvalidCreditNote, got {other:?}"),
+        };
 
     let (number, problem) = reason(&[note(
         "CN-001",

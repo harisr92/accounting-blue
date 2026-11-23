@@ -1078,7 +1078,7 @@ pub(super) fn gst_regime(document: &dyn GstDocument) -> GstRegime {
 }
 
 /// A GST document a seller issues to a buyer: a [`GstInvoice`] or a
-/// [`CreditNote`](super::CreditNote)
+/// [`GstCreditNote`](super::GstCreditNote)
 ///
 /// The pricing it shares with every document (subtotal, discount, line taxes) comes from
 /// [`TaxDocument`], under the [`GstRegime`] its supply calls for. This trait adds the parties,

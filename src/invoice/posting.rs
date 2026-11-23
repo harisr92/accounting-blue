@@ -5,10 +5,10 @@
 //! [`GstBreakdown`] into those legs and [`GstInvoice::to_entries`] maps them onto accounts. The
 //! legs always balance, because the breakdown's total is its taxable value plus its tax.
 //!
-//! A [`CreditNote`] posts the same legs on the opposite sides, reversing the part of the invoice
-//! it credits: [`CreditNote::to_entries`].
+//! A [`GstCreditNote`] posts the same legs on the opposite sides, reversing the part of the invoice
+//! it credits: [`GstCreditNote::to_entries`].
 
-use super::note::CreditNote;
+use super::note::GstCreditNote;
 use super::types::{GstBreakdown, GstDocument, GstInvoice, InvoiceError};
 use super::validation::{compliance_errors, credit_note_errors, ComplianceIssue};
 use crate::billing::{self, breakdown_entries, PostingAccounts, TaxBreakdown};
@@ -170,7 +170,7 @@ impl GstInvoice {
     }
 }
 
-impl CreditNote {
+impl GstCreditNote {
     /// Journal entries that record this credit note in the ledger
     ///
     /// The legs are an invoice's, on the opposite sides: sales and the output tax are debited,
@@ -185,7 +185,7 @@ impl CreditNote {
     /// # Example
     ///
     /// ```
-    /// use accounting_core::invoice::{CreditNote, GstInvoice, GstLineItem, Gstin, InvoiceAccounts};
+    /// use accounting_core::invoice::{GstCreditNote, GstInvoice, GstLineItem, Gstin, InvoiceAccounts};
     /// use accounting_core::EntryType;
     /// use bigdecimal::BigDecimal;
     /// use chrono::NaiveDate;
@@ -195,7 +195,7 @@ impl CreditNote {
     ///     BigDecimal::from(1000), BigDecimal::from(18))?;
     /// let invoice = GstInvoice::new("INV-001", NaiveDate::from_ymd_opt(2024, 11, 15).unwrap(),
     ///     Gstin::parse("27AAPFU0939F1ZV")?, Gstin::parse("29AAPFU0939F1ZR")?, vec![item.clone()])?;
-    /// let note = CreditNote::new(&invoice, "CN-001", NaiveDate::from_ymd_opt(2024, 11, 20).unwrap(),
+    /// let note = GstCreditNote::new(&invoice, "CN-001", NaiveDate::from_ymd_opt(2024, 11, 20).unwrap(),
     ///     vec![item])?;
     ///
     /// let accounts = InvoiceAccounts::new("receivable", "sales returns", "cgst", "sgst", "igst");

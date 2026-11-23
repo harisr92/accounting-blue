@@ -1,5 +1,5 @@
 use crate::billing::discount::Discount;
-use crate::invoice::note::CreditNote;
+use crate::invoice::note::GstCreditNote;
 use crate::invoice::posting::*;
 use crate::invoice::types::{
     GstBreakdown, GstInvoice, GstLineItem, Gstin, LineItemError, Recipient, StateCode,
@@ -268,10 +268,10 @@ fn test_exempt_invoice_posts_sales_without_tax_legs() {
     );
 }
 
-fn credit_note(buyer: &str) -> CreditNote {
+fn credit_note(buyer: &str) -> GstCreditNote {
     let invoice = invoice(buyer, 18);
     let on = NaiveDate::from_ymd_opt(2024, 11, 20).unwrap();
-    CreditNote::new(&invoice, "CN-001", on, invoice.line_items.clone()).unwrap()
+    GstCreditNote::new(&invoice, "CN-001", on, invoice.line_items.clone()).unwrap()
 }
 
 fn posted(entries: &[crate::types::Entry]) -> Vec<(&str, EntryType, BigDecimal)> {

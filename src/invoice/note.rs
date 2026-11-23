@@ -1,6 +1,6 @@
 //! Credit notes against GST invoices
 //!
-//! A seller issues a [`CreditNote`] (Section 34 of the CGST Act) to reduce the value or tax of an
+//! A seller issues a [`GstCreditNote`] (Section 34 of the CGST Act) to reduce the value or tax of an
 //! invoice it issued: goods returned, a discount after the sale, or an amount over-billed. The note
 //! is built from the [`GstInvoice`] it corrects, so it has the same seller, buyer and place of
 //! supply, and it records the invoice as an [`OriginalInvoice`]: its number, date and
@@ -41,11 +41,11 @@ pub struct OriginalInvoice {
 
 /// A credit note: the seller reduces the value or tax of an invoice it issued
 ///
-/// Deserialising goes through the same checks as [`CreditNote::new`], except that the original
+/// Deserialising goes through the same checks as [`GstCreditNote::new`], except that the original
 /// invoice is given by its [`OriginalInvoice`] record.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawCreditNote")]
-pub struct CreditNote {
+pub struct GstCreditNote {
     /// Note number: at most 16 characters of letters, digits, `-` and `/` (Rule 53)
     pub note_number: String,
     /// Date of issue
@@ -60,7 +60,7 @@ pub struct CreditNote {
     pub line_items: Vec<GstLineItem>,
 }
 
-/// Unvalidated shape of a [`CreditNote`], used when deserialising
+/// Unvalidated shape of a [`GstCreditNote`], used when deserialising
 #[derive(Deserialize)]
 struct RawCreditNote {
     note_number: String,
@@ -71,7 +71,7 @@ struct RawCreditNote {
     line_items: Vec<GstLineItem>,
 }
 
-impl TryFrom<RawCreditNote> for CreditNote {
+impl TryFrom<RawCreditNote> for GstCreditNote {
     type Error = InvoiceError;
 
     fn try_from(raw: RawCreditNote) -> Result<Self, Self::Error> {
@@ -87,7 +87,7 @@ impl TryFrom<RawCreditNote> for CreditNote {
     }
 }
 
-impl CreditNote {
+impl GstCreditNote {
     /// Create a validated credit note against `invoice`
     ///
     /// The note takes the invoice's seller and buyer, and records its number, date and supply
@@ -103,7 +103,7 @@ impl CreditNote {
     /// # Example
     ///
     /// ```
-    /// use accounting_core::invoice::{CreditNote, GstDocument, GstInvoice, GstLineItem, Gstin};
+    /// use accounting_core::invoice::{GstCreditNote, GstDocument, GstInvoice, GstLineItem, Gstin};
     /// use bigdecimal::BigDecimal;
     /// use chrono::NaiveDate;
     ///
@@ -114,7 +114,7 @@ impl CreditNote {
     ///     Gstin::parse("27AAPFU0939F1ZV")?, Gstin::parse("27AAPFU0939F2ZU")?, vec![item(10)?])?;
     ///
     /// // Two of the ten units are credited back
-    /// let note = CreditNote::new(&invoice, "CN-001", NaiveDate::from_ymd_opt(2024, 11, 20).unwrap(),
+    /// let note = GstCreditNote::new(&invoice, "CN-001", NaiveDate::from_ymd_opt(2024, 11, 20).unwrap(),
     ///     vec![item(2)?])?;
     /// assert_eq!(note.original.number, "INV-001");
     /// assert_eq!(note.breakdown()?.total, BigDecimal::from(2360));
@@ -206,7 +206,7 @@ impl CreditNote {
     }
 }
 
-impl TaxDocument for CreditNote {
+impl TaxDocument for GstCreditNote {
     type Line = GstLineItem;
     type Regime = GstRegime;
     type Error = InvoiceError;
@@ -228,7 +228,7 @@ impl TaxDocument for CreditNote {
     }
 }
 
-impl GstDocument for CreditNote {
+impl GstDocument for GstCreditNote {
     fn supply_date(&self) -> NaiveDate {
         self.original.date
     }

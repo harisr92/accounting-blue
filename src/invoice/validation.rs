@@ -9,11 +9,11 @@
 //! Issues are [`Severity::Error`] when the invoice must not be issued or posted, and
 //! [`Severity::Warning`] when it is valid but worth a second look.
 //!
-//! [`validate_credit_note`] runs the same rules over a [`CreditNote`], which is a
+//! [`validate_credit_note`] runs the same rules over a [`GstCreditNote`], which is a
 //! [`GstDocument`] too, plus the rules only a note has.
 
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
-use super::note::CreditNote;
+use super::note::GstCreditNote;
 use super::types::{invoice_number_error, GstDocument, GstInvoice, GstLineItem};
 use super::types::{InvoiceNumberError, LineItemError, Recipient, SupplyKind};
 use crate::billing::discount::DiscountError;
@@ -188,7 +188,7 @@ type ErrorRule = fn(&dyn GstDocument, NaiveDate) -> Vec<ComplianceIssue>;
 type WarningRule = fn(&dyn GstDocument, &HsnMaster) -> Vec<ComplianceIssue>;
 
 /// A rule only credit notes have, whose issues are errors
-type NoteRule = fn(&CreditNote) -> Vec<ComplianceIssue>;
+type NoteRule = fn(&GstCreditNote) -> Vec<ComplianceIssue>;
 
 /// The rules that block an invoice, in report order
 const ERROR_RULES: &[ErrorRule] = &[
@@ -255,12 +255,12 @@ pub fn validate_invoice(
 /// The note meets the same rules as an invoice, as [`validate_invoice`] describes, and four of
 /// its own: it is not dated before the invoice it corrects, its buyer is one the invoice's supply
 /// kind can apply to, its total is no more than the invoice's value, and it is issued by
-/// [`CreditNote::deadline`] (Section 34(2)). All four are errors.
+/// [`GstCreditNote::deadline`] (Section 34(2)). All four are errors.
 ///
 /// # Example
 ///
 /// ```
-/// use accounting_core::invoice::{validate_credit_note, ComplianceIssue, CreditNote, GstInvoice,
+/// use accounting_core::invoice::{validate_credit_note, ComplianceIssue, GstCreditNote, GstInvoice,
 ///     GstLineItem, Gstin, HsnMaster};
 /// use bigdecimal::BigDecimal;
 /// use chrono::NaiveDate;
@@ -273,7 +273,7 @@ pub fn validate_invoice(
 ///
 /// // The deadline for an invoice of FY 2024-25 is 30 November 2025
 /// let late = NaiveDate::from_ymd_opt(2025, 12, 1).unwrap();
-/// let note = CreditNote::new(&invoice, "CN-001", late, vec![item])?;
+/// let note = GstCreditNote::new(&invoice, "CN-001", late, vec![item])?;
 /// let report = validate_credit_note(&note, late, HsnMaster::global());
 /// assert!(matches!(report.issues(), [ComplianceIssue::CreditNoteTooLate { .. }]));
 /// # Ok(())
@@ -281,7 +281,7 @@ pub fn validate_invoice(
 /// ```
 #[must_use]
 pub fn validate_credit_note(
-    note: &CreditNote,
+    note: &GstCreditNote,
     as_of: NaiveDate,
     master: &HsnMaster,
 ) -> InvoiceValidationReport {
@@ -310,7 +310,7 @@ pub(crate) fn compliance_errors(
 }
 
 /// Only the error-severity issues of a credit note: the document rules, then its own
-pub(crate) fn credit_note_errors(note: &CreditNote, as_of: NaiveDate) -> Vec<ComplianceIssue> {
+pub(crate) fn credit_note_errors(note: &GstCreditNote, as_of: NaiveDate) -> Vec<ComplianceIssue> {
     let note_issues = NOTE_RULES.iter().flat_map(|rule| rule(note));
     compliance_errors(note, as_of)
         .into_iter()
@@ -427,7 +427,7 @@ fn shared(issues: Vec<ValidationIssue>) -> Vec<ComplianceIssue> {
     issues.into_iter().map(ComplianceIssue::from).collect()
 }
 
-fn note_date_rule(note: &CreditNote) -> Vec<ComplianceIssue> {
+fn note_date_rule(note: &GstCreditNote) -> Vec<ComplianceIssue> {
     if note.predates_original() {
         vec![ComplianceIssue::NoteBeforeOriginal {
             note_date: note.note_date,
@@ -440,7 +440,7 @@ fn note_date_rule(note: &CreditNote) -> Vec<ComplianceIssue> {
 
 /// The note's buyer must be one its original invoice's supply kind can apply to, or GSTR-1 would
 /// report it in the wrong table or drop it from Table 9B
-fn note_kind_rule(note: &CreditNote) -> Vec<ComplianceIssue> {
+fn note_kind_rule(note: &GstCreditNote) -> Vec<ComplianceIssue> {
     if note.original_kind_fits_buyer() {
         Vec::new()
     } else {
@@ -453,7 +453,7 @@ fn note_kind_rule(note: &CreditNote) -> Vec<ComplianceIssue> {
 
 /// A note may credit at most its invoice's value; a note whose tax can't be computed is left to
 /// [`line_fields_rule`]
-fn note_value_rule(note: &CreditNote) -> Vec<ComplianceIssue> {
+fn note_value_rule(note: &GstCreditNote) -> Vec<ComplianceIssue> {
     match note.credit_over_value() {
         Ok(Some(credited)) => vec![ComplianceIssue::CreditExceedsInvoice {
             credited,
@@ -463,7 +463,7 @@ fn note_value_rule(note: &CreditNote) -> Vec<ComplianceIssue> {
     }
 }
 
-fn note_deadline_rule(note: &CreditNote) -> Vec<ComplianceIssue> {
+fn note_deadline_rule(note: &GstCreditNote) -> Vec<ComplianceIssue> {
     let deadline = note.deadline();
     if note.note_date > deadline {
         vec![ComplianceIssue::CreditNoteTooLate {

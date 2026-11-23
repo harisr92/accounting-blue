@@ -23,7 +23,7 @@
 //! invoice keeps its whole value but lists only its taxed rates, and one with no taxed line
 //! appears only in Table 8.
 //!
-//! A [`CreditNote`] is reported under the supply kind of the invoice it corrects. Against a B2B
+//! A [`GstCreditNote`] is reported under the supply kind of the invoice it corrects. Against a B2B
 //! or B2CL invoice it goes to Table 9B; against a B2CS invoice it is subtracted from the Table 7
 //! row for its place of supply and rate, which may then be negative. Either way its lines are
 //! subtracted from Table 8 and from the HSN summary tab of its supply kind, and Table 13 lists the
@@ -35,7 +35,7 @@ use crate::invoice::print::PRINT_DATE_FORMAT;
 use crate::invoice::types::supply_kind_for;
 use crate::invoice::validation::{compliance_errors, credit_note_errors};
 use crate::invoice::{
-    ComplianceIssue, CreditNote, GstBreakdown, GstDocument, GstInvoice, GstLineItem, Gstin,
+    ComplianceIssue, GstBreakdown, GstCreditNote, GstDocument, GstInvoice, GstLineItem, Gstin,
     HsnMaster, HsnSacKind, InvoiceError, SupplyKind, SupplyTreatment,
 };
 use crate::tax::round_to_paise;
@@ -656,7 +656,7 @@ impl<'a> PricedDocument<'a> {
     }
 
     /// Price a credit note's lines as negative amounts, under the supply kind of its invoice
-    fn credit_note(note: &'a CreditNote) -> Result<Self, InvoiceError> {
+    fn credit_note(note: &'a GstCreditNote) -> Result<Self, InvoiceError> {
         let lines: Vec<_> = note
             .line_breakdowns()?
             .iter()
@@ -729,7 +729,7 @@ impl Gstr1Return {
         filer: &Gstin,
         period: ReturnPeriod,
         invoices: &[GstInvoice],
-        credit_notes: &[CreditNote],
+        credit_notes: &[GstCreditNote],
         master: &HsnMaster,
     ) -> Result<Self, Gstr1Error> {
         check_documents(filer, period, invoices, |invoice| {

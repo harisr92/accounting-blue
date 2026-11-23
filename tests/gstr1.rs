@@ -2,7 +2,7 @@
 #![cfg(feature = "india")]
 
 use accounting_core::invoice::{
-    CreditNote, Discount, GstInvoice, GstLineItem, Gstin, HsnMaster, InvoiceAccounts, Recipient,
+    Discount, GstCreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, InvoiceAccounts, Recipient,
     StateCode, SupplyKind,
 };
 use accounting_core::{Gstr1Error, Gstr1Return, ReturnPeriod};
@@ -310,7 +310,7 @@ fn test_small_sales_to_unregistered_buyers_are_reported_as_b2cs() {
 
 /// November's invoices with two credit notes: laptops returned by the Karnataka buyer, and a
 /// discount on the first consulting invoice
-fn november_with_credit_notes() -> (Vec<GstInvoice>, Vec<CreditNote>) {
+fn november_with_credit_notes() -> (Vec<GstInvoice>, Vec<GstCreditNote>) {
     let invoices = november_invoices();
     let find = |number: &str| {
         invoices
@@ -320,14 +320,14 @@ fn november_with_credit_notes() -> (Vec<GstInvoice>, Vec<CreditNote>) {
     };
     let on = |day| NaiveDate::from_ymd_opt(2024, 11, day).unwrap();
     let notes = vec![
-        CreditNote::new(
+        GstCreditNote::new(
             find("INV-002"),
             "CN-002",
             on(29),
             vec![line("847130", "Laptop returned", 1, "55000", 18)],
         )
         .unwrap(),
-        CreditNote::new(
+        GstCreditNote::new(
             find("INV-001"),
             "CN-001",
             on(10),

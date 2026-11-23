@@ -1,4 +1,6 @@
-use crate::invoice::{CreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode};
+use crate::invoice::{
+    GstCreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode,
+};
 use crate::returns::cdn::*;
 use crate::returns::gstr1::{Gstr1Error, Gstr1Return};
 use crate::returns::period::ReturnPeriod;
@@ -35,11 +37,11 @@ fn unregistered(state: &str) -> Recipient {
     Recipient::unregistered(StateCode::parse(state).unwrap())
 }
 
-fn credit(invoice: &GstInvoice, number: &str, date: u32, lines: Vec<GstLineItem>) -> CreditNote {
-    CreditNote::new(invoice, number, day(date), lines).unwrap()
+fn credit(invoice: &GstInvoice, number: &str, date: u32, lines: Vec<GstLineItem>) -> GstCreditNote {
+    GstCreditNote::new(invoice, number, day(date), lines).unwrap()
 }
 
-fn build(invoices: &[GstInvoice], notes: &[CreditNote]) -> Result<Gstr1Return, Gstr1Error> {
+fn build(invoices: &[GstInvoice], notes: &[GstCreditNote]) -> Result<Gstr1Return, Gstr1Error> {
     let period = ReturnPeriod::new(2024, 11).unwrap();
     Gstr1Return::build(
         &Gstin::parse(SELLER).unwrap(),

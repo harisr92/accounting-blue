@@ -32,9 +32,9 @@
 //!
 //! [`state_label`] names a GST state code, as in `29 - Karnataka`, from the [`GST_STATES`] table.
 //!
-//! [`CreditNote::new`] builds a credit note against an invoice, to reduce its value or tax after a
+//! [`GstCreditNote::new`] builds a credit note against an invoice, to reduce its value or tax after a
 //! return, a discount or over-billing. [`validate_credit_note`] checks it, including the Section
-//! 34(2) deadline, and [`CreditNote::to_entries`] posts it as the reverse of an invoice. Invoices
+//! 34(2) deadline, and [`GstCreditNote::to_entries`] posts it as the reverse of an invoice. Invoices
 //! and notes share their tax arithmetic through [`GstDocument`].
 //!
 //! The tax arithmetic comes from [`crate::tax::gst`]. The invoice types are also re-exported at the
@@ -86,7 +86,7 @@ pub mod validation;
 
 pub use crate::billing::discount::{apportion, Discount, DiscountError};
 pub use hsn_lookup::{HsnMaster, HsnSacEntry, HsnSacKind};
-pub use note::{credit_note_deadline, CreditNote, OriginalInvoice};
+pub use note::{credit_note_deadline, GstCreditNote, OriginalInvoice};
 pub use payment::{upi_uri, PaymentDetails, UPI_CURRENCY};
 #[cfg(feature = "pdf")]
 pub use pdf::{render_pdf, FontFace, PdfError, PdfFont, PdfOptions, DEFAULT_CURRENCY_LABEL};
