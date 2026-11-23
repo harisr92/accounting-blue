@@ -7,9 +7,10 @@
 use crate::document::discount::Discount;
 use crate::document::error::DocumentError;
 use crate::document::line::LineItem;
-use crate::document::posting::{breakdown_entries, PostingAccounts, PostingLeg};
+use crate::document::posting::PostingLeg;
 use crate::document::pricing::Document;
 use crate::document::tax::{TaxError, TaxRegime};
+use crate::sales::posting::{sales_entries, SalesAccounts};
 use crate::types::Entry;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -22,8 +23,8 @@ use serde::{Deserialize, Serialize};
 /// # Example
 ///
 /// ```
-/// use accounting_core::document::{FlatRate, LineItem, PostingAccounts, Document};
-/// use accounting_core::sales::Invoice;
+/// use accounting_core::document::{Document, FlatRate, LineItem};
+/// use accounting_core::sales::{Invoice, SalesAccounts};
 /// use bigdecimal::BigDecimal;
 /// use chrono::NaiveDate;
 ///
@@ -34,7 +35,7 @@ use serde::{Deserialize, Serialize};
 ///     "Acme Ltd", vec![line], FlatRate::new("VAT"))?;
 /// assert_eq!(invoice.tax_breakdown()?.total, BigDecimal::from(1200));
 ///
-/// let accounts = PostingAccounts::new("receivable", "sales").with_tax("VAT", "vat-payable");
+/// let accounts = SalesAccounts::new("receivable", "sales").with_output_tax("VAT", "vat-payable");
 /// let entries = invoice.to_entries(&accounts)?;
 /// assert_eq!(entries.len(), 3);
 /// # Ok(())
@@ -135,8 +136,8 @@ impl<R: TaxRegime<Error = TaxError> + Clone> Invoice<R> {
     ///
     /// [`DocumentError::Posting`] if the total is zero or a tax has no account, or any error from
     /// [`Document::tax_breakdown`].
-    pub fn to_entries(&self, accounts: &PostingAccounts) -> Result<Vec<Entry>, DocumentError> {
-        Ok(breakdown_entries(
+    pub fn to_entries(&self, accounts: &SalesAccounts) -> Result<Vec<Entry>, DocumentError> {
+        Ok(sales_entries(
             &self.tax_breakdown()?,
             accounts,
             PostingLeg::side,

@@ -3,10 +3,11 @@
 use crate::document::discount::Discount;
 use crate::document::error::DocumentError;
 use crate::document::line::LineItem;
-use crate::document::posting::{PostingAccounts, PostingError};
+use crate::document::posting::PostingError;
 use crate::document::pricing::Document;
 use crate::document::tax::{FlatRate, NoTax};
 use crate::sales::invoice::*;
+use crate::sales::posting::SalesAccounts;
 use crate::types::EntryType;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -29,8 +30,8 @@ fn vat_invoice(lines: Vec<LineItem>) -> Invoice<FlatRate> {
     Invoice::new("INV-001", date(), "Acme Ltd", lines, FlatRate::new("VAT")).unwrap()
 }
 
-fn accounts() -> PostingAccounts {
-    PostingAccounts::new("ar", "sales").with_tax("VAT", "vat_out")
+fn accounts() -> SalesAccounts {
+    SalesAccounts::new("ar", "sales").with_output_tax("VAT", "vat_out")
 }
 
 #[test]
@@ -108,7 +109,7 @@ fn test_invoice_posts_balanced_entries() {
 
 #[test]
 fn test_posting_a_tax_without_an_account_is_refused() {
-    let result = vat_invoice(vec![line(1, 100, 20)]).to_entries(&PostingAccounts::new("ar", "s"));
+    let result = vat_invoice(vec![line(1, 100, 20)]).to_entries(&SalesAccounts::new("ar", "s"));
     assert!(matches!(
         result,
         Err(DocumentError::Posting(PostingError::NoTaxAccount { .. }))

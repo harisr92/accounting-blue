@@ -6,7 +6,7 @@
 use accounting_core::utils::MemoryStorage;
 use accounting_core::{
     AccountType, CreditNote, Discount, Document, Entry, FlatRate, Invoice, Ledger, LineItem,
-    PostingAccounts, TransactionBuilder,
+    SalesAccounts, TransactionBuilder,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -77,7 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("  Total:     {}", breakdown.total);
 
-    let sales = PostingAccounts::new("1200", "4000").with_tax("VAT", "2200");
+    let sales = SalesAccounts::new("1200", "4000").with_output_tax("VAT", "2200");
     post(
         &mut ledger,
         "INV-2025-001",
@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         note.original.number,
         note.tax_breakdown()?.total
     );
-    let returns = PostingAccounts::new("1200", "4100").with_tax("VAT", "2200");
+    let returns = SalesAccounts::new("1200", "4100").with_output_tax("VAT", "2200");
     post(
         &mut ledger,
         "CN-2025-001",

@@ -2,11 +2,11 @@
 
 use crate::document::error::DocumentError;
 use crate::document::line::LineItem;
-use crate::document::posting::PostingAccounts;
 use crate::document::pricing::Document;
 use crate::document::tax::FlatRate;
 use crate::sales::credit_note::*;
 use crate::sales::invoice::Invoice;
+use crate::sales::posting::SalesAccounts;
 use crate::types::EntryType;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -85,7 +85,7 @@ fn test_note_needs_a_number_and_lines() {
 #[test]
 fn test_note_posts_the_reverse_of_an_invoice() {
     let note = CreditNote::new(&invoice(), "CN-001", date(12), vec![chairs(2)]).unwrap();
-    let accounts = PostingAccounts::new("ar", "returns").with_tax("VAT", "vat_out");
+    let accounts = SalesAccounts::new("ar", "returns").with_output_tax("VAT", "vat_out");
     let posted: Vec<_> = note
         .to_entries(&accounts)
         .unwrap()

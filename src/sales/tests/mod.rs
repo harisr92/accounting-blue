@@ -2,3 +2,4 @@
 
 mod credit_note_test;
 mod invoice_test;
+mod posting_test;

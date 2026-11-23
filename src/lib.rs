@@ -168,7 +168,7 @@
 //! their tax under a [`TaxRegime`] and posts them as balanced journal entries.
 //!
 //! ```rust
-//! use accounting_core::{FlatRate, Invoice, LineItem, PostingAccounts, Document};
+//! use accounting_core::{FlatRate, Invoice, LineItem, SalesAccounts, Document};
 //! use bigdecimal::BigDecimal;
 //! use chrono::NaiveDate;
 //!
@@ -179,7 +179,7 @@
 //!     "Acme Ltd", vec![line], FlatRate::new("VAT"))?;
 //! assert_eq!(invoice.tax_breakdown()?.total, BigDecimal::from(1200));
 //!
-//! let accounts = PostingAccounts::new("1200", "4000").with_tax("VAT", "2200");
+//! let accounts = SalesAccounts::new("1200", "4000").with_output_tax("VAT", "2200");
 //! let entries = invoice.to_entries(&accounts)?; // Dr 1200 1200, Cr 4000 1000, Cr 2200 200
 //! assert_eq!(entries.len(), 3);
 //! # Ok(())
@@ -267,7 +267,7 @@ pub mod utils;
 
 pub use document::{
     apportion, Discount, DiscountError, Document, DocumentError, DocumentLine, FlatRate, LineItem,
-    NoTax, PostingAccounts, PostingLeg, TaxBreakdown, TaxComponent, TaxRegime,
+    NoTax, PostingLeg, TaxBreakdown, TaxComponent, TaxRegime,
 };
 pub use error::{BoxError, Error, FieldError, LedgerError, LedgerResult, PaginationError, Result};
 #[cfg(feature = "india")]
@@ -293,7 +293,7 @@ pub use ledger::{
 pub use reports::{
     BalanceSheet, CashFlowItem, CashFlowStatement, IncomeStatement, LedgerIntegrityReport,
 };
-pub use sales::{CreditNote, Invoice};
+pub use sales::{CreditNote, Invoice, SalesAccounts};
 pub use traits::{
     AccountStore, AccountValidator, LedgerStorage, TransactionStore, TransactionValidator,
 };

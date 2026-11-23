@@ -3,7 +3,7 @@
 use accounting_core::document::validate_document;
 use accounting_core::{
     utils::MemoryStorage, AccountType, CreditNote, Discount, Document, Entry, FlatRate, Invoice,
-    Ledger, LineItem, PostingAccounts, TransactionBuilder,
+    Ledger, LineItem, SalesAccounts, TransactionBuilder,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -23,8 +23,8 @@ fn chairs(quantity: i32) -> LineItem {
     .with_unit("pcs")
 }
 
-fn accounts() -> PostingAccounts {
-    PostingAccounts::new("receivable", "sales").with_tax("VAT", "vat_payable")
+fn accounts() -> SalesAccounts {
+    SalesAccounts::new("receivable", "sales").with_output_tax("VAT", "vat_payable")
 }
 
 async fn books() -> Ledger<MemoryStorage> {

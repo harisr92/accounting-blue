@@ -11,33 +11,34 @@
 use super::note::GstCreditNote;
 use super::types::{GstBreakdown, GstDocument, GstInvoice, InvoiceError};
 use super::validation::{compliance_errors, credit_note_errors, ComplianceIssue};
-use crate::document::{self, breakdown_entries, PostingAccounts, TaxBreakdown};
+use crate::document::{self, TaxBreakdown};
 use crate::gst::tax::{CGST_CODE, IGST_CODE, SGST_CODE};
+use crate::sales::{sales_entries, sales_legs, SalesAccounts};
 use crate::types::{Entry, EntryType};
 use bigdecimal::BigDecimal;
 use serde::{Deserialize, Serialize};
 
 pub use crate::document::PostingLeg;
 
-/// Every leg a GST invoice can post, debit first: receivable, sales, then CGST, SGST and IGST
+/// Every leg a GST invoice can post, debit first: receivable, revenue, then CGST, SGST and IGST
 #[must_use]
 pub fn gst_legs() -> [PostingLeg; 5] {
     [
         PostingLeg::Receivable,
-        PostingLeg::Sales,
-        PostingLeg::tax(CGST_CODE),
-        PostingLeg::tax(SGST_CODE),
-        PostingLeg::tax(IGST_CODE),
+        PostingLeg::Revenue,
+        PostingLeg::output_tax(CGST_CODE),
+        PostingLeg::output_tax(SGST_CODE),
+        PostingLeg::output_tax(IGST_CODE),
     ]
 }
 
 /// Legs of the journal entry for `breakdown`, leaving out those with a zero amount
 ///
 /// An invoice only ever carries CGST + SGST or IGST, never both. See
-/// [`document::posting_legs`].
+/// [`sales_legs`].
 #[must_use]
 pub fn posting_legs(breakdown: &GstBreakdown) -> Vec<(PostingLeg, BigDecimal)> {
-    document::posting_legs(&TaxBreakdown::from(breakdown))
+    sales_legs(&TaxBreakdown::from(breakdown))
 }
 
 /// Why an invoice could not be posted to the ledger
@@ -73,7 +74,7 @@ pub struct InvoiceAccounts {
     /// Debited with the invoice total (accounts receivable or cash)
     pub receivable: String,
     /// Credited with the taxable value
-    pub sales: String,
+    pub revenue: String,
     /// Credited with CGST
     pub cgst_output: String,
     /// Credited with SGST
@@ -86,14 +87,14 @@ impl InvoiceAccounts {
     /// Name the account for each leg
     pub fn new(
         receivable: impl Into<String>,
-        sales: impl Into<String>,
+        revenue: impl Into<String>,
         cgst_output: impl Into<String>,
         sgst_output: impl Into<String>,
         igst_output: impl Into<String>,
     ) -> Self {
         Self {
             receivable: receivable.into(),
-            sales: sales.into(),
+            revenue: revenue.into(),
             cgst_output: cgst_output.into(),
             sgst_output: sgst_output.into(),
             igst_output: igst_output.into(),
@@ -105,21 +106,21 @@ impl InvoiceAccounts {
     pub fn account_for(&self, leg: &PostingLeg) -> Option<&str> {
         match leg {
             PostingLeg::Receivable => Some(&self.receivable),
-            PostingLeg::Sales => Some(&self.sales),
-            PostingLeg::Tax(code) if code == CGST_CODE => Some(&self.cgst_output),
-            PostingLeg::Tax(code) if code == SGST_CODE => Some(&self.sgst_output),
-            PostingLeg::Tax(code) if code == IGST_CODE => Some(&self.igst_output),
-            PostingLeg::Tax(_) => None,
+            PostingLeg::Revenue => Some(&self.revenue),
+            PostingLeg::OutputTax(code) if code == CGST_CODE => Some(&self.cgst_output),
+            PostingLeg::OutputTax(code) if code == SGST_CODE => Some(&self.sgst_output),
+            PostingLeg::OutputTax(code) if code == IGST_CODE => Some(&self.igst_output),
+            PostingLeg::OutputTax(_) => None,
         }
     }
 }
 
-impl From<&InvoiceAccounts> for PostingAccounts {
+impl From<&InvoiceAccounts> for SalesAccounts {
     fn from(accounts: &InvoiceAccounts) -> Self {
-        PostingAccounts::new(accounts.receivable.clone(), accounts.sales.clone())
-            .with_tax(CGST_CODE, accounts.cgst_output.clone())
-            .with_tax(SGST_CODE, accounts.sgst_output.clone())
-            .with_tax(IGST_CODE, accounts.igst_output.clone())
+        SalesAccounts::new(accounts.receivable.clone(), accounts.revenue.clone())
+            .with_output_tax(CGST_CODE, accounts.cgst_output.clone())
+            .with_output_tax(SGST_CODE, accounts.sgst_output.clone())
+            .with_output_tax(IGST_CODE, accounts.igst_output.clone())
     }
 }
 
@@ -175,7 +176,7 @@ impl GstCreditNote {
     ///
     /// The legs are an invoice's, on the opposite sides: sales and the output tax are debited,
     /// and the receivable is credited with the note's total. Pass a sales returns account as
-    /// `accounts.sales` to keep returns apart from sales. The note must pass the error-severity
+    /// `accounts.revenue` to keep returns apart from sales. The note must pass the error-severity
     /// rules of [`validate_credit_note`](super::validate_credit_note) as of its own date.
     ///
     /// # Errors
@@ -227,9 +228,9 @@ fn document_entries(
         return Err(PostingError::NotCompliant(errors));
     }
     let breakdown = document.tax_breakdown()?;
-    Ok(breakdown_entries(
+    Ok(sales_entries(
         &breakdown,
-        &PostingAccounts::from(accounts),
+        &SalesAccounts::from(accounts),
         side,
     )?)
 }

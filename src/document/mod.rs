@@ -22,7 +22,7 @@ pub mod validation;
 pub use discount::{apportion, Discount, DiscountError};
 pub use error::DocumentError;
 pub use line::{check_line, check_line_fields, DocumentLine, LineError, LineItem};
-pub use posting::{breakdown_entries, posting_legs, PostingAccounts, PostingError, PostingLeg};
+pub use posting::{legs_to_entries, PostingError, PostingLeg};
 pub use pricing::{line_values, price_lines, Document, PricedLines};
 pub use tax::{
     check_rate, FlatRate, NoTax, TaxBreakdown, TaxComponent, TaxError, TaxRegime, MAX_TAX_RATE,

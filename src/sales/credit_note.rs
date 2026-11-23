@@ -8,10 +8,10 @@
 
 use crate::document::error::DocumentError;
 use crate::document::line::LineItem;
-use crate::document::posting::{breakdown_entries, PostingAccounts};
 use crate::document::pricing::Document;
 use crate::document::tax::{TaxError, TaxRegime};
 use crate::sales::invoice::{check_document, Invoice};
+use crate::sales::posting::{sales_entries, SalesAccounts};
 use crate::types::Entry;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -33,8 +33,8 @@ pub struct OriginalInvoice {
 /// # Example
 ///
 /// ```
-/// use accounting_core::document::{FlatRate, LineItem, PostingAccounts};
-/// use accounting_core::sales::{CreditNote, Invoice};
+/// use accounting_core::document::{FlatRate, LineItem};
+/// use accounting_core::sales::{CreditNote, Invoice, SalesAccounts};
 /// use accounting_core::EntryType;
 /// use bigdecimal::BigDecimal;
 /// use chrono::NaiveDate;
@@ -47,7 +47,7 @@ pub struct OriginalInvoice {
 ///
 /// // Two chairs come back
 /// let note = CreditNote::new(&invoice, "CN-001", date(5), vec![line(2)?])?;
-/// let accounts = PostingAccounts::new("receivable", "sales returns").with_tax("VAT", "vat");
+/// let accounts = SalesAccounts::new("receivable", "sales returns").with_output_tax("VAT", "vat");
 /// let entries = note.to_entries(&accounts)?;
 /// assert_eq!(entries[0].entry_type, EntryType::Credit);
 /// assert_eq!(entries[0].amount, BigDecimal::from(120));
@@ -116,17 +116,15 @@ impl<R: TaxRegime<Error = TaxError> + Clone> CreditNote<R> {
 
     /// Journal entries that record this note: an invoice's legs on the opposite sides
     ///
-    /// Pass a sales returns account as `accounts.sales` to keep returns apart from sales.
+    /// Pass a sales returns account as `accounts.revenue` to keep returns apart from sales.
     ///
     /// # Errors
     ///
     /// As [`Invoice::to_entries`].
-    pub fn to_entries(&self, accounts: &PostingAccounts) -> Result<Vec<Entry>, DocumentError> {
-        Ok(breakdown_entries(
-            &self.tax_breakdown()?,
-            accounts,
-            |leg| leg.side().opposite(),
-        )?)
+    pub fn to_entries(&self, accounts: &SalesAccounts) -> Result<Vec<Entry>, DocumentError> {
+        Ok(sales_entries(&self.tax_breakdown()?, accounts, |leg| {
+            leg.side().opposite()
+        })?)
     }
 }
 

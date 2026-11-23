@@ -8,9 +8,11 @@
 
 pub mod credit_note;
 pub mod invoice;
+pub mod posting;
 
 pub use credit_note::{CreditNote, OriginalInvoice};
 pub use invoice::Invoice;
+pub use posting::{sales_entries, sales_legs, SalesAccounts};
 
 #[cfg(test)]
 mod tests;

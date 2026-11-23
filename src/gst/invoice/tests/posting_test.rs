@@ -47,9 +47,9 @@ fn test_intra_state_posting_splits_cgst_and_sgst() {
         posting_legs(&breakdown),
         vec![
             (PostingLeg::Receivable, BigDecimal::from(1180)),
-            (PostingLeg::Sales, BigDecimal::from(1000)),
-            (PostingLeg::tax(CGST_CODE), BigDecimal::from(90)),
-            (PostingLeg::tax(SGST_CODE), BigDecimal::from(90)),
+            (PostingLeg::Revenue, BigDecimal::from(1000)),
+            (PostingLeg::output_tax(CGST_CODE), BigDecimal::from(90)),
+            (PostingLeg::output_tax(SGST_CODE), BigDecimal::from(90)),
         ]
     );
 }
@@ -62,8 +62,8 @@ fn test_inter_state_posting_charges_igst() {
         posting_legs(&breakdown),
         vec![
             (PostingLeg::Receivable, BigDecimal::from(1180)),
-            (PostingLeg::Sales, BigDecimal::from(1000)),
-            (PostingLeg::tax(IGST_CODE), BigDecimal::from(180)),
+            (PostingLeg::Revenue, BigDecimal::from(1000)),
+            (PostingLeg::output_tax(IGST_CODE), BigDecimal::from(180)),
         ]
     );
 }
@@ -76,7 +76,7 @@ fn test_zero_rated_posting_has_no_tax_legs() {
         posting_legs(&breakdown),
         vec![
             (PostingLeg::Receivable, BigDecimal::from(1000)),
-            (PostingLeg::Sales, BigDecimal::from(1000)),
+            (PostingLeg::Revenue, BigDecimal::from(1000)),
         ]
     );
     assert!(posting_legs(&GstBreakdown::default()).is_empty());
@@ -350,9 +350,9 @@ fn test_discounted_invoice_posts_its_discounted_sales() {
         posting_legs(&invoice.breakdown().unwrap()),
         vec![
             (PostingLeg::Receivable, BigDecimal::from(1062)),
-            (PostingLeg::Sales, BigDecimal::from(900)),
-            (PostingLeg::tax(CGST_CODE), BigDecimal::from(81)),
-            (PostingLeg::tax(SGST_CODE), BigDecimal::from(81)),
+            (PostingLeg::Revenue, BigDecimal::from(900)),
+            (PostingLeg::output_tax(CGST_CODE), BigDecimal::from(81)),
+            (PostingLeg::output_tax(SGST_CODE), BigDecimal::from(81)),
         ]
     );
 }
