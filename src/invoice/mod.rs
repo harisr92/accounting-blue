@@ -73,7 +73,6 @@
 //! # }
 //! ```
 
-pub mod discount;
 pub mod hsn_lookup;
 pub mod note;
 pub mod payment;
@@ -85,7 +84,7 @@ pub mod state;
 pub mod types;
 pub mod validation;
 
-pub use discount::{apportion, Discount, DiscountError};
+pub use crate::billing::discount::{apportion, Discount, DiscountError};
 pub use hsn_lookup::{HsnMaster, HsnSacEntry, HsnSacKind};
 pub use note::{credit_note_deadline, CreditNote, OriginalInvoice};
 pub use payment::{upi_uri, PaymentDetails, UPI_CURRENCY};

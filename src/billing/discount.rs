@@ -1,13 +1,13 @@
 //! Discounts on a line or on an invoice's subtotal
 //!
-//! A [`Discount`] is a percentage or a flat amount of rupees. A line's discount comes off its
-//! quantity times unit price; an invoice's discount comes off its subtotal, the sum of its lines
-//! after their own discounts. Both are given before tax, so they reduce the taxable value
-//! (Section 15(3) of the CGST Act). An invoice's lines may carry different rates, so its discount
-//! is shared across them in proportion to their value by [`apportion`], and each line is taxed on
-//! what is left.
+//! A [`Discount`] is a percentage or a flat amount. A line's discount comes off its quantity
+//! times unit price; an invoice's discount comes off its subtotal, the sum of its lines after
+//! their own discounts. Both are given before tax, so they reduce the taxable value (as Section
+//! 15(3) of India's CGST Act requires for GST). An invoice's lines may carry different rates, so
+//! its discount is shared across them in proportion to their value by [`apportion`], and each
+//! line is taxed on what is left.
 
-use crate::tax::gst::{percent_of, round_to_paise};
+use crate::money::{percent_of, round_money};
 use bigdecimal::{BigDecimal, Signed, Zero};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -22,7 +22,7 @@ const MAX_DISCOUNT_PERCENT: u32 = 100;
 /// # Example
 ///
 /// ```
-/// use accounting_core::invoice::Discount;
+/// use accounting_core::billing::Discount;
 /// use bigdecimal::BigDecimal;
 ///
 /// let base = BigDecimal::from(1999);
@@ -34,20 +34,20 @@ const MAX_DISCOUNT_PERCENT: u32 = 100;
 pub enum Discount {
     /// A percentage of the value, from 0 to 100
     Percent(BigDecimal),
-    /// A flat amount of rupees, at most the value
+    /// A flat amount, at most the value
     Amount(BigDecimal),
 }
 
 impl Discount {
-    /// The rupees this discount takes off `base`, rounded to paise
+    /// The amount this discount takes off `base`, rounded to the minor unit
     ///
     /// Never more than `base`: rounding a discount of the whole of a base with a fraction of a
-    /// paisa, such as 100% of 3.335, would otherwise leave a negative value.
+    /// minor unit, such as 100% of 3.335, would otherwise leave a negative value.
     #[must_use]
     pub fn amount_off(&self, base: &BigDecimal) -> BigDecimal {
         let off = match self {
-            Self::Percent(percent) => round_to_paise(&percent_of(base, percent)),
-            Self::Amount(amount) => round_to_paise(amount),
+            Self::Percent(percent) => round_money(&percent_of(base, percent)),
+            Self::Amount(amount) => round_money(amount),
         };
         if off > *base && !base.is_negative() {
             base.clone()
@@ -109,16 +109,16 @@ pub enum DiscountError {
     },
 }
 
-/// Share `total` across `bases` in proportion to each, in paise
+/// Share `total` across `bases` in proportion to each, in minor units
 ///
-/// Each share is rounded to paise, and what rounding leaves over goes to the largest base, so the
-/// shares always add up to `total` when it is in paise. When the bases sum to zero, every share
+/// Each share is rounded with [`round_money`], and what rounding leaves over goes to the largest base, so the
+/// shares always add up to `total` when it is already rounded. When the bases sum to zero, every share
 /// is zero.
 ///
 /// # Example
 ///
 /// ```
-/// use accounting_core::invoice::apportion;
+/// use accounting_core::billing::apportion;
 /// use bigdecimal::BigDecimal;
 ///
 /// let bases = [BigDecimal::from(1), BigDecimal::from(1), BigDecimal::from(1)];
@@ -134,7 +134,7 @@ pub fn apportion(total: &BigDecimal, bases: &[BigDecimal]) -> Vec<BigDecimal> {
     }
     let shares: Vec<BigDecimal> = bases
         .iter()
-        .map(|base| round_to_paise(&(total * base / &sum)))
+        .map(|base| round_money(&(total * base / &sum)))
         .collect();
     let remainder = total - shares.iter().sum::<BigDecimal>();
     let largest = bases

@@ -1,4 +1,4 @@
-use crate::invoice::discount::Discount;
+use crate::billing::discount::Discount;
 use crate::invoice::payment::PaymentDetails;
 use crate::invoice::pdf::*;
 use crate::invoice::print::{InvoiceDetails, InvoiceParties, InvoiceParty, InvoicePrint};

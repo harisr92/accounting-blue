@@ -6,10 +6,11 @@
 
 use bigdecimal::BigDecimal;
 
+use crate::billing::DiscountError;
 #[cfg(feature = "pdf")]
 use crate::invoice::PdfError;
 #[cfg(feature = "india")]
-use crate::invoice::{DiscountError, InvoiceError, PostingError};
+use crate::invoice::{InvoiceError, PostingError};
 use crate::reconciliation::ReconciliationError;
 #[cfg(feature = "india")]
 use crate::returns::Gstr1Error;
@@ -34,7 +35,6 @@ pub enum Error {
     #[error(transparent)]
     Invoice(#[from] InvoiceError),
     /// A discount does not fit the value it comes off
-    #[cfg(feature = "india")]
     #[error(transparent)]
     Discount(#[from] DiscountError),
     /// An invoice could not be posted to the ledger

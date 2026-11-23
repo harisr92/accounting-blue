@@ -1,8 +1,8 @@
 //! GST invoice domain types
 
-use super::discount::{apportion, Discount, DiscountError};
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use super::print::{PartyError, PartyRole};
+use crate::billing::discount::{apportion, Discount, DiscountError};
 use crate::tax::gst::{round_to_paise, GstCalculation, GstError, GstRate};
 use bigdecimal::{BigDecimal, Signed, Zero};
 use chrono::NaiveDate;

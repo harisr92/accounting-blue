@@ -12,11 +12,11 @@
 //! [`validate_credit_note`] runs the same rules over a [`CreditNote`], which is a
 //! [`GstDocument`] too, plus the rules only a note has.
 
-use super::discount::DiscountError;
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use super::note::CreditNote;
 use super::types::{invoice_number_error, GstDocument, GstInvoice, GstLineItem};
 use super::types::{InvoiceNumberError, LineItemError, Recipient, SupplyKind};
+use crate::billing::discount::DiscountError;
 use crate::tax::round_to_paise;
 use bigdecimal::{BigDecimal, Zero};
 use chrono::NaiveDate;

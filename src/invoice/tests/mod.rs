@@ -1,6 +1,5 @@
 //! Unit tests for the modules in this directory
 
-mod discount_test;
 mod hsn_lookup_test;
 mod note_test;
 mod payment_test;

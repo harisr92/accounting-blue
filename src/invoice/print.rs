@@ -5,12 +5,12 @@
 //! [`GstInvoice`] and the [`InvoiceParties`] that issue and receive it, and serialises to JSON as
 //! is. The PDF renderer (behind the `pdf` feature) only lays this model out on the page.
 
-use super::discount::Discount;
 use super::payment::{non_blank, upi_uri, PaymentDetails};
 use super::state::state_label;
 use super::types::{
     price_lines, GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError, SupplyTreatment,
 };
+use crate::billing::discount::Discount;
 use crate::utils::formatting::{amount_in_words, format_inr};
 use bigdecimal::{BigDecimal, Signed, Zero};
 use chrono::NaiveDate;
