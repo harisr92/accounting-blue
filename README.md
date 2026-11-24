@@ -29,7 +29,8 @@ The core is country-neutral. Indian tax support is opt-in:
 
 | Feature | Adds |
 |---------|------|
-| `india` | GST rates and maths, GSTIN, HSN/SAC master data, GST invoices and credit notes, GSTR-1 returns, Indian amount formatting |
+| `india` | GST rates and maths, GSTIN, HSN/SAC codes with checked default rates, GST invoices and credit notes, GSTR-1 returns, Indian amount formatting |
+| `hsn-catalog` | The GST portal's whole HSN/SAC list with descriptions (about 22,500 codes, ~1.8 MB in the binary), for code search, GSTR-1 HSN descriptions and unknown-code warnings; turns on `india` |
 | `pdf` | Renders GST invoices to PDF (needs Rust 1.88); turns on `india` |
 
 ```toml
@@ -281,6 +282,7 @@ Run the test suite:
 ```bash
 cargo test                  # core only
 cargo test --features india # adds the GST, invoice and GSTR-1 tests
+cargo test --features hsn-catalog # adds the full HSN/SAC list's tests
 cargo test --all-features   # adds the PDF renderer's tests
 ```
 

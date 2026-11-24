@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Breaking
+- The GST portal's whole HSN/SAC list is behind the new opt-in `hsn-catalog` feature (implies `india`), since it adds about 1.8 MB to the binary. With `india` alone, `HsnMaster::global` holds only the codes with checked rates, as before this release; `HsnMaster::lists_every_code` says which you have, and `validate_invoice` warns `UnknownHsnSac` only when the master lists every code. A master you deserialize yourself always lists every code.
+- The published crate ships only `src`, `examples`, `tests`, `Cargo.toml`, `README.md`, `CHANGELOG.md` and licence files.
 - GSTR-1's HSN summary cuts each row's description to the whole words that fit in 30 characters (`HSN_DESCRIPTION_MAX`), the most the portal's `desc` takes.
 - The HSN/SAC master now holds the GST portal's whole list (about 22,500 codes, `src/gst/data/hsn_codes.json`, built by `scripts/build_hsn_codes.py`), not 83 common codes. The portal gives no rates, so `HsnSacEntry::gst_rate` is now `Option<BigDecimal>`: `Some` only for the hand-checked codes in `hsn_master.json`.
   - `HsnMaster::lookup` finds many more codes exactly, so a code that used to resolve to its heading may now resolve to itself (with no rate).

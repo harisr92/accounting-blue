@@ -1355,6 +1355,7 @@ fn test_services_report_na_even_with_a_unit() {
 }
 
 #[test]
+#[cfg(feature = "hsn-catalog")]
 fn test_hsn_row_descriptions_fit_the_portals_limit() {
     // 84713010 reads "PERSONAL COMPUTER"; 998314's description is longer than the portal takes.
     let lines = vec![

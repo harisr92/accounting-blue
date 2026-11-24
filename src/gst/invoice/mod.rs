@@ -13,7 +13,8 @@
 //! [`GstLineItem::with_discount`], or off the subtotal through [`GstInvoice::with_discount`],
 //! which [`apportion`] shares across the lines by value.
 //!
-//! [`HsnMaster`] holds common HSN/SAC codes with their default GST rates;
+//! [`HsnMaster`] holds HSN/SAC codes with their default GST rates: the checked codes, plus the GST
+//! portal's whole list with the `hsn-catalog` feature;
 //! [`GstLineItem::with_default_rate`] builds a line at the rate for its code.
 //!
 //! [`validate_invoice`] checks an invoice against the compliance rules (future dates, missing or

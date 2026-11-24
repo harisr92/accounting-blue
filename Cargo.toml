@@ -10,6 +10,16 @@ categories = ["finance"]
 rust-version = "1.82"
 readme = "README.md"
 repository = "https://github.com/harisr92/accounting-blue"
+# Publish only what builds and documents the library: no CI, editor or data-build files
+include = [
+    "src/**/*",
+    "examples/**/*",
+    "tests/**/*",
+    "Cargo.toml",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE*",
+]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -35,6 +45,9 @@ tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 default = []
 # Indian GST: rates and maths, GSTIN, HSN/SAC master, GST invoices and credit notes, GSTR-1
 india = ["dep:serde_json"]
+# The GST portal's whole HSN/SAC list with descriptions (about 22,500 codes, ~1.8 MB in the
+# binary), for code search, GSTR-1 HSN descriptions and unknown-code warnings (implies `india`)
+hsn-catalog = ["india"]
 # Render GST invoices to PDF with printpdf (implies `india`)
 pdf = ["india", "dep:printpdf", "dep:qrcode"]
 

@@ -1,6 +1,6 @@
 # accounting-core
 
-Rust library for double-entry bookkeeping, financial reports and bank/gateway reconciliation, with Indian GST (tax maths, B2B invoices, GSTR-1, invoice PDFs) behind the opt-in `india` feature. Money is `bigdecimal::BigDecimal` everywhere. Storage is pluggable behind async traits, and `MemoryStorage` is the reference implementation.
+Rust library for double-entry bookkeeping, financial reports and bank/gateway reconciliation, with Indian GST (tax maths, B2B invoices, GSTR-1 and GSTR-3B, invoice PDFs) behind the opt-in `india` feature (the full HSN/SAC list is behind `hsn-catalog`). Money is `bigdecimal::BigDecimal` everywhere. Storage is pluggable behind async traits, and `MemoryStorage` is the reference implementation.
 
 ## Layout
 
@@ -17,7 +17,8 @@ Rust library for double-entry bookkeeping, financial reports and bank/gateway re
 | `src/gst/` | Indian GST, behind the `india` feature: `tax`, `invoice` and `returns` below |
 | `src/gst/tax/gst.rs` | GST rates and calculations, and `GstRegime`, the GST `TaxRegime` |
 | `src/gst/invoice/` | GSTIN, GST invoices and credit notes built on `document` and `sales`, HSN/SAC master data, the pure print model, and the PDF renderer behind the `pdf` feature (implies `india`) |
-| `src/gst/returns/` | GST returns built from invoices: the pure GSTR-1 builder, its portal-schema DTOs and JSON export, and `ReturnPeriod` |
+| `src/gst/returns/` | GST returns built from invoices: the pure GSTR-1 builder, its portal-schema DTOs and JSON export, the pure GSTR-3B Table 3.1 (outward supplies) builder, and `ReturnPeriod` |
+| `src/gst/data/` | HSN/SAC master data embedded at compile time, loaded by `gst::invoice::hsn_lookup`: `hsn_master.json` (checked rates, always with `india`) and `hsn_codes.json` (the portal's whole list, only with `hsn-catalog`) |
 | `src/reconciliation/` | Pure matching engine, split by pass, with scoring and the report |
 | `src/utils/` | `MemoryStorage`, `MemoryReconciliationStorage`, validation rules, Indian amount formatting (`india` feature) |
 | `src/**/tests/` | Unit test module for its directory: `mod.rs` plus one `<module>_test.rs` per module (see [Tests](#tests)) |
@@ -132,9 +133,11 @@ Run all of these before handing work off. CI runs the same checks.
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings                  # core only, no Indian tax
 cargo clippy --all-targets --features india -- -D warnings
+cargo clippy --all-targets --features hsn-catalog -- -D warnings
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test                       # core unit, integration and doc tests
-cargo test --features india      # adds GST, invoice and GSTR-1 tests
+cargo test --features india      # adds GST, invoice, HSN, GSTR-1 and GSTR-3B tests
+cargo test --features hsn-catalog  # adds the full HSN/SAC list's tests
 cargo test --all-features        # adds the `pdf` renderer's tests
 cargo doc --no-deps
 cargo doc --no-deps --all-features
@@ -147,4 +150,4 @@ done
 cargo run -q --features pdf --example gst_invoice_pdf > /dev/null || echo "FAILED: gst_invoice_pdf"
 ```
 
-Core code (`ledger`, `reports`, `reconciliation`, `document`, `sales`, `money`, `types`, `traits`, `utils` outside `formatting`) must never depend on `gst`. New tax systems go in as a `TaxRegime`, not as branches in `document` or `sales`. Indian code may depend on the core. Gate any new Indian-only module, re-export, error variant or test file with `#[cfg(feature = "india")]`.
+Core code (`ledger`, `reports`, `reconciliation`, `document`, `sales`, `money`, `types`, `traits`, `utils` outside `formatting`) must never depend on `gst`. New tax systems go in as a `TaxRegime`, not as branches in `document` or `sales`. Indian code may depend on the core. Gate any new Indian-only module, re-export, error variant or test file with `#[cfg(feature = "india")]`. Tests that need the portal's whole HSN/SAC list (codes outside `hsn_master.json`, search, descriptions) take `#[cfg(feature = "hsn-catalog")]`, so `india` alone still passes.
