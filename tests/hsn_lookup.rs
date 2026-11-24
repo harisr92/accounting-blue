@@ -30,7 +30,9 @@ fn test_master_integrity() {
         master.effective_from(),
         NaiveDate::from_ymd_opt(2025, 9, 22).unwrap()
     );
+    assert_eq!(master.lists_every_code(), cfg!(feature = "hsn-catalog"));
     // The portal's whole list, not only the codes with a checked rate.
+    #[cfg(feature = "hsn-catalog")]
     assert!(master.entries().len() > 20_000);
 
     let allowed_rates: Vec<BigDecimal> = ["0", "0.25", "3", "5", "18", "40"]
@@ -72,6 +74,7 @@ fn test_lookup_exact() {
 }
 
 #[test]
+#[cfg(feature = "hsn-catalog")]
 fn test_every_portal_code_is_known_with_its_description() {
     let master = HsnMaster::global();
 
@@ -106,6 +109,7 @@ fn test_lookup_falls_back_to_a_heading_the_list_holds() {
 }
 
 #[test]
+#[cfg(feature = "hsn-catalog")]
 fn test_search_by_code_lists_headings_first() {
     let found: Vec<&str> = HsnMaster::global()
         .search("8471", 3)
@@ -120,6 +124,7 @@ fn test_search_by_code_lists_headings_first() {
 }
 
 #[test]
+#[cfg(feature = "hsn-catalog")]
 fn test_search_by_words_matches_every_word_ignoring_case() {
     let found = HsnMaster::global().search("personal Computer", 10);
     assert!(found.iter().any(|e| e.code == "84713010"));
@@ -131,6 +136,7 @@ fn test_search_by_words_matches_every_word_ignoring_case() {
 }
 
 #[test]
+#[cfg(feature = "hsn-catalog")]
 fn test_a_code_known_without_a_rate_has_no_default_line() {
     // 28413000 (sodium dichromate) is listed, but neither it nor its headings has a checked rate.
     let master = HsnMaster::global();

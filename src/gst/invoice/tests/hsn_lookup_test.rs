@@ -22,3 +22,21 @@ fn test_master_kinds_agree_with_the_code_chapter() {
         .iter()
         .all(|e| HsnSacKind::of_code(&e.code) == e.kind));
 }
+
+#[test]
+fn test_embedded_master_lists_every_code_only_with_the_catalog() {
+    assert_eq!(
+        HsnMaster::global().lists_every_code(),
+        cfg!(feature = "hsn-catalog")
+    );
+}
+
+#[test]
+fn test_a_callers_own_master_lists_every_code() {
+    let master: HsnMaster = serde_json::from_str(
+        r#"{ "schedule": "Custom", "effective_from": "2025-01-01",
+             "entries": [{ "code": "998314", "description": "IT consulting", "gst_rate": "5" }] }"#,
+    )
+    .unwrap();
+    assert!(master.lists_every_code());
+}

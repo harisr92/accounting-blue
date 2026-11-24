@@ -2,12 +2,16 @@
 //!
 //! The master is compiled into the crate from two files:
 //!
-//! - `src/gst/data/hsn_codes.json`: every 4-, 6- and 8-digit HSN code and 6-digit SAC code with
-//!   its description, from the GST portal's HSN/SAC master (built by
-//!   `scripts/build_hsn_codes.py`, which names the source and the day it was downloaded);
 //! - `src/gst/data/hsn_master.json`: the codes whose default rate has been checked against the GST
 //!   schedule named by [`HsnMaster::schedule`], with their rates. The notifications and references
-//!   it was checked against are listed under `sources` there.
+//!   it was checked against are listed under `sources` there. Always compiled in with `india`.
+//! - `src/gst/data/hsn_codes.json`: every 4-, 6- and 8-digit HSN code and 6-digit SAC code with
+//!   its description, from the GST portal's HSN/SAC master (built by
+//!   `scripts/build_hsn_codes.py`, which names the source and the day it was downloaded). It adds
+//!   about 1.8 MB to the binary, so it is only compiled in with the `hsn-catalog` feature.
+//!
+//! Without `hsn-catalog` the embedded master holds only the checked codes, so
+//! [`HsnMaster::lists_every_code`] is `false` and validation does not warn about codes it lacks.
 //!
 //! The portal file has no rates, so most codes have none: [`HsnMaster::default_rate`] falls back
 //! to the nearest heading that has one. Rates are defaults: some goods and services carry
@@ -24,14 +28,31 @@ use std::sync::LazyLock;
 ///
 /// The JSON is compiled into the crate, so a parse failure is a build defect rather than a
 /// runtime condition; `test_embedded_master_parses` catches it in CI.
+static MASTER: LazyLock<HsnMaster> =
+    LazyLock::new(|| HsnMaster::from_parts(embedded_rates(), embedded_codes()));
+
+/// The embedded checked rates
 #[allow(clippy::expect_used)]
-static MASTER: LazyLock<HsnMaster> = LazyLock::new(|| {
-    let rates: RawRates = serde_json::from_str(include_str!("../data/hsn_master.json"))
-        .expect("embedded HSN/SAC rates are valid JSON");
-    let codes: RawCodes = serde_json::from_str(include_str!("../data/hsn_codes.json"))
-        .expect("embedded HSN/SAC codes are valid JSON");
-    HsnMaster::from_parts(rates, codes)
-});
+fn embedded_rates() -> RawRates {
+    serde_json::from_str(include_str!("../data/hsn_master.json"))
+        .expect("embedded HSN/SAC rates are valid JSON")
+}
+
+/// The embedded portal code list
+#[cfg(feature = "hsn-catalog")]
+#[allow(clippy::expect_used)]
+fn embedded_codes() -> Option<RawCodes> {
+    Some(
+        serde_json::from_str(include_str!("../data/hsn_codes.json"))
+            .expect("embedded HSN/SAC codes are valid JSON"),
+    )
+}
+
+/// No portal code list: the `hsn-catalog` feature is off
+#[cfg(not(feature = "hsn-catalog"))]
+fn embedded_codes() -> Option<RawCodes> {
+    None
+}
 
 /// Whether a code classifies goods or services
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -88,6 +109,8 @@ pub struct HsnMaster {
     index: HashMap<String, usize>,
     /// Each entry's description in lower case, in `entries` order, for [`HsnMaster::search`]
     search_text: Vec<String>,
+    /// Whether every valid code is listed, so a code missing from it is unknown
+    lists_every_code: bool,
 }
 
 /// On-disk shape of the checked rates
@@ -112,9 +135,12 @@ struct RawCodes {
     codes: Vec<(String, String)>,
 }
 
+/// A caller's own master is taken as the whole list of codes it accepts
 impl From<RawRates> for HsnMaster {
     fn from(rates: RawRates) -> Self {
-        Self::from_parts(rates, RawCodes { codes: Vec::new() })
+        let mut master = Self::from_parts(rates, None);
+        master.lists_every_code = true;
+        master
     }
 }
 
@@ -123,14 +149,18 @@ const HEADING_LENGTHS: [usize; 2] = [6, 4];
 
 impl HsnMaster {
     /// The master over `codes`, with the checked `rates` (and their wording) laid over them. A
-    /// checked code missing from the list is added.
-    fn from_parts(rates: RawRates, codes: RawCodes) -> Self {
+    /// checked code missing from the list is added. Without `codes` it holds only the checked
+    /// codes and does not list every code.
+    fn from_parts(rates: RawRates, codes: Option<RawCodes>) -> Self {
+        let lists_every_code = codes.is_some();
         let checked: HashMap<String, RawRate> = rates
             .entries
             .into_iter()
             .map(|rate| (rate.code.clone(), rate))
             .collect();
-        let listed: HashMap<String, String> = codes.codes.into_iter().collect();
+        let listed: HashMap<String, String> = codes
+            .map(|codes| codes.codes.into_iter().collect())
+            .unwrap_or_default();
         let mut all: Vec<&String> = listed.keys().chain(checked.keys()).collect();
         all.sort();
         all.dedup();
@@ -141,10 +171,20 @@ impl HsnMaster {
                 None => entry(code, listed.get(code).map_or("", String::as_str), None),
             })
             .collect();
-        Self::indexed(rates.schedule, rates.effective_from, entries)
+        Self::indexed(
+            rates.schedule,
+            rates.effective_from,
+            entries,
+            lists_every_code,
+        )
     }
 
-    fn indexed(schedule: String, effective_from: NaiveDate, entries: Vec<HsnSacEntry>) -> Self {
+    fn indexed(
+        schedule: String,
+        effective_from: NaiveDate,
+        entries: Vec<HsnSacEntry>,
+        lists_every_code: bool,
+    ) -> Self {
         let index = entries
             .iter()
             .enumerate()
@@ -160,6 +200,7 @@ impl HsnMaster {
             entries,
             index,
             search_text,
+            lists_every_code,
         }
     }
 
@@ -179,6 +220,16 @@ impl HsnMaster {
     #[must_use]
     pub fn effective_from(&self) -> NaiveDate {
         self.effective_from
+    }
+
+    /// Whether the master lists every valid code, so that a code it lacks is unknown
+    ///
+    /// `true` for a master deserialized by the caller, and for [`HsnMaster::global`] with the
+    /// `hsn-catalog` feature. Without that feature the embedded master holds only the codes with
+    /// checked rates, and this is `false`.
+    #[must_use]
+    pub fn lists_every_code(&self) -> bool {
+        self.lists_every_code
     }
 
     /// All entries, ordered by code

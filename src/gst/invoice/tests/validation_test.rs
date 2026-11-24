@@ -241,6 +241,7 @@ fn test_hsn_default_matches_after_heading_fallback() {
 }
 
 #[test]
+#[cfg(feature = "hsn-catalog")]
 fn test_unknown_hsn_sac_is_a_warning() {
     let invoice = invoice(BUYER_SAME_STATE, vec![item("0000", 18)]);
 
@@ -253,6 +254,19 @@ fn test_unknown_hsn_sac_is_a_warning() {
             code: "0000".to_string(),
         }]
     );
+}
+
+#[test]
+#[cfg(not(feature = "hsn-catalog"))]
+fn test_unknown_hsn_sac_is_not_flagged_without_the_full_list() {
+    // Without `hsn-catalog` the embedded master holds only checked codes, so a missing code may
+    // still be on the portal's list.
+    let invoice = invoice(
+        BUYER_SAME_STATE,
+        vec![item("0000", 18), item("28413000", 18)],
+    );
+
+    assert!(check(&invoice).issues().is_empty());
 }
 
 #[test]
@@ -362,6 +376,7 @@ fn test_rates_are_compared_against_the_master_passed_in() {
 }
 
 #[test]
+#[cfg(feature = "hsn-catalog")]
 fn test_error_rules_report_only_errors() {
     let mut invoice = invoice(SELLER, vec![item("0000", 5), item("998314", 18)]);
     invoice.invoice_number = "INV#1".to_string();

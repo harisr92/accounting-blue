@@ -388,6 +388,10 @@ fn parties_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<Compliance
 
 /// Warn about well-formed codes the master doesn't know, and rates that differ from its default
 ///
+/// A code missing from the master is only flagged when the master lists every code
+/// ([`HsnMaster::lists_every_code`]); the embedded master without the `hsn-catalog` feature holds
+/// only the codes with checked rates, so it can't tell an unlisted code from a wrong one.
+///
 /// A rate is only compared when the master has the line's exact code with a checked rate: a
 /// fallback heading's rate may not apply to every tariff item under it, and most codes have no
 /// checked rate at all. It is also not compared on a line that already
@@ -402,10 +406,12 @@ fn hsn_master_rule(document: &dyn GstDocument, master: &HsnMaster) -> Vec<Compli
             return None;
         }
         let Some(entry) = master.lookup(&item.hsn_sac) else {
-            return Some(ComplianceIssue::UnknownHsnSac {
-                line,
-                code: item.hsn_sac.clone(),
-            });
+            return master
+                .lists_every_code()
+                .then(|| ComplianceIssue::UnknownHsnSac {
+                    line,
+                    code: item.hsn_sac.clone(),
+                });
         };
         let default = entry.gst_rate.as_ref()?;
         let compare_rate = schedule_applies
