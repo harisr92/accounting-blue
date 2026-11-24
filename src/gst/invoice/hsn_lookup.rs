@@ -1,11 +1,18 @@
 //! HSN/SAC master data and default GST rates
 //!
-//! The master is compiled into the crate from `src/data/hsn_master.json`. It covers common codes
-//! for Indian SMEs under the GST schedule named by [`HsnMaster::schedule`], not the full CBIC
-//! tariff. Rates are defaults: some goods and services carry conditional rates (price thresholds,
-//! input tax credit options), so callers can always pass an explicit rate instead. The
-//! notifications and references the data was checked against are listed under `sources` in the
-//! JSON file.
+//! The master is compiled into the crate from two files:
+//!
+//! - `src/gst/data/hsn_codes.json`: every 4-, 6- and 8-digit HSN code and 6-digit SAC code with
+//!   its description, from the GST portal's HSN/SAC master (built by
+//!   `scripts/build_hsn_codes.py`, which names the source and the day it was downloaded);
+//! - `src/gst/data/hsn_master.json`: the codes whose default rate has been checked against the GST
+//!   schedule named by [`HsnMaster::schedule`], with their rates. The notifications and references
+//!   it was checked against are listed under `sources` there.
+//!
+//! The portal file has no rates, so most codes have none: [`HsnMaster::default_rate`] falls back
+//! to the nearest heading that has one. Rates are defaults: some goods and services carry
+//! conditional rates (price thresholds, input tax credit options), so callers can always pass an
+//! explicit rate instead.
 
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -19,8 +26,11 @@ use std::sync::LazyLock;
 /// runtime condition; `test_embedded_master_parses` catches it in CI.
 #[allow(clippy::expect_used)]
 static MASTER: LazyLock<HsnMaster> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("../data/hsn_master.json"))
-        .expect("embedded HSN/SAC master is valid JSON")
+    let rates: RawRates = serde_json::from_str(include_str!("../data/hsn_master.json"))
+        .expect("embedded HSN/SAC rates are valid JSON");
+    let codes: RawCodes = serde_json::from_str(include_str!("../data/hsn_codes.json"))
+        .expect("embedded HSN/SAC codes are valid JSON");
+    HsnMaster::from_parts(rates, codes)
 });
 
 /// Whether a code classifies goods or services
@@ -59,47 +69,100 @@ pub struct HsnSacEntry {
     pub kind: HsnSacKind,
     /// Short description of what the code covers
     pub description: String,
-    /// Default total GST rate as a percentage (e.g. 18 for 18%)
-    pub gst_rate: BigDecimal,
+    /// Default total GST rate as a percentage (e.g. 18 for 18%), when it has been checked for
+    /// this code; `None` for most codes, which the portal's list gives no rate
+    pub gst_rate: Option<BigDecimal>,
 }
 
 /// Lookup table of HSN/SAC codes and their default GST rates
+///
+/// Deserializes from the shape of `hsn_master.json` (`schedule`, `effective_from` and `entries`
+/// with rates), so a caller can check documents against a master of its own.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(from = "RawMaster")]
+#[serde(from = "RawRates")]
 pub struct HsnMaster {
     schedule: String,
     effective_from: NaiveDate,
+    /// Ordered by code
     entries: Vec<HsnSacEntry>,
     index: HashMap<String, usize>,
+    /// Each entry's description in lower case, in `entries` order, for [`HsnMaster::search`]
+    search_text: Vec<String>,
 }
 
-/// On-disk shape of the master, before indexing
+/// On-disk shape of the checked rates
 #[derive(Deserialize)]
-struct RawMaster {
+struct RawRates {
     schedule: String,
     effective_from: NaiveDate,
-    entries: Vec<HsnSacEntry>,
+    entries: Vec<RawRate>,
 }
 
-impl From<RawMaster> for HsnMaster {
-    fn from(raw: RawMaster) -> Self {
-        let index = raw
-            .entries
-            .iter()
-            .enumerate()
-            .map(|(i, entry)| (entry.code.clone(), i))
-            .collect();
+/// One checked code: its description and default rate
+#[derive(Deserialize)]
+struct RawRate {
+    code: String,
+    description: String,
+    gst_rate: BigDecimal,
+}
 
-        Self {
-            schedule: raw.schedule,
-            effective_from: raw.effective_from,
-            entries: raw.entries,
-            index,
-        }
+/// On-disk shape of the portal's code list: `[code, description]` pairs
+#[derive(Deserialize)]
+struct RawCodes {
+    codes: Vec<(String, String)>,
+}
+
+impl From<RawRates> for HsnMaster {
+    fn from(rates: RawRates) -> Self {
+        Self::from_parts(rates, RawCodes { codes: Vec::new() })
     }
 }
 
+/// Headings a code falls back to, longest first: the code itself, then its 6- and 4-digit headings
+const HEADING_LENGTHS: [usize; 2] = [6, 4];
+
 impl HsnMaster {
+    /// The master over `codes`, with the checked `rates` (and their wording) laid over them. A
+    /// checked code missing from the list is added.
+    fn from_parts(rates: RawRates, codes: RawCodes) -> Self {
+        let checked: HashMap<String, RawRate> = rates
+            .entries
+            .into_iter()
+            .map(|rate| (rate.code.clone(), rate))
+            .collect();
+        let listed: HashMap<String, String> = codes.codes.into_iter().collect();
+        let mut all: Vec<&String> = listed.keys().chain(checked.keys()).collect();
+        all.sort();
+        all.dedup();
+        let entries: Vec<HsnSacEntry> = all
+            .into_iter()
+            .map(|code| match checked.get(code) {
+                Some(rate) => entry(code, &rate.description, Some(rate.gst_rate.clone())),
+                None => entry(code, listed.get(code).map_or("", String::as_str), None),
+            })
+            .collect();
+        Self::indexed(rates.schedule, rates.effective_from, entries)
+    }
+
+    fn indexed(schedule: String, effective_from: NaiveDate, entries: Vec<HsnSacEntry>) -> Self {
+        let index = entries
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (e.code.clone(), i))
+            .collect();
+        let search_text = entries
+            .iter()
+            .map(|e| e.description.to_lowercase())
+            .collect();
+        Self {
+            schedule,
+            effective_from,
+            entries,
+            index,
+            search_text,
+        }
+    }
+
     /// The master embedded in the crate
     #[must_use]
     pub fn global() -> &'static HsnMaster {
@@ -118,33 +181,90 @@ impl HsnMaster {
         self.effective_from
     }
 
-    /// All entries, in file order
+    /// All entries, ordered by code
     #[must_use]
     pub fn entries(&self) -> &[HsnSacEntry] {
         &self.entries
     }
 
+    /// The code and the headings it falls back to that the master holds, longest first
+    fn candidates(&self, code: &str) -> Vec<&HsnSacEntry> {
+        std::iter::once(code.len())
+            .chain(HEADING_LENGTHS.into_iter().filter(|&len| len < code.len()))
+            .filter_map(|len| self.index.get(&code[..len]))
+            .map(|&i| &self.entries[i])
+            .collect()
+    }
+
     /// Find the entry for a code
     ///
     /// Tries the exact code first, then its 6- and 4-digit headings, so an 8-digit tariff item
-    /// such as `84713010` resolves to `847130` or `8471`. Malformed codes return `None`.
+    /// such as `84713010` resolves to `847130` or `8471` when the master lacks it. A code is known
+    /// when it or one of its headings is. Malformed codes return `None`.
     #[must_use]
     pub fn lookup(&self, code: &str) -> Option<&HsnSacEntry> {
         if !is_valid_hsn_sac(code) {
             return None;
         }
-
-        [code.len(), 6, 4]
-            .into_iter()
-            .filter(|&len| len <= code.len())
-            .find_map(|len| self.index.get(&code[..len]))
-            .map(|&i| &self.entries[i])
+        self.candidates(code).into_iter().next()
     }
 
-    /// Default GST rate for a code, if the master knows it
+    /// Default GST rate for a code: that of the code, or of the nearest heading over it that has
+    /// one. `None` when neither the code nor its headings has a checked rate.
     #[must_use]
     pub fn default_rate(&self, code: &str) -> Option<BigDecimal> {
-        self.lookup(code).map(|entry| entry.gst_rate.clone())
+        if !is_valid_hsn_sac(code) {
+            return None;
+        }
+        self.candidates(code)
+            .into_iter()
+            .find_map(|entry| entry.gst_rate.clone())
+    }
+
+    /// Up to `limit` entries matching `query`, for picking a code
+    ///
+    /// Digits match codes starting with them; anything else matches descriptions containing every
+    /// word of it, ignoring case. Headings come before the tariff items under them (shorter codes
+    /// first), then codes in order. A blank query matches nothing.
+    #[must_use]
+    pub fn search(&self, query: &str, limit: usize) -> Vec<&HsnSacEntry> {
+        let query = query.trim();
+        if query.is_empty() {
+            return Vec::new();
+        }
+        let words: Vec<String> = query
+            .to_lowercase()
+            .split_whitespace()
+            .map(String::from)
+            .collect();
+        let by_code = query.bytes().all(|b| b.is_ascii_digit());
+        let mut found: Vec<&HsnSacEntry> = self
+            .entries
+            .iter()
+            .zip(&self.search_text)
+            .filter(|(entry, text)| {
+                if by_code {
+                    entry.code.starts_with(query)
+                } else {
+                    words.iter().all(|word| text.contains(word.as_str()))
+                }
+            })
+            .map(|(entry, _)| entry)
+            .collect();
+        // Stable: entries are already in code order.
+        found.sort_by_key(|entry| entry.code.len());
+        found.truncate(limit);
+        found
+    }
+}
+
+/// An entry for `code`, its kind read from its chapter
+fn entry(code: &str, description: &str, gst_rate: Option<BigDecimal>) -> HsnSacEntry {
+    HsnSacEntry {
+        code: code.to_string(),
+        kind: HsnSacKind::of_code(code),
+        description: description.to_string(),
+        gst_rate,
     }
 }
 

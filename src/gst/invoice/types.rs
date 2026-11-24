@@ -759,7 +759,8 @@ impl GstLineItem {
     /// # Errors
     ///
     /// [`InvoiceError::InvalidHsnSac`] for a malformed code, [`InvoiceError::UnknownHsnSac`] for a
-    /// code the master does not know, or any error from [`GstLineItem::new`].
+    /// code the master does not know, [`InvoiceError::NoDefaultRate`] for one it knows without a
+    /// checked rate, or any error from [`GstLineItem::new`].
     pub fn with_default_rate(
         hsn_sac: impl Into<String>,
         description: impl Into<String>,
@@ -767,12 +768,15 @@ impl GstLineItem {
         unit_price: BigDecimal,
     ) -> Result<Self, InvoiceError> {
         let hsn_sac = hsn_sac.into();
-        let Some(gst_rate) = HsnMaster::global().default_rate(&hsn_sac) else {
-            return Err(if is_valid_hsn_sac(&hsn_sac) {
-                InvoiceError::UnknownHsnSac(hsn_sac)
-            } else {
-                InvoiceError::InvalidHsnSac(hsn_sac)
-            });
+        let master = HsnMaster::global();
+        let Some(gst_rate) = master.default_rate(&hsn_sac) else {
+            return Err(
+                match (is_valid_hsn_sac(&hsn_sac), master.lookup(&hsn_sac)) {
+                    (false, _) => InvoiceError::InvalidHsnSac(hsn_sac),
+                    (true, None) => InvoiceError::UnknownHsnSac(hsn_sac),
+                    (true, Some(_)) => InvoiceError::NoDefaultRate(hsn_sac),
+                },
+            );
         };
 
         Self::new(hsn_sac, description, quantity, unit_price, gst_rate)
@@ -1250,8 +1254,12 @@ pub enum InvoiceError {
     #[error("invalid HSN/SAC code: {0}")]
     InvalidHsnSac(String),
     /// The HSN/SAC code is well-formed but not in the master data
-    #[error("HSN/SAC code not in the master data: {0}")]
+    #[error("HSN/SAC code {0} is not on the GST portal's HSN/SAC list")]
     UnknownHsnSac(String),
+    /// The HSN/SAC code is in the master data, but no default rate has been checked for it or
+    /// its headings
+    #[error("no default GST rate is known for HSN/SAC code {0}; give the rate")]
+    NoDefaultRate(String),
     /// A line item field is invalid
     #[error("invalid line item: {0}")]
     InvalidLineItem(LineItemError),
