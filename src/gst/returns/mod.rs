@@ -9,6 +9,7 @@
 //! (documents issued). A credit note against a B2CS invoice is subtracted from Table 7, and every
 //! credit note is subtracted from Tables 8 and 12.
 //! [`Gstr1Return::to_json`] writes it in the GST portal's offline-tool schema for upload.
+//! [`Gstr3bOutward::build`] sums the same documents into GSTR-3B's Table 3.1 (outward supplies).
 //!
 //! Building is pure: the caller passes the invoices, the credit notes and the HSN/SAC master, and
 //! gets a value back. Supplies through an e-commerce operator, exports, debit notes and amendments
@@ -48,6 +49,7 @@
 
 pub mod cdn;
 pub mod gstr1;
+pub mod gstr3b;
 pub mod period;
 
 pub use cdn::{CdnrNote, CdnrParty, CdnurNote, CdnurType, NoteType};
@@ -55,8 +57,9 @@ pub use gstr1::{
     B2bInvoice, B2bInvoiceType, B2bItem, B2bParty, B2clInvoice, B2clItem, B2clItemDetail,
     B2clPlace, B2csRow, B2csType, DocIssue, DocSeries, DocSummary, DocumentProblem, Gstr1Error,
     Gstr1Return, HsnRow, HsnSummary, ItemDetail, NilRow, NilSupplies, NilSupplyType, SupplyType,
-    CREDIT_NOTES_DOC_TYPE, GOODS_UQC, OUTWARD_INVOICES_DOC_TYPE, SERVICES_UQC,
+    CREDIT_NOTES_DOC_TYPE, GOODS_UQC, HSN_DESCRIPTION_MAX, OUTWARD_INVOICES_DOC_TYPE, SERVICES_UQC,
 };
+pub use gstr3b::{Gstr3bOutward, OutwardRow, OutwardSupplies};
 pub use period::{ReturnPeriod, FIRST_GST_YEAR};
 
 #[cfg(test)]

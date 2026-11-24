@@ -30,7 +30,8 @@ fn test_master_integrity() {
         master.effective_from(),
         NaiveDate::from_ymd_opt(2025, 9, 22).unwrap()
     );
-    assert!(master.entries().len() >= 50);
+    // The portal's whole list, not only the codes with a checked rate.
+    assert!(master.entries().len() > 20_000);
 
     let allowed_rates: Vec<BigDecimal> = ["0", "0.25", "3", "5", "18", "40"]
         .iter()
@@ -42,12 +43,14 @@ fn test_master_integrity() {
         assert!(is_well_formed(&entry.code), "{} is malformed", entry.code);
         assert!(seen.insert(&entry.code), "{} is duplicated", entry.code);
         assert!(!entry.description.trim().is_empty(), "{}", entry.code);
-        assert!(
-            allowed_rates.contains(&entry.gst_rate),
-            "{} has rate {} outside the GST 2.0 slabs",
-            entry.code,
-            entry.gst_rate
-        );
+        if let Some(rate) = &entry.gst_rate {
+            assert!(
+                allowed_rates.contains(rate),
+                "{} has rate {} outside the GST 2.0 slabs",
+                entry.code,
+                rate
+            );
+        }
     }
 
     let kinds: HashSet<_> = master.entries().iter().map(|e| e.kind).collect();
@@ -61,7 +64,7 @@ fn test_lookup_exact() {
 
     let wheat = master.lookup("1001").unwrap();
     assert_eq!(wheat.kind, HsnSacKind::Hsn);
-    assert_eq!(wheat.gst_rate, BigDecimal::from(0));
+    assert_eq!(wheat.gst_rate, Some(BigDecimal::from(0)));
 
     assert_eq!(master.default_rate("7010"), Some(BigDecimal::from(18)));
     assert_eq!(master.default_rate("7108"), Some(BigDecimal::from(3)));
@@ -69,17 +72,73 @@ fn test_lookup_exact() {
 }
 
 #[test]
-fn test_lookup_falls_back_to_heading() {
+fn test_every_portal_code_is_known_with_its_description() {
     let master = HsnMaster::global();
 
-    // 8-digit tariff item → 6-digit subheading
-    assert_eq!(master.lookup("84713010").unwrap().code, "847130");
-    // 6-digit subheading → 4-digit heading
-    assert_eq!(master.lookup("847150").unwrap().code, "8471");
-    // 8-digit → 4-digit when there is no 6-digit entry
-    assert_eq!(master.lookup("70109000").unwrap().code, "7010");
-    // an exact 8-digit entry wins over its heading
-    assert_eq!(master.lookup("48202000").unwrap().code, "48202000");
+    let laptop = master.lookup("84713010").unwrap();
+    assert_eq!(laptop.code, "84713010");
+    assert_eq!(laptop.description, "PERSONAL COMPUTER");
+    assert_eq!(laptop.gst_rate, None, "the portal gives no rate");
+    // A checked code keeps its checked wording and rate.
+    assert_eq!(
+        master.lookup("847130").unwrap().gst_rate,
+        Some(BigDecimal::from(18))
+    );
+    // A code that lost its leading zero in the portal's file has it back.
+    assert_eq!(master.lookup("030559").unwrap().code, "030559");
+}
+
+#[test]
+fn test_a_code_without_a_rate_takes_its_nearest_headings() {
+    let master = HsnMaster::global();
+
+    // 84713010 → 847130 (18%), 70109000 → 7010 (18%)
+    assert_eq!(master.default_rate("84713010"), Some(BigDecimal::from(18)));
+    assert_eq!(master.default_rate("70109000"), Some(BigDecimal::from(18)));
+    // an exact checked entry wins over its heading
+    assert!(master.lookup("48202000").unwrap().gst_rate.is_some());
+}
+
+#[test]
+fn test_lookup_falls_back_to_a_heading_the_list_holds() {
+    // 84719999 is not a tariff item, but its heading 8471 is.
+    assert_eq!(HsnMaster::global().lookup("84719999").unwrap().code, "8471");
+}
+
+#[test]
+fn test_search_by_code_lists_headings_first() {
+    let found: Vec<&str> = HsnMaster::global()
+        .search("8471", 3)
+        .iter()
+        .map(|e| e.code.as_str())
+        .collect();
+    assert_eq!(found[0], "8471");
+    assert_eq!(found.len(), 3);
+    assert!(found[1..]
+        .iter()
+        .all(|code| code.starts_with("8471") && code.len() == 6));
+}
+
+#[test]
+fn test_search_by_words_matches_every_word_ignoring_case() {
+    let found = HsnMaster::global().search("personal Computer", 10);
+    assert!(found.iter().any(|e| e.code == "84713010"));
+    assert!(found.iter().all(|e| {
+        let text = e.description.to_lowercase();
+        text.contains("personal") && text.contains("computer")
+    }));
+    assert!(HsnMaster::global().search("  ", 10).is_empty());
+}
+
+#[test]
+fn test_a_code_known_without_a_rate_has_no_default_line() {
+    // 28413000 (sodium dichromate) is listed, but neither it nor its headings has a checked rate.
+    let master = HsnMaster::global();
+    assert!(master.lookup("28413000").is_some());
+    assert_eq!(master.default_rate("28413000"), None);
+    assert!(
+        matches!(line("28413000"), Err(InvoiceError::NoDefaultRate(code)) if code == "28413000")
+    );
 }
 
 #[test]
@@ -104,7 +163,6 @@ fn test_lookup_misses() {
     let master = HsnMaster::global();
 
     assert!(master.lookup("0000").is_none());
-    assert!(master.lookup("48201000").is_none()); // only 48202000 is known
     assert!(master.lookup("847").is_none());
     assert!(master.lookup("84A1").is_none());
     assert!(master.lookup("").is_none());

@@ -283,7 +283,7 @@ pub use gst::invoice::{
 #[cfg(feature = "pdf")]
 pub use gst::invoice::{PdfError, PdfFont, PdfOptions};
 #[cfg(feature = "india")]
-pub use gst::returns::{Gstr1Error, Gstr1Return, ReturnPeriod};
+pub use gst::returns::{Gstr1Error, Gstr1Return, Gstr3bOutward, ReturnPeriod};
 #[cfg(feature = "india")]
 pub use gst::tax::{GstCalculation, GstCalculator, GstCategory, GstError, GstRate};
 pub use ledger::{

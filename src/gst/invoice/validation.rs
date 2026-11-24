@@ -70,7 +70,10 @@ pub enum ComplianceIssue {
     #[error("seller and buyer have the same GSTIN {0}")]
     SameSellerAndBuyer(String),
     /// A line's HSN/SAC code is well-formed but not in the master data
-    #[error("line {}: HSN/SAC code {code} is not in the master data", .line + 1)]
+    #[error(
+        "line {}: HSN/SAC code {code} is not on the GST portal's HSN/SAC list; check it before filing",
+        .line + 1
+    )]
     UnknownHsnSac {
         /// Index of the line
         line: usize,
@@ -385,8 +388,9 @@ fn parties_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<Compliance
 
 /// Warn about well-formed codes the master doesn't know, and rates that differ from its default
 ///
-/// A rate is only compared when the master has the line's exact code: a fallback heading's rate
-/// may not apply to every tariff item under it. It is also not compared on a line that already
+/// A rate is only compared when the master has the line's exact code with a checked rate: a
+/// fallback heading's rate may not apply to every tariff item under it, and most codes have no
+/// checked rate at all. It is also not compared on a line that already
 /// breaks a field rule, on an exempt or non-GST line (whose rate is 0 by definition), or on an
 /// invoice dated before [`HsnMaster::effective_from`], when the schedule didn't apply yet. A credit
 /// note goes by its original invoice's date ([`GstDocument::supply_date`]), since it reverses tax
@@ -403,16 +407,17 @@ fn hsn_master_rule(document: &dyn GstDocument, master: &HsnMaster) -> Vec<Compli
                 code: item.hsn_sac.clone(),
             });
         };
+        let default = entry.gst_rate.as_ref()?;
         let compare_rate = schedule_applies
             && item.treatment.is_taxable()
             && entry.code == item.hsn_sac
             && item.check_fields().is_ok();
-        (compare_rate && entry.gst_rate != item.gst_rate).then(|| {
+        (compare_rate && *default != item.gst_rate).then(|| {
             ComplianceIssue::RateDiffersFromHsnDefault {
                 line,
                 code: item.hsn_sac.clone(),
                 rate: item.gst_rate.clone(),
-                default: entry.gst_rate.clone(),
+                default: default.clone(),
             }
         })
     })
