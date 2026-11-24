@@ -388,95 +388,101 @@
 <a href=#388 id=388 data-nosnippet>388</a>
 <a href=#389 id=389 data-nosnippet>389</a><span class="doccomment">/// Warn about well-formed codes the master doesn't know, and rates that differ from its default
 <a href=#390 id=390 data-nosnippet>390</a>///
-<a href=#391 id=391 data-nosnippet>391</a>/// A rate is only compared when the master has the line's exact code with a checked rate: a
-<a href=#392 id=392 data-nosnippet>392</a>/// fallback heading's rate may not apply to every tariff item under it, and most codes have no
-<a href=#393 id=393 data-nosnippet>393</a>/// checked rate at all. It is also not compared on a line that already
-<a href=#394 id=394 data-nosnippet>394</a>/// breaks a field rule, on an exempt or non-GST line (whose rate is 0 by definition), or on an
-<a href=#395 id=395 data-nosnippet>395</a>/// invoice dated before [`HsnMaster::effective_from`], when the schedule didn't apply yet. A credit
-<a href=#396 id=396 data-nosnippet>396</a>/// note goes by its original invoice's date ([`GstDocument::supply_date`]), since it reverses tax
-<a href=#397 id=397 data-nosnippet>397</a>/// at the rates that invoice charged.
-<a href=#398 id=398 data-nosnippet>398</a></span><span class="kw">fn </span>hsn_master_rule(document: <span class="kw-2">&amp;</span><span class="kw">dyn </span>GstDocument, master: <span class="kw-2">&amp;</span>HsnMaster) -&gt; Vec&lt;ComplianceIssue&gt; {
-<a href=#399 id=399 data-nosnippet>399</a>    <span class="kw">let </span>schedule_applies = document.supply_date() &gt;= master.effective_from();
-<a href=#400 id=400 data-nosnippet>400</a>    per_line(document, |line, item| {
-<a href=#401 id=401 data-nosnippet>401</a>        <span class="kw">if </span>!is_valid_hsn_sac(<span class="kw-2">&amp;</span>item.hsn_sac) {
-<a href=#402 id=402 data-nosnippet>402</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#403 id=403 data-nosnippet>403</a>        }
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(entry) = master.lookup(<span class="kw-2">&amp;</span>item.hsn_sac) <span class="kw">else </span>{
-<a href=#405 id=405 data-nosnippet>405</a>            <span class="kw">return </span><span class="prelude-val">Some</span>(ComplianceIssue::UnknownHsnSac {
-<a href=#406 id=406 data-nosnippet>406</a>                line,
-<a href=#407 id=407 data-nosnippet>407</a>                code: item.hsn_sac.clone(),
-<a href=#408 id=408 data-nosnippet>408</a>            });
-<a href=#409 id=409 data-nosnippet>409</a>        };
-<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">let </span>default = entry.gst_rate.as_ref()<span class="question-mark">?</span>;
-<a href=#411 id=411 data-nosnippet>411</a>        <span class="kw">let </span>compare_rate = schedule_applies
-<a href=#412 id=412 data-nosnippet>412</a>            &amp;&amp; item.treatment.is_taxable()
-<a href=#413 id=413 data-nosnippet>413</a>            &amp;&amp; entry.code == item.hsn_sac
-<a href=#414 id=414 data-nosnippet>414</a>            &amp;&amp; item.check_fields().is_ok();
-<a href=#415 id=415 data-nosnippet>415</a>        (compare_rate &amp;&amp; <span class="kw-2">*</span>default != item.gst_rate).then(|| {
-<a href=#416 id=416 data-nosnippet>416</a>            ComplianceIssue::RateDiffersFromHsnDefault {
-<a href=#417 id=417 data-nosnippet>417</a>                line,
-<a href=#418 id=418 data-nosnippet>418</a>                code: item.hsn_sac.clone(),
-<a href=#419 id=419 data-nosnippet>419</a>                rate: item.gst_rate.clone(),
-<a href=#420 id=420 data-nosnippet>420</a>                default: default.clone(),
-<a href=#421 id=421 data-nosnippet>421</a>            }
-<a href=#422 id=422 data-nosnippet>422</a>        })
-<a href=#423 id=423 data-nosnippet>423</a>    })
-<a href=#424 id=424 data-nosnippet>424</a>}
-<a href=#425 id=425 data-nosnippet>425</a>
-<a href=#426 id=426 data-nosnippet>426</a><span class="kw">fn </span>zero_value_rule(document: <span class="kw-2">&amp;</span><span class="kw">dyn </span>GstDocument, _master: <span class="kw-2">&amp;</span>HsnMaster) -&gt; Vec&lt;ComplianceIssue&gt; {
-<a href=#427 id=427 data-nosnippet>427</a>    shared(rules::zero_value_rule(document))
-<a href=#428 id=428 data-nosnippet>428</a>}
-<a href=#429 id=429 data-nosnippet>429</a>
-<a href=#430 id=430 data-nosnippet>430</a><span class="doccomment">/// The GST issues for issues a shared rule found
-<a href=#431 id=431 data-nosnippet>431</a></span><span class="kw">fn </span>shared(issues: Vec&lt;ValidationIssue&gt;) -&gt; Vec&lt;ComplianceIssue&gt; {
-<a href=#432 id=432 data-nosnippet>432</a>    issues.into_iter().map(ComplianceIssue::from).collect()
-<a href=#433 id=433 data-nosnippet>433</a>}
-<a href=#434 id=434 data-nosnippet>434</a>
-<a href=#435 id=435 data-nosnippet>435</a><span class="kw">fn </span>note_date_rule(note: <span class="kw-2">&amp;</span>GstCreditNote) -&gt; Vec&lt;ComplianceIssue&gt; {
-<a href=#436 id=436 data-nosnippet>436</a>    <span class="kw">if </span>note.predates_original() {
-<a href=#437 id=437 data-nosnippet>437</a>        <span class="macro">vec!</span>[ComplianceIssue::NoteBeforeOriginal {
-<a href=#438 id=438 data-nosnippet>438</a>            note_date: note.note_date,
-<a href=#439 id=439 data-nosnippet>439</a>            original_date: note.original.date,
-<a href=#440 id=440 data-nosnippet>440</a>        }]
-<a href=#441 id=441 data-nosnippet>441</a>    } <span class="kw">else </span>{
-<a href=#442 id=442 data-nosnippet>442</a>        Vec::new()
-<a href=#443 id=443 data-nosnippet>443</a>    }
-<a href=#444 id=444 data-nosnippet>444</a>}
-<a href=#445 id=445 data-nosnippet>445</a>
-<a href=#446 id=446 data-nosnippet>446</a><span class="doccomment">/// The note's buyer must be one its original invoice's supply kind can apply to, or GSTR-1 would
-<a href=#447 id=447 data-nosnippet>447</a>/// report it in the wrong table or drop it from Table 9B
-<a href=#448 id=448 data-nosnippet>448</a></span><span class="kw">fn </span>note_kind_rule(note: <span class="kw-2">&amp;</span>GstCreditNote) -&gt; Vec&lt;ComplianceIssue&gt; {
-<a href=#449 id=449 data-nosnippet>449</a>    <span class="kw">if </span>note.original_kind_fits_buyer() {
-<a href=#450 id=450 data-nosnippet>450</a>        Vec::new()
-<a href=#451 id=451 data-nosnippet>451</a>    } <span class="kw">else </span>{
-<a href=#452 id=452 data-nosnippet>452</a>        <span class="macro">vec!</span>[ComplianceIssue::OriginalKindMismatch {
-<a href=#453 id=453 data-nosnippet>453</a>            kind: note.original.kind,
-<a href=#454 id=454 data-nosnippet>454</a>            buyer: note.buyer.clone(),
-<a href=#455 id=455 data-nosnippet>455</a>        }]
-<a href=#456 id=456 data-nosnippet>456</a>    }
-<a href=#457 id=457 data-nosnippet>457</a>}
-<a href=#458 id=458 data-nosnippet>458</a>
-<a href=#459 id=459 data-nosnippet>459</a><span class="doccomment">/// A note may credit at most its invoice's value; a note whose tax can't be computed is left to
-<a href=#460 id=460 data-nosnippet>460</a>/// [`line_fields_rule`]
-<a href=#461 id=461 data-nosnippet>461</a></span><span class="kw">fn </span>note_value_rule(note: <span class="kw-2">&amp;</span>GstCreditNote) -&gt; Vec&lt;ComplianceIssue&gt; {
-<a href=#462 id=462 data-nosnippet>462</a>    <span class="kw">match </span>note.credit_over_value() {
-<a href=#463 id=463 data-nosnippet>463</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(credited)) =&gt; <span class="macro">vec!</span>[ComplianceIssue::CreditExceedsInvoice {
-<a href=#464 id=464 data-nosnippet>464</a>            credited,
-<a href=#465 id=465 data-nosnippet>465</a>            invoice_value: note.original.value.clone(),
-<a href=#466 id=466 data-nosnippet>466</a>        }],
-<a href=#467 id=467 data-nosnippet>467</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) | <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; Vec::new(),
-<a href=#468 id=468 data-nosnippet>468</a>    }
-<a href=#469 id=469 data-nosnippet>469</a>}
-<a href=#470 id=470 data-nosnippet>470</a>
-<a href=#471 id=471 data-nosnippet>471</a><span class="kw">fn </span>note_deadline_rule(note: <span class="kw-2">&amp;</span>GstCreditNote) -&gt; Vec&lt;ComplianceIssue&gt; {
-<a href=#472 id=472 data-nosnippet>472</a>    <span class="kw">let </span>deadline = note.deadline();
-<a href=#473 id=473 data-nosnippet>473</a>    <span class="kw">if </span>note.note_date &gt; deadline {
-<a href=#474 id=474 data-nosnippet>474</a>        <span class="macro">vec!</span>[ComplianceIssue::CreditNoteTooLate {
-<a href=#475 id=475 data-nosnippet>475</a>            note_date: note.note_date,
-<a href=#476 id=476 data-nosnippet>476</a>            deadline,
-<a href=#477 id=477 data-nosnippet>477</a>        }]
-<a href=#478 id=478 data-nosnippet>478</a>    } <span class="kw">else </span>{
-<a href=#479 id=479 data-nosnippet>479</a>        Vec::new()
-<a href=#480 id=480 data-nosnippet>480</a>    }
-<a href=#481 id=481 data-nosnippet>481</a>}
+<a href=#391 id=391 data-nosnippet>391</a>/// A code missing from the master is only flagged when the master lists every code
+<a href=#392 id=392 data-nosnippet>392</a>/// ([`HsnMaster::lists_every_code`]); the embedded master without the `hsn-catalog` feature holds
+<a href=#393 id=393 data-nosnippet>393</a>/// only the codes with checked rates, so it can't tell an unlisted code from a wrong one.
+<a href=#394 id=394 data-nosnippet>394</a>///
+<a href=#395 id=395 data-nosnippet>395</a>/// A rate is only compared when the master has the line's exact code with a checked rate: a
+<a href=#396 id=396 data-nosnippet>396</a>/// fallback heading's rate may not apply to every tariff item under it, and most codes have no
+<a href=#397 id=397 data-nosnippet>397</a>/// checked rate at all. It is also not compared on a line that already
+<a href=#398 id=398 data-nosnippet>398</a>/// breaks a field rule, on an exempt or non-GST line (whose rate is 0 by definition), or on an
+<a href=#399 id=399 data-nosnippet>399</a>/// invoice dated before [`HsnMaster::effective_from`], when the schedule didn't apply yet. A credit
+<a href=#400 id=400 data-nosnippet>400</a>/// note goes by its original invoice's date ([`GstDocument::supply_date`]), since it reverses tax
+<a href=#401 id=401 data-nosnippet>401</a>/// at the rates that invoice charged.
+<a href=#402 id=402 data-nosnippet>402</a></span><span class="kw">fn </span>hsn_master_rule(document: <span class="kw-2">&amp;</span><span class="kw">dyn </span>GstDocument, master: <span class="kw-2">&amp;</span>HsnMaster) -&gt; Vec&lt;ComplianceIssue&gt; {
+<a href=#403 id=403 data-nosnippet>403</a>    <span class="kw">let </span>schedule_applies = document.supply_date() &gt;= master.effective_from();
+<a href=#404 id=404 data-nosnippet>404</a>    per_line(document, |line, item| {
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">if </span>!is_valid_hsn_sac(<span class="kw-2">&amp;</span>item.hsn_sac) {
+<a href=#406 id=406 data-nosnippet>406</a>            <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#407 id=407 data-nosnippet>407</a>        }
+<a href=#408 id=408 data-nosnippet>408</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(entry) = master.lookup(<span class="kw-2">&amp;</span>item.hsn_sac) <span class="kw">else </span>{
+<a href=#409 id=409 data-nosnippet>409</a>            <span class="kw">return </span>master
+<a href=#410 id=410 data-nosnippet>410</a>                .lists_every_code()
+<a href=#411 id=411 data-nosnippet>411</a>                .then(|| ComplianceIssue::UnknownHsnSac {
+<a href=#412 id=412 data-nosnippet>412</a>                    line,
+<a href=#413 id=413 data-nosnippet>413</a>                    code: item.hsn_sac.clone(),
+<a href=#414 id=414 data-nosnippet>414</a>                });
+<a href=#415 id=415 data-nosnippet>415</a>        };
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">let </span>default = entry.gst_rate.as_ref()<span class="question-mark">?</span>;
+<a href=#417 id=417 data-nosnippet>417</a>        <span class="kw">let </span>compare_rate = schedule_applies
+<a href=#418 id=418 data-nosnippet>418</a>            &amp;&amp; item.treatment.is_taxable()
+<a href=#419 id=419 data-nosnippet>419</a>            &amp;&amp; entry.code == item.hsn_sac
+<a href=#420 id=420 data-nosnippet>420</a>            &amp;&amp; item.check_fields().is_ok();
+<a href=#421 id=421 data-nosnippet>421</a>        (compare_rate &amp;&amp; <span class="kw-2">*</span>default != item.gst_rate).then(|| {
+<a href=#422 id=422 data-nosnippet>422</a>            ComplianceIssue::RateDiffersFromHsnDefault {
+<a href=#423 id=423 data-nosnippet>423</a>                line,
+<a href=#424 id=424 data-nosnippet>424</a>                code: item.hsn_sac.clone(),
+<a href=#425 id=425 data-nosnippet>425</a>                rate: item.gst_rate.clone(),
+<a href=#426 id=426 data-nosnippet>426</a>                default: default.clone(),
+<a href=#427 id=427 data-nosnippet>427</a>            }
+<a href=#428 id=428 data-nosnippet>428</a>        })
+<a href=#429 id=429 data-nosnippet>429</a>    })
+<a href=#430 id=430 data-nosnippet>430</a>}
+<a href=#431 id=431 data-nosnippet>431</a>
+<a href=#432 id=432 data-nosnippet>432</a><span class="kw">fn </span>zero_value_rule(document: <span class="kw-2">&amp;</span><span class="kw">dyn </span>GstDocument, _master: <span class="kw-2">&amp;</span>HsnMaster) -&gt; Vec&lt;ComplianceIssue&gt; {
+<a href=#433 id=433 data-nosnippet>433</a>    shared(rules::zero_value_rule(document))
+<a href=#434 id=434 data-nosnippet>434</a>}
+<a href=#435 id=435 data-nosnippet>435</a>
+<a href=#436 id=436 data-nosnippet>436</a><span class="doccomment">/// The GST issues for issues a shared rule found
+<a href=#437 id=437 data-nosnippet>437</a></span><span class="kw">fn </span>shared(issues: Vec&lt;ValidationIssue&gt;) -&gt; Vec&lt;ComplianceIssue&gt; {
+<a href=#438 id=438 data-nosnippet>438</a>    issues.into_iter().map(ComplianceIssue::from).collect()
+<a href=#439 id=439 data-nosnippet>439</a>}
+<a href=#440 id=440 data-nosnippet>440</a>
+<a href=#441 id=441 data-nosnippet>441</a><span class="kw">fn </span>note_date_rule(note: <span class="kw-2">&amp;</span>GstCreditNote) -&gt; Vec&lt;ComplianceIssue&gt; {
+<a href=#442 id=442 data-nosnippet>442</a>    <span class="kw">if </span>note.predates_original() {
+<a href=#443 id=443 data-nosnippet>443</a>        <span class="macro">vec!</span>[ComplianceIssue::NoteBeforeOriginal {
+<a href=#444 id=444 data-nosnippet>444</a>            note_date: note.note_date,
+<a href=#445 id=445 data-nosnippet>445</a>            original_date: note.original.date,
+<a href=#446 id=446 data-nosnippet>446</a>        }]
+<a href=#447 id=447 data-nosnippet>447</a>    } <span class="kw">else </span>{
+<a href=#448 id=448 data-nosnippet>448</a>        Vec::new()
+<a href=#449 id=449 data-nosnippet>449</a>    }
+<a href=#450 id=450 data-nosnippet>450</a>}
+<a href=#451 id=451 data-nosnippet>451</a>
+<a href=#452 id=452 data-nosnippet>452</a><span class="doccomment">/// The note's buyer must be one its original invoice's supply kind can apply to, or GSTR-1 would
+<a href=#453 id=453 data-nosnippet>453</a>/// report it in the wrong table or drop it from Table 9B
+<a href=#454 id=454 data-nosnippet>454</a></span><span class="kw">fn </span>note_kind_rule(note: <span class="kw-2">&amp;</span>GstCreditNote) -&gt; Vec&lt;ComplianceIssue&gt; {
+<a href=#455 id=455 data-nosnippet>455</a>    <span class="kw">if </span>note.original_kind_fits_buyer() {
+<a href=#456 id=456 data-nosnippet>456</a>        Vec::new()
+<a href=#457 id=457 data-nosnippet>457</a>    } <span class="kw">else </span>{
+<a href=#458 id=458 data-nosnippet>458</a>        <span class="macro">vec!</span>[ComplianceIssue::OriginalKindMismatch {
+<a href=#459 id=459 data-nosnippet>459</a>            kind: note.original.kind,
+<a href=#460 id=460 data-nosnippet>460</a>            buyer: note.buyer.clone(),
+<a href=#461 id=461 data-nosnippet>461</a>        }]
+<a href=#462 id=462 data-nosnippet>462</a>    }
+<a href=#463 id=463 data-nosnippet>463</a>}
+<a href=#464 id=464 data-nosnippet>464</a>
+<a href=#465 id=465 data-nosnippet>465</a><span class="doccomment">/// A note may credit at most its invoice's value; a note whose tax can't be computed is left to
+<a href=#466 id=466 data-nosnippet>466</a>/// [`line_fields_rule`]
+<a href=#467 id=467 data-nosnippet>467</a></span><span class="kw">fn </span>note_value_rule(note: <span class="kw-2">&amp;</span>GstCreditNote) -&gt; Vec&lt;ComplianceIssue&gt; {
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">match </span>note.credit_over_value() {
+<a href=#469 id=469 data-nosnippet>469</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(credited)) =&gt; <span class="macro">vec!</span>[ComplianceIssue::CreditExceedsInvoice {
+<a href=#470 id=470 data-nosnippet>470</a>            credited,
+<a href=#471 id=471 data-nosnippet>471</a>            invoice_value: note.original.value.clone(),
+<a href=#472 id=472 data-nosnippet>472</a>        }],
+<a href=#473 id=473 data-nosnippet>473</a>        <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) | <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; Vec::new(),
+<a href=#474 id=474 data-nosnippet>474</a>    }
+<a href=#475 id=475 data-nosnippet>475</a>}
+<a href=#476 id=476 data-nosnippet>476</a>
+<a href=#477 id=477 data-nosnippet>477</a><span class="kw">fn </span>note_deadline_rule(note: <span class="kw-2">&amp;</span>GstCreditNote) -&gt; Vec&lt;ComplianceIssue&gt; {
+<a href=#478 id=478 data-nosnippet>478</a>    <span class="kw">let </span>deadline = note.deadline();
+<a href=#479 id=479 data-nosnippet>479</a>    <span class="kw">if </span>note.note_date &gt; deadline {
+<a href=#480 id=480 data-nosnippet>480</a>        <span class="macro">vec!</span>[ComplianceIssue::CreditNoteTooLate {
+<a href=#481 id=481 data-nosnippet>481</a>            note_date: note.note_date,
+<a href=#482 id=482 data-nosnippet>482</a>            deadline,
+<a href=#483 id=483 data-nosnippet>483</a>        }]
+<a href=#484 id=484 data-nosnippet>484</a>    } <span class="kw">else </span>{
+<a href=#485 id=485 data-nosnippet>485</a>        Vec::new()
+<a href=#486 id=486 data-nosnippet>486</a>    }
+<a href=#487 id=487 data-nosnippet>487</a>}
 </code></pre></div></section></main></body></html>
