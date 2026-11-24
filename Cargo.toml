@@ -10,6 +10,16 @@ categories = ["finance"]
 rust-version = "1.82"
 readme = "README.md"
 repository = "https://github.com/harisr92/accounting-blue"
+# Publish only what builds and documents the library: no CI, editor or data-build files
+include = [
+    "src/**/*",
+    "examples/**/*",
+    "tests/**/*",
+    "Cargo.toml",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE*",
+]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
