@@ -46,6 +46,10 @@ jobs:
         run: cargo clippy --all-targets --features india -- -D warnings
         if: matrix.rust == 'stable'
 
+      - name: Run clippy (hsn-catalog)
+        run: cargo clippy --all-targets --features hsn-catalog -- -D warnings
+        if: matrix.rust == 'stable'
+
       - name: Run clippy (all features)
         run: cargo clippy --all-targets --all-features -- -D warnings
         if: matrix.rust == 'stable'
@@ -58,6 +62,9 @@ jobs:
 
       - name: Run tests with the india feature
         run: cargo test --features india --verbose
+
+      - name: Run tests with the hsn-catalog feature
+        run: cargo test --features hsn-catalog --verbose
 
       - name: Run tests with all features
         run: cargo test --all-features --verbose
