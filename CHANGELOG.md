@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Breaking
+- GSTR-1's HSN summary cuts each row's description to the whole words that fit in 30 characters (`HSN_DESCRIPTION_MAX`), the most the portal's `desc` takes.
+- The HSN/SAC master now holds the GST portal's whole list (about 22,500 codes, `src/gst/data/hsn_codes.json`, built by `scripts/build_hsn_codes.py`), not 83 common codes. The portal gives no rates, so `HsnSacEntry::gst_rate` is now `Option<BigDecimal>`: `Some` only for the hand-checked codes in `hsn_master.json`.
+  - `HsnMaster::lookup` finds many more codes exactly, so a code that used to resolve to its heading may now resolve to itself (with no rate).
+  - `HsnMaster::default_rate` takes the rate of the code or the nearest heading over it that has one.
+  - `GstLineItem::with_default_rate` fails with the new `InvoiceError::NoDefaultRate` for a listed code with no checked rate on it or its headings.
+  - `validate_invoice` compares a line's rate only against a code with a checked rate, so it stops warning `UnknownHsnSac` for any code on the portal's list.
+  - `UnknownHsnSac` (the compliance issue and the `InvoiceError`) now reads "… is not on the GST portal's HSN/SAC list", saying what was checked rather than that the code is wrong.
 - Indian tax support is now behind the opt-in `india` Cargo feature, so the default build is country-neutral (ledger, reports, reconciliation). Turn it on with `accounting-core = { version = "0.4", features = ["india"] }`. Without it:
   - the `gst` module (`gst::tax`, `gst::invoice`, `gst::returns`), `utils::formatting` (`format_inr`, `amount_in_words`) and their root re-exports (`GstInvoice`, `Gstin`, `HsnMaster`, `GstCalculator`, `Gstr1Return`, `ReturnPeriod`, ...) are not compiled;
   - `Error` has no `Gst`, `Invoice`, `Posting` or `Gstr1` variants;
@@ -20,6 +27,8 @@
   - `gst::tax::round_to_paise`, `percent_of` and `PAISE_SCALE` are re-exports of the new `money` module.
 
 ### Added
+- `Gstr3bOutward::build(filer, period, invoices, credit_notes)`: GSTR-3B's Table 3.1 (outward supplies) from the same documents GSTR-1 takes, checked the same way. Rows (a) taxed lines with their IGST, CGST and SGST, (c) nil-rated and exempt, (e) non-GST; (b) zero-rated and (d) reverse charge stay zero. Credit notes are subtracted from their rows.
+- `HsnMaster::search(query, limit)`: codes starting with the digits typed, or whose description has every word typed, headings first.
 - Country-neutral trade documents, compiled without any feature:
   - `document`: what every document shares. `LineItem` (a `DocumentLine`), `Discount`, and the `Document` trait, which gives a document its subtotal, discount and breakdowns through the one pricing engine `price_lines`. `TaxRegime` returns a `TaxBreakdown` of named `TaxComponent`s for a line; it ships with `NoTax` and `FlatRate` (one tax such as VAT at the line's rate), and `gst::tax::GstRegime` (CGST + SGST or IGST) with `india`. `PostingLeg` and `legs_to_entries` turn legs into journal entries. `validate_document` runs the rules every document shares (lines present, line fields, discount, future date, zero-value lines) into a `ValidationReport`; GST compliance runs the same rules.
   - `sales`: `Invoice<R>` to a customer and `CreditNote<R>` against it (not dated before it, not worth more than it, recording an `OriginalInvoice`), taxed under a regime `R`. `to_entries(&SalesAccounts)` posts an invoice as Dr receivable, Cr revenue and Cr output tax per tax code; a credit note posts the reverse. `sales_legs` and `sales_entries` do it for any breakdown.

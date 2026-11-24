@@ -42,8 +42,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for code in ["1001", "7010", "84713010", "998314", "0000"] {
         match master.lookup(code) {
             Some(entry) => println!(
-                "  ✅ {code} → {} {:?} \"{}\" at {}%",
-                entry.code, entry.kind, entry.description, entry.gst_rate
+                "  ✅ {code} → {} {:?} \"{}\" at {}",
+                entry.code,
+                entry.kind,
+                entry.description,
+                master
+                    .default_rate(code)
+                    .map_or_else(|| "no default rate".to_string(), |rate| format!("{rate}%"))
             ),
             None => println!("  ❌ {code} → not in the master"),
         }
