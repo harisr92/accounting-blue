@@ -19,6 +19,7 @@
 //! | Feature | Adds |
 //! |---------|------|
 //! | `india` | Indian GST on top of the invoicing core: rates and CGST/SGST/IGST maths (`gst::tax`), GSTIN, HSN/SAC master data, GST invoices and credit notes (`gst::invoice`), GSTR-1 returns (`gst::returns`), and Indian amount formatting (`utils::formatting`) |
+//! | `hsn-catalog` | The GST portal's whole HSN/SAC list with descriptions in [`HsnMaster::global`] (about 1.8 MB in the binary); turns on `india` |
 //! | `pdf` | Renders GST invoices to PDF; turns on `india` |
 //!
 //! ```toml
