@@ -206,7 +206,7 @@ fn test_hsn_summary_groups_by_code_and_rate_across_invoices() {
     assert_eq!((low.number, &low.rate), (1, &dec("12")));
     assert_eq!((high.number, &high.rate), (2, &dec("18")));
     assert_eq!(high.hsn_sac, "998314");
-    assert_eq!(high.description, "IT design and development services");
+    assert_eq!(high.description, "IT design and development");
     assert_eq!(high.uqc, SERVICES_UQC);
     assert_eq!(high.quantity, dec("0"));
     assert_eq!(high.taxable_value, dec("1300"));
@@ -253,7 +253,7 @@ fn test_goods_report_their_quantity_and_services_report_na_with_zero() {
 #[test]
 fn test_hsn_row_falls_back_to_the_line_description_for_unknown_codes() {
     let item =
-        GstLineItem::new("99999999", "Bespoke widget", dec("1"), dec("10"), dec("18")).unwrap();
+        GstLineItem::new("00000000", "Bespoke widget", dec("1"), dec("10"), dec("18")).unwrap();
     let gstr1 = build(&[invoice("INV-001", day(1), BUYER_SAME_STATE, vec![item])]).unwrap();
     assert_eq!(gstr1.hsn.b2b[0].description, "Bespoke widget");
 }
@@ -415,7 +415,7 @@ fn test_json_uses_portal_keys_and_numeric_amounts() {
         json!({
             "num": 1,
             "hsn_sc": "998314",
-            "desc": "IT design and development services",
+            "desc": "IT design and development",
             "uqc": "NA",
             "qty": 0.0,
             "val": 1180.01,
@@ -1352,4 +1352,45 @@ fn test_services_report_na_even_with_a_unit() {
     .unwrap();
     assert_eq!(gstr1.hsn.b2b[0].uqc, SERVICES_UQC);
     assert_eq!(gstr1.hsn.b2b[0].quantity, dec("0"));
+}
+
+#[test]
+fn test_hsn_row_descriptions_fit_the_portals_limit() {
+    // 84713010 reads "PERSONAL COMPUTER"; 998314's description is longer than the portal takes.
+    let lines = vec![
+        line("84713010", "1", "100", "18"),
+        line("998314", "1", "100", "18"),
+    ];
+    let gstr1 = build(&[invoice("INV-001", day(1), BUYER_SAME_STATE, lines)]).unwrap();
+    let descriptions: Vec<&str> = gstr1
+        .hsn
+        .b2b
+        .iter()
+        .map(|row| row.description.as_str())
+        .collect();
+    assert!(descriptions.contains(&"PERSONAL COMPUTER"));
+    assert!(
+        descriptions
+            .iter()
+            .all(|d| d.chars().count() <= HSN_DESCRIPTION_MAX),
+        "{descriptions:?}"
+    );
+    assert!(
+        descriptions.contains(&"IT design and development"),
+        "cut at a whole word"
+    );
+}
+
+#[test]
+fn test_a_description_is_cut_at_a_whole_word_or_mid_word_when_it_must() {
+    assert_eq!(fit_description("PERSONAL  COMPUTER"), "PERSONAL COMPUTER");
+    assert_eq!(
+        fit_description("IT design and development services"),
+        "IT design and development"
+    );
+    let long_word = "X".repeat(40);
+    assert_eq!(
+        fit_description(&long_word).chars().count(),
+        HSN_DESCRIPTION_MAX
+    );
 }

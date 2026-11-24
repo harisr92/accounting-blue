@@ -65,6 +65,10 @@ pub const CREDIT_NOTES_DOC_TYPE: &str = "Credit Note";
 /// Table 13 serial number for credit notes
 const CREDIT_NOTES_DOC_NUM: usize = 5;
 
+/// The most characters the portal takes in an HSN summary row's description (`desc`), an
+/// optional field
+pub const HSN_DESCRIPTION_MAX: usize = 30;
+
 /// A GSTR-1 return for one filer and period
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Gstr1Return {
@@ -442,7 +446,8 @@ pub struct HsnRow {
     /// HSN or SAC code
     #[serde(rename = "hsn_sc")]
     pub hsn_sac: String,
-    /// Description from the HSN/SAC master, or of the first line if the master lacks the code
+    /// Description from the HSN/SAC master, or of the first line if the master lacks the code,
+    /// cut to [`HSN_DESCRIPTION_MAX`] characters, which the portal takes at most
     #[serde(rename = "desc")]
     pub description: String,
     /// Unit quantity code: the lines' unit for goods, or [`GOODS_UQC`] when they have none;
@@ -732,20 +737,7 @@ impl Gstr1Return {
         credit_notes: &[GstCreditNote],
         master: &HsnMaster,
     ) -> Result<Self, Gstr1Error> {
-        check_documents(filer, period, invoices, |invoice| {
-            compliance_errors(invoice, invoice.invoice_date)
-        })
-        .map_err(|(number, problem)| Gstr1Error::for_invoice(number, problem))?;
-        check_documents(filer, period, credit_notes, |note| {
-            credit_note_errors(note, note.note_date)
-        })
-        .map_err(|(note_number, reason)| Gstr1Error::InvalidCreditNote {
-            note_number,
-            reason,
-        })?;
-
-        let invoices = priced(invoices, PricedDocument::invoice)?;
-        let notes = priced(credit_notes, PricedDocument::credit_note)?;
+        let (invoices, notes) = checked_and_priced(filer, period, invoices, credit_notes)?;
         Ok(Self::from_priced(filer, period, &invoices, &notes, master))
     }
 
@@ -815,6 +807,31 @@ fn number_key(number: &str) -> (&str, usize, &str) {
         .unwrap_or_default()
         .trim_start_matches('0');
     (prefix, digits.len(), digits)
+}
+
+/// The invoices and credit notes once each is checked as a return takes it (see
+/// [`Gstr1Return::build`]), priced and ordered by date then number
+pub(super) fn checked_and_priced<'a>(
+    filer: &Gstin,
+    period: ReturnPeriod,
+    invoices: &'a [GstInvoice],
+    credit_notes: &'a [GstCreditNote],
+) -> Result<(Vec<PricedDocument<'a>>, Vec<PricedDocument<'a>>), Gstr1Error> {
+    check_documents(filer, period, invoices, |invoice| {
+        compliance_errors(invoice, invoice.invoice_date)
+    })
+    .map_err(|(number, problem)| Gstr1Error::for_invoice(number, problem))?;
+    check_documents(filer, period, credit_notes, |note| {
+        credit_note_errors(note, note.note_date)
+    })
+    .map_err(|(note_number, reason)| Gstr1Error::InvalidCreditNote {
+        note_number,
+        reason,
+    })?;
+    Ok((
+        priced(invoices, PricedDocument::invoice)?,
+        priced(credit_notes, PricedDocument::credit_note)?,
+    ))
 }
 
 /// Check every document, and that no two share a number ignoring case; the first failure comes
@@ -1110,11 +1127,26 @@ fn uqc(item: &GstLineItem) -> String {
     }
 }
 
+/// A description cut to the whole words that fit in [`HSN_DESCRIPTION_MAX`] characters, or cut
+/// mid-word when its first word alone is longer
+pub(super) fn fit_description(text: &str) -> String {
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if text.chars().count() <= HSN_DESCRIPTION_MAX {
+        return text;
+    }
+    let cut: String = text.chars().take(HSN_DESCRIPTION_MAX + 1).collect();
+    match cut.rfind(' ') {
+        Some(space) if space > 0 => cut[..space].trim_end().to_string(),
+        _ => cut.chars().take(HSN_DESCRIPTION_MAX).collect(),
+    }
+}
+
 fn hsn_row(number: usize, key: HsnKey, totals: HsnTotals, master: &HsnMaster) -> HsnRow {
     let (hsn_sac, uqc, rate) = key;
     let description = master
         .lookup(&hsn_sac)
         .map_or(totals.first_description, |entry| entry.description.clone());
+    let description = fit_description(&description);
     let quantity = match HsnSacKind::of_code(&hsn_sac) {
         HsnSacKind::Hsn => totals.quantity,
         HsnSacKind::Sac => BigDecimal::zero(),
