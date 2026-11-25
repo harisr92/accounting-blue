@@ -1,11 +1,11 @@
-//! GSTR-1 built from a month of invoices through the public API, checked on its JSON
+//! GSTR-1 and GSTR-3B built from a month of invoices through the public API, checked on their JSON
 #![cfg(feature = "india")]
 
 use accounting_core::gst::invoice::{
     Discount, GstCreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, InvoiceAccounts, Recipient,
     StateCode, SupplyKind,
 };
-use accounting_core::{Gstr1Error, Gstr1Return, ReturnPeriod};
+use accounting_core::{Gstr1Error, Gstr1Return, Gstr3bOutward, ReturnPeriod};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 use serde_json::{json, Value};
@@ -468,4 +468,76 @@ fn test_discounted_invoice_is_reported_and_posted_at_its_discounted_value() {
             ("igst".to_string(), rupees("150.30")),
         ]
     );
+}
+
+/// The taxable value of every item a GSTR-1 section's invoices list
+fn items_taxable(section: &Value) -> impl Iterator<Item = f64> + '_ {
+    section
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|group| group["inv"].as_array().unwrap())
+        .flat_map(|inv| inv["itms"].as_array().unwrap())
+        .map(|item| item["itm_det"]["txval"].as_f64().unwrap())
+}
+
+#[test]
+fn test_gstr3b_agrees_with_gstr1_for_the_same_month() {
+    let mut invoices = november_invoices();
+    invoices.extend([
+        retail_invoice(
+            "INV-006",
+            29,
+            "29",
+            vec![line("847130", "Laptop", 2, "55000", 18)],
+        ),
+        retail_invoice(
+            "INV-007",
+            29,
+            "07",
+            vec![line("1905", "Biscuits", 40, "12.50", 5)],
+        ),
+        retail_invoice(
+            "INV-008",
+            30,
+            "27",
+            vec![line("998314", "IT consulting", 1, "1500", 18)],
+        ),
+    ]);
+    let seller = Gstin::parse(SELLER).unwrap();
+    let period = ReturnPeriod::new(2024, 11).unwrap();
+    let gstr1 = Gstr1Return::build(&seller, period, &invoices, &[], HsnMaster::global()).unwrap();
+    let gstr3b = Gstr3bOutward::build(&seller, period, &invoices, &[]).unwrap();
+    let one: Value = serde_json::from_str(&gstr1.to_json().unwrap()).unwrap();
+    let three_b: Value = serde_json::from_str(&gstr3b.to_json().unwrap()).unwrap();
+
+    // Row (a) is every taxed line GSTR-1 lists in B2B, B2CL and B2CS; nil-rated lines are
+    // in GSTR-1 Table 8 and GSTR-3B row (c)
+    let b2cs_taxed = one["b2cs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["txval"].as_f64().unwrap());
+    let gstr1_taxed = sum(items_taxable(&one["b2b"])
+        .chain(items_taxable(&one["b2cl"]))
+        .chain(b2cs_taxed));
+    assert_eq!(
+        three_b["sup_details"]["osup_det"]["txval"],
+        json!(gstr1_taxed)
+    );
+    assert_eq!(
+        three_b["sup_details"]["osup_nil_exmp"]["txval"],
+        json!(1500.0)
+    );
+
+    // Table 3.2 is the inter-state supplies to unregistered buyers, by place of supply
+    assert_eq!(
+        three_b["inter_sup"]["unreg_details"],
+        json!([
+            { "pos": "07", "txval": 500.0, "iamt": 25.0 },
+            { "pos": "29", "txval": 110000.0, "iamt": 19800.0 }
+        ])
+    );
+    assert_eq!(three_b["ret_period"], one["fp"]);
+    assert_eq!(three_b["gstin"], json!(SELLER));
 }

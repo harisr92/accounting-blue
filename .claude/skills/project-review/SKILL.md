@@ -46,7 +46,7 @@ Before accepting a new helper, search `src/` for an existing one. A copy of any 
 | Indian amounts and words | `utils::formatting::{format_inr, amount_in_words}` |
 | Validation rules | `utils::validation`; invoice compliance: `invoice::validation::compliance_errors` |
 | B2B / B2CL / B2CS classification | `GstInvoice::supply_kind`, `supply_kind_for`, `b2cl_threshold` |
-| Portal JSON numbers and dates | `portal_amount`, `portal_number`, `portal_date` in `returns/gstr1.rs` |
+| Portal JSON numbers and dates | `portal_amount`, `portal_number` in `returns/portal.rs`; `portal_date` in `returns/gstr1.rs` |
 
 **Money and GST**
 - Is money `BigDecimal` all the way through? An `f64` is allowed only when serialising to the portal's JSON numbers (`portal_number`) and in PDF layout coordinates.

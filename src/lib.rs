@@ -18,7 +18,7 @@
 //!
 //! | Feature | Adds |
 //! |---------|------|
-//! | `india` | Indian GST on top of the invoicing core: rates and CGST/SGST/IGST maths (`gst::tax`), GSTIN, HSN/SAC master data, GST invoices and credit notes (`gst::invoice`), GSTR-1 returns (`gst::returns`), and Indian amount formatting (`utils::formatting`) |
+//! | `india` | Indian GST on top of the invoicing core: rates and CGST/SGST/IGST maths (`gst::tax`), GSTIN, HSN/SAC master data, GST invoices and credit notes (`gst::invoice`), GSTR-1 and GSTR-3B returns with portal JSON export (`gst::returns`), and Indian amount formatting (`utils::formatting`) |
 //! | `hsn-catalog` | The GST portal's whole HSN/SAC list with descriptions in [`HsnMaster::global`] (about 1.8 MB in the binary); turns on `india` |
 //! | `pdf` | Renders GST invoices to PDF; turns on `india` |
 //!
@@ -241,8 +241,8 @@
 //! - `invoice.rs` - A VAT invoice and a credit note, posted to the ledger
 //! - `gst_calculations.rs` - CGST/SGST/IGST maths (needs the `india` feature)
 //! - `gst_invoice.rs` - GSTIN validation, HSN/SAC rate lookup and B2B GST invoices (needs `india`)
-//! - `gstr1_export.rs` - Aggregating a month of invoices into GSTR-1 and exporting it as JSON
-//!   (needs `india`)
+//! - `gstr1_export.rs` - Aggregating a month of invoices into GSTR-1 and GSTR-3B and exporting
+//!   both as portal JSON (needs `india`)
 //! - `gst_invoice_pdf.rs` - Rendering a GST invoice to PDF (needs the `pdf` feature)
 
 #![forbid(unsafe_code)]

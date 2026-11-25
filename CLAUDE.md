@@ -17,7 +17,7 @@ Rust library for double-entry bookkeeping, financial reports and bank/gateway re
 | `src/gst/` | Indian GST, behind the `india` feature: `tax`, `invoice` and `returns` below |
 | `src/gst/tax/gst.rs` | GST rates and calculations, and `GstRegime`, the GST `TaxRegime` |
 | `src/gst/invoice/` | GSTIN, GST invoices and credit notes built on `document` and `sales`, HSN/SAC master data, the pure print model, and the PDF renderer behind the `pdf` feature (implies `india`) |
-| `src/gst/returns/` | GST returns built from invoices: the pure GSTR-1 builder, its portal-schema DTOs and JSON export, the pure GSTR-3B Table 3.1 (outward supplies) builder, and `ReturnPeriod` |
+| `src/gst/returns/` | GST returns built from invoices: the pure GSTR-1 builder, its portal-schema DTOs and JSON export, the pure GSTR-3B builder (Table 3.1 outward supplies and Table 3.2 inter-state supplies to unregistered persons) and its portal JSON export, the shared portal number serialisers (`portal.rs`), and `ReturnPeriod` |
 | `src/gst/data/` | HSN/SAC master data embedded at compile time, loaded by `gst::invoice::hsn_lookup`: `hsn_master.json` (checked rates, always with `india`) and `hsn_codes.json` (the portal's whole list, only with `hsn-catalog`) |
 | `src/reconciliation/` | Pure matching engine, split by pass, with scoring and the report |
 | `src/utils/` | `MemoryStorage`, `MemoryReconciliationStorage`, validation rules, Indian amount formatting (`india` feature) |

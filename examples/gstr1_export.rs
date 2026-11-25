@@ -1,10 +1,11 @@
-//! GSTR-1 example: aggregate a month of B2B, B2CL and B2CS invoices and a credit note into the
-//! return of outward supplies and export it as JSON in the GST portal's offline-tool schema
+//! GSTR-1 and GSTR-3B example: aggregate a month of B2B, B2CL and B2CS invoices and a credit
+//! note into the return of outward supplies and GSTR-3B's outward-supply tables, and export both
+//! as JSON in the GST portal's schemas
 
 use accounting_core::gst::invoice::{
     GstCreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode,
 };
-use accounting_core::gst::returns::{Gstr1Return, ReturnPeriod};
+use accounting_core::gst::returns::{Gstr1Return, Gstr3bOutward, ReturnPeriod};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
 use std::str::FromStr;
@@ -159,5 +160,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!("\n📤 Portal JSON:\n{}", gstr1.to_json()?);
+
+    let gstr3b = Gstr3bOutward::build(&seller, period, &invoices, &credit_notes)?;
+    println!(
+        "\n🧮 GSTR-3B Table 3.1(a): taxable {}",
+        gstr3b.outward.taxable.taxable_value
+    );
+    for row in &gstr3b.inter_state_unregistered {
+        println!(
+            "  🗺️  Table 3.2 to state {}: taxable {}, IGST {}",
+            row.place_of_supply, row.taxable_value, row.igst
+        );
+    }
+    println!("\n📤 GSTR-3B portal JSON:\n{}", gstr3b.to_json()?);
     Ok(())
 }
