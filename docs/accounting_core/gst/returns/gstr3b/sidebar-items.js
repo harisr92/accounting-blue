@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Gstr3bOutward","OutwardRow","OutwardSupplies"]};
+window.SIDEBAR_ITEMS = {"struct":["Gstr3bOutward","InterStateRow","OutwardRow","OutwardSupplies"]};
