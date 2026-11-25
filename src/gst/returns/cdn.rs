@@ -10,9 +10,10 @@
 //! and is left out when no line charges GST, its lines then being netted in Table 8 alone.
 
 use super::gstr1::{
-    grouped, portal_amount, portal_date, taxable_rates, yes_no, B2bInvoiceType, B2bItem, B2clItem,
-    B2clItemDetail, ItemDetail, PricedDocument,
+    grouped, portal_date, taxable_rates, yes_no, B2bInvoiceType, B2bItem, B2clItem, B2clItemDetail,
+    ItemDetail, PricedDocument,
 };
+use super::portal::portal_amount;
 use crate::gst::invoice::{GstBreakdown, Gstin};
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;

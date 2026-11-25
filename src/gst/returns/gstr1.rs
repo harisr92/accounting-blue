@@ -31,6 +31,7 @@
 
 use super::cdn::{cdnr_section, cdnur_section, CdnrParty, CdnurNote};
 use super::period::ReturnPeriod;
+use super::portal::{portal_amount, portal_number};
 use crate::gst::invoice::print::PRINT_DATE_FORMAT;
 use crate::gst::invoice::types::supply_kind_for;
 use crate::gst::invoice::validation::{compliance_errors, credit_note_errors};
@@ -38,10 +39,8 @@ use crate::gst::invoice::{
     ComplianceIssue, GstBreakdown, GstCreditNote, GstDocument, GstInvoice, GstLineItem, Gstin,
     HsnMaster, HsnSacKind, InvoiceError, SupplyKind, SupplyTreatment,
 };
-use crate::gst::tax::round_to_paise;
-use bigdecimal::{BigDecimal, ToPrimitive, Zero};
+use bigdecimal::{BigDecimal, Zero};
 use chrono::NaiveDate;
-use serde::ser::Error as _;
 use serde::{Serialize, Serializer};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
@@ -1186,14 +1185,6 @@ fn doc_summary(doc_num: usize, doc_type: &str, priced: &[PricedDocument]) -> Opt
     })
 }
 
-/// An amount rounded to paise, written as a JSON number
-pub(super) fn portal_amount<S: Serializer>(
-    amount: &BigDecimal,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    portal_number(&round_to_paise(amount), serializer)
-}
-
 /// An amount that is present, rounded to paise and written as a JSON number
 #[allow(clippy::ref_option)] // serde's `serialize_with` passes a `&Option<_>`
 fn portal_optional_amount<S: Serializer>(
@@ -1204,18 +1195,6 @@ fn portal_optional_amount<S: Serializer>(
         Some(amount) => portal_amount(amount, serializer),
         None => serializer.serialize_none(),
     }
-}
-
-/// A decimal written as a JSON number
-pub(super) fn portal_number<S: Serializer>(
-    value: &BigDecimal,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    let number = value
-        .to_f64()
-        .filter(|number| number.is_finite())
-        .ok_or_else(|| S::Error::custom(format!("{value} does not fit a JSON number")))?;
-    serializer.serialize_f64(number)
 }
 
 /// A date written `dd-mm-yyyy`

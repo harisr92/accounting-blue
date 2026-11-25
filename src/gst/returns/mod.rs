@@ -51,6 +51,7 @@ pub mod cdn;
 pub mod gstr1;
 pub mod gstr3b;
 pub mod period;
+mod portal;
 
 pub use cdn::{CdnrNote, CdnrParty, CdnurNote, CdnurType, NoteType};
 pub use gstr1::{
