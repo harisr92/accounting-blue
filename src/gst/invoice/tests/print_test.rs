@@ -628,3 +628,31 @@ fn test_no_upi_link_without_a_upi_id() {
     assert!(print.payment.is_some());
     assert_eq!(print.upi_uri, None);
 }
+
+#[test]
+fn test_print_charges_tax_and_has_no_declaration_by_default() {
+    let taxed = invoice(BUYER_SAME_STATE, vec![item("1")]);
+    let exempt = invoice(BUYER_SAME_STATE, vec![book(SupplyTreatment::Exempt)]);
+    for invoice in [taxed, exempt] {
+        let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap();
+        assert!(print.charges_tax);
+        assert_eq!(print.declaration, None);
+        assert_eq!(print.seller_state, "27 - Maharashtra");
+    }
+}
+
+#[test]
+fn test_print_json_without_new_fields_reads_as_charging_tax() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item("1")]);
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap();
+    let mut json = serde_json::to_value(&print).unwrap();
+    let fields = json.as_object_mut().unwrap();
+    assert!(!fields.contains_key("declaration"));
+    fields.remove("charges_tax");
+    fields.remove("seller_state");
+
+    let back: InvoicePrint = serde_json::from_value(json).unwrap();
+    assert!(back.charges_tax);
+    assert_eq!(back.declaration, None);
+    assert_eq!(back.seller_state, "");
+}

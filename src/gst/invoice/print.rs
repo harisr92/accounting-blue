@@ -317,8 +317,21 @@ pub struct InvoicePrint {
     pub buyer_state: String,
     /// Whether IGST applies rather than CGST + SGST
     pub is_inter_state: bool,
+    /// Whether the document charges GST, so it prints the tax columns, the supply type and the
+    /// tax summary; `false` for a bill of supply from a seller who may not charge tax, which
+    /// prints none of them
+    #[serde(default = "charges_tax_by_default")]
+    pub charges_tax: bool,
+    /// Statutory declaration printed above the payment details, such as the one a composition
+    /// taxable person must print on its bills of supply; `None` when there is none
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declaration: Option<String>,
     /// Supplier
     pub seller: InvoiceParty,
+    /// The seller's state as a label, such as `29 - Karnataka`, printed in place of a GSTIN for
+    /// a seller who has none
+    #[serde(default)]
+    pub seller_state: String,
     /// Recipient
     pub buyer: InvoiceParty,
     /// Item table
@@ -331,11 +344,12 @@ pub struct InvoicePrint {
     /// Label of the discount line, such as `Discount (10%)`; `None` when there is no discount
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub discount_label: Option<String>,
-    /// Total taxable value: the subtotal less the invoice discount, before tax
+    /// Total taxable value: the subtotal less the invoice discount, before tax; not printed when
+    /// the document doesn't [charge tax](InvoicePrint::charges_tax)
     pub taxable_value: String,
-    /// Tax lines with a non-zero amount
+    /// Tax lines with a non-zero amount; not printed when the document doesn't charge tax
     pub tax_lines: Vec<TaxLine>,
-    /// Total tax
+    /// Total tax; not printed when the document doesn't charge tax
     pub total_tax: String,
     /// Invoice total
     pub total: String,
@@ -446,7 +460,10 @@ impl InvoicePrint {
                     .map_or_else(|| invoice.buyer.place_of_supply(), Gstin::state_code),
             ),
             is_inter_state: invoice.is_inter_state(),
+            charges_tax: true,
+            declaration: None,
             seller: parties.seller.clone(),
+            seller_state: state_label(invoice.seller_gstin.state_code()),
             buyer: parties.buyer.clone(),
             rows,
             subtotal: format_inr(&priced.subtotal),
@@ -609,6 +626,12 @@ impl InvoicePrint {
     pub fn shows_subtotal(&self) -> bool {
         self.discount.is_some() || self.has_line_discounts()
     }
+}
+
+/// A print read from JSON saved before [`InvoicePrint::charges_tax`] existed charges tax, as every
+/// print did then
+fn charges_tax_by_default() -> bool {
+    true
 }
 
 /// [`DISCOUNT_LABEL`], with the rate of a percentage discount

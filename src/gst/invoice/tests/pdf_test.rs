@@ -618,6 +618,135 @@ fn test_notes_count_towards_the_room_below_the_totals() {
     );
 }
 
+/// The print of `invoice` as a bill of supply that charges no tax, with `declaration`
+fn no_tax_print(invoice: &GstInvoice, declaration: Option<&str>) -> InvoicePrint {
+    InvoicePrint {
+        charges_tax: false,
+        declaration: declaration.map(str::to_string),
+        ..InvoicePrint::from_invoice(invoice, &parties()).unwrap()
+    }
+}
+
+/// An invoice of one exempt line of printed books, with `discount` off the line when given
+fn exempt_invoice(discount: Option<Discount>) -> GstInvoice {
+    let line = GstLineItem::exempt(
+        "4901",
+        "Printed books",
+        BigDecimal::from(3),
+        "250".parse().unwrap(),
+    )
+    .unwrap();
+    let line = match discount {
+        Some(discount) => line.with_discount(discount).unwrap(),
+        None => line,
+    };
+    GstInvoice::new(
+        "BOS/2025-26/001",
+        NaiveDate::from_ymd_opt(2025, 6, 30).unwrap(),
+        gstin(SELLER),
+        gstin(BUYER),
+        vec![line],
+    )
+    .unwrap()
+}
+
+const DECLARATION: &str = "Composition taxable person, not eligible to collect tax on supplies";
+
+#[test]
+fn test_bill_of_supply_without_tax_prints_no_tax_columns_or_summary() {
+    let print = no_tax_print(&exempt_invoice(None), None);
+    let page = &pages(&render_pdf(&print, &PdfOptions::default()).unwrap())[0];
+
+    for expected in [
+        "Bill of Supply",
+        "Place of Supply",
+        "Amount",
+        "Total",
+        "750.00",
+    ] {
+        assert!(
+            page.contains(expected),
+            "missing {expected:?} in:
+{page}"
+        );
+    }
+    for unexpected in [
+        "Taxable Value",
+        "Total Tax",
+        "Intra-state",
+        "Inter-state",
+        "CGST",
+        "IGST",
+        "Exempt",
+        "Declaration",
+    ] {
+        assert!(
+            !page.contains(unexpected),
+            "unexpected {unexpected:?} in:
+{page}"
+        );
+    }
+}
+
+#[test]
+fn test_bill_of_supply_with_line_discount_keeps_the_discount_column() {
+    let discounted = exempt_invoice(Some(Discount::Amount(BigDecimal::from(50))));
+    let print = no_tax_print(&discounted, None);
+    let page = &pages(&render_pdf(&print, &PdfOptions::default()).unwrap())[0];
+
+    for expected in ["Disc.", "50.00", "Subtotal", "700.00"] {
+        assert!(
+            page.contains(expected),
+            "missing {expected:?} in:
+{page}"
+        );
+    }
+    assert!(
+        !page.contains("Taxable Value"),
+        "in:
+{page}"
+    );
+}
+
+#[test]
+fn test_declaration_is_printed_above_the_payment_details() {
+    let print = no_tax_print(&exempt_invoice(None), Some(DECLARATION)).with_payment(payment());
+    let page = &pages(&render_pdf(&print, &PdfOptions::default()).unwrap())[0];
+
+    let declaration = page.find(DECLARATION).expect("declaration printed");
+    let heading = page.find("Declaration").expect("declaration heading");
+    let payment = page.find("Payment details").expect("payment details");
+    assert!(
+        heading < declaration && declaration < payment,
+        "in:
+{page}"
+    );
+}
+
+#[test]
+fn test_declaration_counts_towards_the_room_below_the_totals() {
+    let terms_only = PdfOptions {
+        terms: vec!["Term.".into(); 200],
+        ..PdfOptions::default()
+    };
+    let print = no_tax_print(&exempt_invoice(None), None);
+    let Err(PdfError::TermsTooLong { max_lines, .. }) = render_pdf(&print, &terms_only) else {
+        panic!("expected the terms to be too long");
+    };
+    let options = PdfOptions {
+        terms: vec!["Term.".into(); max_lines],
+        ..PdfOptions::default()
+    };
+    assert!(render_pdf(&print, &options).is_ok());
+
+    let declared = no_tax_print(&exempt_invoice(None), Some(DECLARATION));
+    let result = render_pdf(&declared, &options);
+    assert!(
+        matches!(result, Err(PdfError::TermsTooLong { lines, .. }) if lines == max_lines + 1),
+        "{result:?}"
+    );
+}
+
 fn payment() -> PaymentDetails {
     PaymentDetails {
         bank_name: Some("HDFC Bank".into()),
