@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["PostingError"],"fn":["gst_legs","posting_legs"],"struct":["InvoiceAccounts"]};
+window.SIDEBAR_ITEMS = {"constant":["COMPOSITION_TAX_MEMO"],"enum":["PostingError"],"fn":["gst_legs","posting_legs"],"struct":["InvoiceAccounts"]};
