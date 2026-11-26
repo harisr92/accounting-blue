@@ -8,6 +8,7 @@ use crate::document::{
     check_line_fields, Document, DocumentLine, LineError, TaxBreakdown, TaxComponent, TaxRegime,
 };
 use crate::gst::tax::gst::{GstCalculation, GstError, GstRegime, CGST_CODE, IGST_CODE, SGST_CODE};
+use crate::money::{percent_of, round_money};
 use bigdecimal::{BigDecimal, Zero};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -1043,6 +1044,42 @@ impl GstInvoice {
         GstDocument::breakdown(self)
     }
 
+    /// Tax a composition seller owes on this invoice; see [`GstDocument::composition_tax`]
+    ///
+    /// # Errors
+    ///
+    /// The first error from [`GstInvoice::breakdown`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use accounting_core::gst::invoice::{
+    ///     CompositionRate, GstInvoice, GstLineItem, Gstin, SellerRegistration,
+    /// };
+    /// use bigdecimal::BigDecimal;
+    /// use chrono::NaiveDate;
+    ///
+    /// # fn main() -> Result<(), accounting_core::gst::invoice::InvoiceError> {
+    /// let seller = SellerRegistration::Composition {
+    ///     gstin: Gstin::parse("27AAPFU0939F1ZV")?,
+    ///     rate: CompositionRate::TraderOrManufacturer,
+    /// };
+    /// let item = GstLineItem::new("7010", "Glass jars", BigDecimal::from(100),
+    ///     BigDecimal::from(45), BigDecimal::from(0))?;
+    /// let bill = GstInvoice::new("BOS-001", NaiveDate::from_ymd_opt(2025, 4, 1).unwrap(),
+    ///     seller, Gstin::parse("27AAPFU0939F2ZU")?, vec![item])?;
+    ///
+    /// assert!(bill.is_bill_of_supply());
+    /// assert_eq!(bill.breakdown()?.total, BigDecimal::from(4500));
+    /// // 1% of the turnover, owed by the seller, not charged to the buyer
+    /// assert_eq!(bill.composition_tax()?, Some(BigDecimal::from(45)));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn composition_tax(&self) -> Result<Option<BigDecimal>, InvoiceError> {
+        GstDocument::composition_tax(self)
+    }
+
     /// How the invoice is reported in GSTR-1; `None` for a bill of supply, which GSTR-1 doesn't
     /// report
     ///
@@ -1176,6 +1213,28 @@ pub trait GstDocument:
     /// The first error from [`GstLineItem::breakdown`].
     fn breakdown(&self) -> Result<GstBreakdown, InvoiceError> {
         Ok(GstBreakdown::from(&self.tax_breakdown()?))
+    }
+
+    /// Tax a composition seller owes on this document's turnover: its
+    /// [`CompositionRate`](super::CompositionRate) of the taxable value after discounts, rounded
+    /// to paise; `None` unless the seller is under composition
+    ///
+    /// The seller pays it itself, collecting none from the buyer (Section 10 of the CGST Act). A
+    /// credit note's is the same rate of the value it credits, so it reverses its invoice's
+    /// pro rata.
+    ///
+    /// # Errors
+    ///
+    /// The first error from [`GstDocument::breakdown`].
+    fn composition_tax(&self) -> Result<Option<BigDecimal>, InvoiceError> {
+        let Some(rate) = self.seller().composition_rate() else {
+            return Ok(None);
+        };
+        let taxable_value = self.breakdown()?.taxable_value;
+        Ok(Some(round_money(&percent_of(
+            &taxable_value,
+            &rate.percent(),
+        ))))
     }
 }
 

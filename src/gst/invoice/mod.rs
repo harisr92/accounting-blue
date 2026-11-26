@@ -95,7 +95,9 @@ pub use note::{credit_note_deadline, GstCreditNote, OriginalInvoice};
 pub use payment::{upi_uri, PaymentDetails, UPI_CURRENCY};
 #[cfg(feature = "pdf")]
 pub use pdf::{render_pdf, FontFace, PdfError, PdfFont, PdfOptions, DEFAULT_CURRENCY_LABEL};
-pub use posting::{gst_legs, posting_legs, InvoiceAccounts, PostingError, PostingLeg};
+pub use posting::{
+    gst_legs, posting_legs, InvoiceAccounts, PostingError, PostingLeg, COMPOSITION_TAX_MEMO,
+};
 pub use print::{
     paginate_rows, InvoiceDetails, InvoiceParties, InvoiceParty, InvoicePrint, PartyError,
     PartyRole, PrintRow, RowCapacity, TaxLine, BILL_OF_SUPPLY_TITLE, DISCOUNT_LABEL,
