@@ -205,9 +205,6 @@ const COLUMNS_WITH_DISCOUNT_NO_TAX: [Column; 7] = [
     COLUMNS_WITH_DISCOUNT[9],
 ];
 
-/// Heading of the declaration printed below the totals, such as a composition seller's
-const DECLARATION_HEADING: &str = "Declaration";
-
 /// Ops for a block and the y position just below it
 type Block = (Vec<Op>, f32);
 
@@ -261,8 +258,7 @@ impl<'a> Layout<'a> {
         if bottom <= BODY_BOTTOM + FIT_TOLERANCE {
             return Ok(());
         }
-        let lines = self.wrapped(WORDS_WIDTH, &self.declaration()).len()
-            + self.wrapped(WORDS_WIDTH, &self.print.notes).len()
+        let lines = self.wrapped(WORDS_WIDTH, &self.print.notes).len()
             + self.wrapped(WORDS_WIDTH, &self.options.terms).len();
         let over = row_count(bottom - BODY_BOTTOM - FIT_TOLERANCE, f32::ceil, LINE_HEIGHT);
         Err(PdfError::TermsTooLong {
@@ -350,8 +346,9 @@ impl<'a> Layout<'a> {
         }
     }
 
-    /// Title and invoice details, right-aligned; the supply type only when the document charges
-    /// tax
+    /// Title, then any declaration (which Rule 5(1)(g) puts at the top of a composition seller's
+    /// bill of supply) and the invoice details, right-aligned; the supply type only when the
+    /// document charges tax
     fn details(&self, y: f32) -> Block {
         let print = self.print;
         let supply = if print.is_inter_state {
@@ -360,6 +357,7 @@ impl<'a> Layout<'a> {
             "Intra-state (CGST + SGST)"
         };
         let lines: Vec<String> = [
+            print.declaration.clone(),
             Some(format!("Invoice No: {}", print.invoice_number)),
             Some(format!("Invoice Date: {}", print.invoice_date)),
             print
@@ -588,17 +586,9 @@ impl<'a> Layout<'a> {
         )
     }
 
-    /// The left column below the totals, top to bottom: the declaration, notes, payment details,
-    /// then terms
+    /// The left column below the totals, top to bottom: notes, payment details, then terms
     fn closing_column(&self, top: f32) -> Block {
-        let (declaration, bottom) =
-            self.section(top, DECLARATION_HEADING, &self.declaration(), WORDS_WIDTH);
-        let (notes, bottom) = self.section(
-            next_top(&declaration, bottom),
-            "Notes",
-            &self.print.notes,
-            WORDS_WIDTH,
-        );
+        let (notes, bottom) = self.section(top, "Notes", &self.print.notes, WORDS_WIDTH);
         let (payment, bottom) = self.payment(next_top(&notes, bottom));
         let (terms, bottom) = self.section(
             next_top(&payment, bottom),
@@ -606,12 +596,7 @@ impl<'a> Layout<'a> {
             &self.options.terms,
             WORDS_WIDTH,
         );
-        ([declaration, notes, payment, terms].concat(), bottom)
-    }
-
-    /// The declaration as the lines of its section: none when there is no declaration
-    fn declaration(&self) -> Vec<String> {
-        self.print.declaration.iter().cloned().collect()
+        ([notes, payment, terms].concat(), bottom)
     }
 
     /// "Payment details" with the bank account and UPI ID, and the UPI QR code beside them when

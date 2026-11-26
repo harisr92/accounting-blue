@@ -330,8 +330,9 @@ pub struct InvoicePrint {
     /// prints none of them
     #[serde(default = "charges_tax_by_default")]
     pub charges_tax: bool,
-    /// Statutory declaration printed above the payment details, such as the one a composition
-    /// taxable person must print on its bills of supply; `None` when there is none
+    /// Statutory declaration printed at the top, under the title, such as the one a composition
+    /// taxable person must print there on its bills of supply (Rule 5(1)(g)); `None` when there
+    /// is none
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declaration: Option<String>,
     /// Supplier

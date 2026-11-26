@@ -12,15 +12,15 @@
 //! A print model that doesn't [charge tax](InvoicePrint::charges_tax), a bill of supply from a
 //! seller who may not collect GST, is laid out without the taxable value, GST rate and tax
 //! columns, the supply type and the tax summary. Its [declaration](InvoicePrint::declaration),
-//! when there is one, is printed above the notes and payment details.
+//! when there is one, is printed at the top, under the title, as Rule 5(1)(g) of the CGST Rules
+//! asks of a composition seller.
 //!
 //! By default the invoice is set in the standard Helvetica font and amounts are labelled `Rs.`.
 //! Helvetica only covers Western European characters, so an invoice with the `₹` sign or with
 //! names in an Indian script needs a [`PdfFont::Custom`] TrueType font that has those glyphs.
 //! Rendering refuses any character its font can't draw with [`PdfError::MissingGlyph`], whether it
-//! comes from the invoice or is one of the renderer's own labels. The declaration, notes and terms
-//! print on the same page as the totals, so a declaration, notes and terms longer than that page
-//! holds are refused with
+//! comes from the invoice or is one of the renderer's own labels. The notes and terms print on the
+//! same page as the totals, so notes and terms longer than that page holds are refused with
 //! [`PdfError::TermsTooLong`].
 //!
 //! # Example
@@ -173,10 +173,10 @@ pub enum PdfError {
         /// Why encoding failed, such as a link too long for a QR code
         reason: String,
     },
-    /// The declaration, notes and terms, once wrapped, don't fit below the totals on one page
-    #[error("the declaration, notes and terms take {lines} lines but at most {max_lines} fit below the totals")]
+    /// The notes and terms, once wrapped, don't fit below the totals on one page
+    #[error("the notes and terms take {lines} lines but at most {max_lines} fit below the totals")]
     TermsTooLong {
-        /// Lines the declaration, notes and terms wrap to, together
+        /// Lines the notes and terms wrap to, together
         lines: usize,
         /// Lines that fit
         max_lines: usize,

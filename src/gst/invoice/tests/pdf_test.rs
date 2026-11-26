@@ -679,7 +679,7 @@ fn test_bill_of_supply_without_tax_prints_no_tax_columns_or_summary() {
         "CGST",
         "IGST",
         "Exempt",
-        "Declaration",
+        "Composition taxable person",
     ] {
         assert!(
             !page.contains(unexpected),
@@ -710,41 +710,20 @@ fn test_bill_of_supply_with_line_discount_keeps_the_discount_column() {
 }
 
 #[test]
-fn test_declaration_is_printed_above_the_payment_details() {
+fn test_declaration_is_printed_at_the_top_under_the_title() {
     let print = no_tax_print(&exempt_invoice(None), Some(DECLARATION)).with_payment(payment());
     let page = &pages(&render_pdf(&print, &PdfOptions::default()).unwrap())[0];
 
-    let declaration = page.find(DECLARATION).expect("declaration printed");
-    let heading = page.find("Declaration").expect("declaration heading");
-    let payment = page.find("Payment details").expect("payment details");
+    let title = page.find("Bill of Supply").expect("title printed");
+    // The declaration wraps to the width of the details, so look for its start
+    let declaration = page
+        .find("Composition taxable person")
+        .expect("declaration printed");
+    let number = page.find("Invoice No:").expect("invoice number printed");
+    let buyer = page.find("BILL TO").expect("buyer printed");
     assert!(
-        heading < declaration && declaration < payment,
-        "in:
-{page}"
-    );
-}
-
-#[test]
-fn test_declaration_counts_towards_the_room_below_the_totals() {
-    let terms_only = PdfOptions {
-        terms: vec!["Term.".into(); 200],
-        ..PdfOptions::default()
-    };
-    let print = no_tax_print(&exempt_invoice(None), None);
-    let Err(PdfError::TermsTooLong { max_lines, .. }) = render_pdf(&print, &terms_only) else {
-        panic!("expected the terms to be too long");
-    };
-    let options = PdfOptions {
-        terms: vec!["Term.".into(); max_lines],
-        ..PdfOptions::default()
-    };
-    assert!(render_pdf(&print, &options).is_ok());
-
-    let declared = no_tax_print(&exempt_invoice(None), Some(DECLARATION));
-    let result = render_pdf(&declared, &options);
-    assert!(
-        matches!(result, Err(PdfError::TermsTooLong { lines, .. }) if lines == max_lines + 1),
-        "{result:?}"
+        title < declaration && declaration < number && number < buyer,
+        "in:\n{page}"
     );
 }
 
@@ -778,7 +757,6 @@ fn test_unregistered_sellers_bill_of_supply_prints_its_state_and_declaration() {
     for expected in [
         "Bill of Supply",
         "State: 29 - Karnataka",
-        "Declaration",
         UNREGISTERED_DECLARATION,
         "Rs. 800.00",
     ] {
