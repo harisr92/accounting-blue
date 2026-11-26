@@ -7,7 +7,10 @@
 
 use super::payment::{non_blank, upi_uri, PaymentDetails};
 use super::state::state_label;
-use super::types::{GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError, SupplyTreatment};
+use super::types::{
+    taxed_line_on_bill_of_supply, GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError,
+    SupplyTreatment,
+};
 use crate::document::discount::Discount;
 use crate::document::price_lines;
 use crate::utils::formatting::{amount_in_words, format_inr};
@@ -389,6 +392,7 @@ impl InvoicePrint {
     ///
     /// # Errors
     ///
+    /// [`InvoiceError::TaxOnBillOfSupply`] if a line of a bill of supply charges tax,
     /// [`InvoiceError::InvalidParty`] if a party lacks a detail the invoice must show (see
     /// [`InvoiceParties::check_against`]) or its GSTIN is not the one on the invoice, or the
     /// first error from [`GstInvoice::line_breakdowns`].
@@ -436,6 +440,9 @@ impl InvoicePrint {
         invoice: &GstInvoice,
         parties: &InvoiceParties,
     ) -> Result<Self, InvoiceError> {
+        if let Some(line) = taxed_line_on_bill_of_supply(invoice) {
+            return Err(InvoiceError::TaxOnBillOfSupply { line });
+        }
         let priced = price_lines(invoice)?;
         let breakdowns: Vec<GstBreakdown> =
             priced.breakdowns.iter().map(GstBreakdown::from).collect();

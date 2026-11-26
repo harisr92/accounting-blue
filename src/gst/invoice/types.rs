@@ -1179,6 +1179,26 @@ pub trait GstDocument:
     }
 }
 
+/// Whether `item` charges tax on `document` although the document is a bill of supply, whose
+/// seller may not charge any (Rule 49 of the CGST Rules)
+pub(super) fn taxes_bill_of_supply(document: &dyn GstDocument, item: &GstLineItem) -> bool {
+    document.is_bill_of_supply() && !item.gst_rate.is_zero()
+}
+
+/// Index of the first line that charges tax on a bill of supply, if any
+pub(super) fn taxed_line_on_bill_of_supply(document: &dyn GstDocument) -> Option<usize> {
+    document
+        .line_items()
+        .iter()
+        .position(|item| taxes_bill_of_supply(document, item))
+}
+
+/// Whether `document` is a composition seller's supply to another state, which Section 10(2)(c)
+/// of the CGST Act, and Notification 2/2019-Central Tax (Rate) for services, bar
+pub(super) fn is_composition_inter_state(document: &dyn GstDocument) -> bool {
+    document.seller().composition_rate().is_some() && document.is_inter_state()
+}
+
 /// [`GstInvoice::supply_kind`] for an invoice whose value, tax included, is already known
 pub(crate) fn supply_kind_for(invoice: &GstInvoice, invoice_value: &BigDecimal) -> SupplyKind {
     if invoice.buyer.is_registered() {
@@ -1340,6 +1360,12 @@ pub enum InvoiceError {
         credited: BigDecimal,
         /// The invoice's value, tax included
         invoice_value: BigDecimal,
+    },
+    /// A line of a bill of supply charges tax, which its seller may not (Rule 49)
+    #[error("line {}: a bill of supply can't charge tax", .line + 1)]
+    TaxOnBillOfSupply {
+        /// Index of the line
+        line: usize,
     },
     /// A composition rate is not one of the scheme's
     #[error("{0}% is not a composition rate")]

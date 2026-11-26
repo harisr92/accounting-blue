@@ -731,3 +731,15 @@ fn test_unregistered_seller_party_with_a_gstin_is_refused() {
         })
     ));
 }
+
+#[test]
+fn test_bill_of_supply_with_a_taxed_line_is_not_printed() {
+    let mut bill = bill_of_supply(composition_seller());
+    bill.line_items.push(item_at("1", 5));
+    let parties = seller_parties(parties(BUYER_SAME_STATE).seller);
+
+    assert!(matches!(
+        InvoicePrint::from_invoice(&bill, &parties),
+        Err(InvoiceError::TaxOnBillOfSupply { line: 1 })
+    ));
+}

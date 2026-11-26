@@ -20,7 +20,8 @@
 //! [`GstLineItem::with_default_rate`] builds a line at the rate for its code.
 //!
 //! [`validate_invoice`] checks an invoice against the compliance rules (future dates, missing or
-//! unknown HSN/SAC codes, amounts, rates and parties) and returns an [`InvoiceValidationReport`]
+//! unknown HSN/SAC codes, amounts, rates, parties, tax on a bill of supply and a composition
+//! seller's inter-state supplies) and returns an [`InvoiceValidationReport`]
 //! of every [`ComplianceIssue`] found. [`GstInvoice::to_entries`] posts a compliant invoice to the
 //! ledger through the accounts named in [`InvoiceAccounts`]; the posting balances by
 //! construction, since the total is the taxable value plus the tax.
