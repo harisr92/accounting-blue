@@ -320,13 +320,14 @@ With the `india` feature, the library supports Indian GST with:
 - **Unregistered buyers**: invoices to a `Recipient::Unregistered { place_of_supply }`, taxed by the place of supply
 - **Discounts before tax**: a `Discount` (percentage or flat amount) on a line with `GstLineItem::with_discount`, and off the subtotal with `GstInvoice::with_discount`. The subtotal discount is shared across the lines by value, so each rate is taxed on its discounted share, and the PDF shows a discount column, the subtotal and the discount
 - **Exempt and non-GST supplies**: `GstLineItem::exempt` and `GstLineItem::non_gst` lines carry no GST, are reported in GSTR-1 Table 8, and an invoice of only such lines prints as a "Bill of Supply"
+- **Composition and unregistered sellers**: a `SellerRegistration::Composition { gstin, rate }` or `SellerRegistration::Unregistered { state }` seller issues a bill of supply (Rule 49): no line may carry a rate, the PDF prints no tax columns and puts the seller's declaration under the title, GSTR-1 and GSTR-3B leave it out, and a composition seller's tax on its turnover (`GstInvoice::composition_tax`, 1%, 5% or 6% by `CompositionRate`) posts as an expense and a payable through `InvoiceAccounts::with_composition_tax`
 
 ```rust,ignore
 use accounting_core::gst::invoice::{GstInvoice, Recipient, StateCode, SupplyKind};
 
 let buyer = Recipient::unregistered(StateCode::parse("07")?); // Delhi, no GSTIN
 let invoice = GstInvoice::new("INV-104", date, seller_gstin, buyer, items)?;
-assert_eq!(invoice.supply_kind()?, SupplyKind::B2cl); // inter-state and over ₹1 lakh
+assert_eq!(invoice.supply_kind()?, Some(SupplyKind::B2cl)); // inter-state and over ₹1 lakh
 ```
 
 ### Invoice PDFs

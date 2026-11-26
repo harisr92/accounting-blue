@@ -171,6 +171,40 @@ const COLUMNS_WITH_DISCOUNT: [Column; 10] = [
     COLUMNS[8],
 ];
 
+/// Width of the taxable value, GST rate and tax columns, which a document that charges no tax
+/// gives to the description
+const TAX_COLUMNS_WIDTH: f32 = COLUMNS[5].width + COLUMNS[6].width + COLUMNS[7].width;
+
+/// The item table's columns when the document charges no tax: [`COLUMNS`] without the taxable
+/// value, GST rate and tax, the description taking their width. The amount is the value of the
+/// supply
+const COLUMNS_NO_TAX: [Column; 6] = [
+    COLUMNS[0],
+    COLUMNS[1],
+    Column {
+        width: COLUMNS[2].width + TAX_COLUMNS_WIDTH,
+        ..COLUMNS[2]
+    },
+    COLUMNS[3],
+    COLUMNS[4],
+    COLUMNS[8],
+];
+
+/// [`COLUMNS_WITH_DISCOUNT`] without the taxable value, GST rate and tax, as in
+/// [`COLUMNS_NO_TAX`]
+const COLUMNS_WITH_DISCOUNT_NO_TAX: [Column; 7] = [
+    COLUMNS_WITH_DISCOUNT[0],
+    COLUMNS_WITH_DISCOUNT[1],
+    Column {
+        width: COLUMNS_WITH_DISCOUNT[2].width + TAX_COLUMNS_WIDTH,
+        ..COLUMNS_WITH_DISCOUNT[2]
+    },
+    COLUMNS_WITH_DISCOUNT[3],
+    COLUMNS_WITH_DISCOUNT[4],
+    COLUMNS_WITH_DISCOUNT[5],
+    COLUMNS_WITH_DISCOUNT[9],
+];
+
 /// Ops for a block and the y position just below it
 type Block = (Vec<Op>, f32);
 
@@ -288,13 +322,18 @@ impl<'a> Layout<'a> {
         (ops, bottom + BLOCK_GAP + 2.0)
     }
 
-    /// Seller name in large type, then its address and GSTIN
+    /// Seller name in large type, then its address and GSTIN, or its state when it has none
     fn seller(&self, y: f32) -> Block {
         let seller = &self.print.seller;
         let x = self.seller_x();
         let name = self.fit(&self.fonts.bold, NAME_SIZE, &seller.name, SELLER_WIDTH);
         let name_ops = text(&self.fonts.bold, NAME_SIZE, x, y, Align::Left, &name);
-        let (lines, bottom) = self.lines(x, y + 5.5, SELLER_WIDTH, &party_lines(seller, None));
+        let (lines, bottom) = self.lines(
+            x,
+            y + 5.5,
+            SELLER_WIDTH,
+            &seller_lines(seller, &self.print.seller_state),
+        );
         ([name_ops, lines].concat(), bottom)
     }
 
@@ -307,7 +346,9 @@ impl<'a> Layout<'a> {
         }
     }
 
-    /// Title and invoice details, right-aligned
+    /// Title, then any declaration (which Rule 5(1)(g) puts at the top of a composition seller's
+    /// bill of supply) and the invoice details, right-aligned; the supply type only when the
+    /// document charges tax
     fn details(&self, y: f32) -> Block {
         let print = self.print;
         let supply = if print.is_inter_state {
@@ -316,6 +357,7 @@ impl<'a> Layout<'a> {
             "Intra-state (CGST + SGST)"
         };
         let lines: Vec<String> = [
+            print.declaration.clone(),
             Some(format!("Invoice No: {}", print.invoice_number)),
             Some(format!("Invoice Date: {}", print.invoice_date)),
             print
@@ -324,7 +366,7 @@ impl<'a> Layout<'a> {
                 .map(|date| format!("Due Date: {date}")),
             print.reference.as_ref().map(|r| format!("Reference: {r}")),
             Some(format!("Place of Supply: {}", print.place_of_supply)),
-            Some(format!("Supply: {supply}")),
+            print.charges_tax.then(|| format!("Supply: {supply}")),
         ]
         .into_iter()
         .flatten()
@@ -363,7 +405,7 @@ impl<'a> Layout<'a> {
         } else {
             WALK_IN_BUYER_LABEL
         };
-        let bill_lines = party_lines(buyer, Some(&print.buyer_state));
+        let bill_lines = party_lines(buyer, &print.buyer_state);
         let Some(ship_to) = &print.ship_to else {
             return self.party_block((LEFT, y), RIGHT - LEFT, "BILL TO", shown_name, &bill_lines);
         };
@@ -419,19 +461,22 @@ impl<'a> Layout<'a> {
         (ops, y + BLOCK_GAP + 2.0)
     }
 
-    /// The item table's columns: with a discount column when any line has a discount
+    /// The item table's columns: with a discount column when any line has a discount, and
+    /// without the tax columns when the document charges no tax
     fn columns(&self) -> &'static [Column] {
-        if self.print.has_line_discounts() {
-            &COLUMNS_WITH_DISCOUNT
-        } else {
-            &COLUMNS
+        match (self.print.has_line_discounts(), self.print.charges_tax) {
+            (false, true) => &COLUMNS,
+            (true, true) => &COLUMNS_WITH_DISCOUNT,
+            (false, false) => &COLUMNS_NO_TAX,
+            (true, false) => &COLUMNS_WITH_DISCOUNT_NO_TAX,
         }
     }
 
     /// Column headings, then one line per row, between rules
     fn table(&self, top: f32, rows: &[PrintRow]) -> Block {
         let columns = self.columns();
-        let with_discount = columns.len() == COLUMNS_WITH_DISCOUNT.len();
+        let with_discount = self.print.has_line_discounts();
+        let with_tax = self.print.charges_tax;
         let headings: Vec<String> = columns
             .iter()
             .map(|column| column.heading.to_string())
@@ -443,7 +488,7 @@ impl<'a> Layout<'a> {
                 columns,
                 &self.fonts.regular,
                 row_top,
-                &cells(row, with_discount),
+                &cells(row, with_discount, with_tax),
             )
         });
         let bottom = top + ROW_HEIGHT * (rows.len() + 1) as f32;
@@ -704,9 +749,9 @@ impl<'a> Layout<'a> {
     }
 }
 
-/// Address lines, then `State: ` and `state` when given, then the GSTIN, or
-/// `GSTIN: Unregistered` for a party without one
-fn party_lines(party: &InvoiceParty, state: Option<&str>) -> Vec<String> {
+/// Address lines, then `State: ` and `state`, then the GSTIN, or `GSTIN: Unregistered` for a
+/// party without one
+fn party_lines(party: &InvoiceParty, state: &str) -> Vec<String> {
     let identity = party.gstin.as_ref().map_or_else(
         || UNREGISTERED_GSTIN_LINE.to_string(),
         |gstin| format!("GSTIN: {gstin}"),
@@ -715,7 +760,20 @@ fn party_lines(party: &InvoiceParty, state: Option<&str>) -> Vec<String> {
         .address
         .iter()
         .cloned()
-        .chain(state.map(|state| format!("State: {state}")))
+        .chain([format!("State: {state}"), identity])
+        .collect()
+}
+
+/// The seller's address lines, then its GSTIN, or `State: ` and `state` when it has none
+fn seller_lines(seller: &InvoiceParty, state: &str) -> Vec<String> {
+    let identity = seller.gstin.as_ref().map_or_else(
+        || format!("State: {state}"),
+        |gstin| format!("GSTIN: {gstin}"),
+    );
+    seller
+        .address
+        .iter()
+        .cloned()
         .chain(std::iter::once(identity))
         .collect()
 }
@@ -755,7 +813,8 @@ fn next_top(ops: &[Op], bottom: f32) -> f32 {
 }
 
 /// The totals lines above the rule, as label and amount: the subtotal and the invoice discount
-/// when there are discounts, then the taxable value, each tax and the total tax
+/// when there are discounts, then, when the document charges tax, the taxable value, each tax
+/// and the total tax
 fn summary_lines(print: &InvoicePrint) -> Vec<(&str, String)> {
     let subtotal = print
         .shows_subtotal()
@@ -765,26 +824,34 @@ fn summary_lines(print: &InvoicePrint) -> Vec<(&str, String)> {
         .as_ref()
         .zip(print.discount_label.as_ref())
         .map(|(amount, label)| (label.as_str(), format!("-{amount}")));
+    let tax = print.charges_tax.then(|| {
+        std::iter::once(("Taxable Value", print.taxable_value.clone()))
+            .chain(
+                print
+                    .tax_lines
+                    .iter()
+                    .map(|line| (line.label.as_str(), line.amount.clone())),
+            )
+            .chain(std::iter::once(("Total Tax", print.total_tax.clone())))
+    });
     subtotal
         .into_iter()
         .chain(discount)
-        .chain(std::iter::once((
-            "Taxable Value",
-            print.taxable_value.clone(),
-        )))
-        .chain(
-            print
-                .tax_lines
-                .iter()
-                .map(|line| (line.label.as_str(), line.amount.clone())),
-        )
-        .chain(std::iter::once(("Total Tax", print.total_tax.clone())))
+        .chain(tax.into_iter().flatten())
         .collect()
 }
 
-/// A row's cells, in column order, with the discount cell when the table has that column
-fn cells(row: &PrintRow, with_discount: bool) -> Vec<String> {
+/// A row's cells, in column order, with the discount cell when the table has that column and the
+/// taxable value, GST rate and tax cells when it has those
+fn cells(row: &PrintRow, with_discount: bool, with_tax: bool) -> Vec<String> {
     let discount = with_discount.then(|| row.discount.clone().unwrap_or_default());
+    let tax = with_tax.then(|| {
+        [
+            row.taxable_value.clone(),
+            row.gst_rate.clone(),
+            row.tax.clone(),
+        ]
+    });
     [
         row.serial.to_string(),
         row.hsn_sac.clone(),
@@ -794,12 +861,8 @@ fn cells(row: &PrintRow, with_discount: bool) -> Vec<String> {
     ]
     .into_iter()
     .chain(discount)
-    .chain([
-        row.taxable_value.clone(),
-        row.gst_rate.clone(),
-        row.tax.clone(),
-        row.amount.clone(),
-    ])
+    .chain(tax.into_iter().flatten())
+    .chain(std::iter::once(row.amount.clone()))
     .collect()
 }
 

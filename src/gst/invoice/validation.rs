@@ -15,6 +15,7 @@
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use super::note::GstCreditNote;
 use super::types::{invoice_number_error, GstDocument, GstInvoice, GstLineItem};
+use super::types::{is_composition_inter_state, taxes_bill_of_supply};
 use super::types::{InvoiceNumberError, LineItemError, Recipient, SupplyKind};
 use crate::document::discount::DiscountError;
 use crate::document::validation::{self as rules, Issue, ValidationIssue, ValidationReport};
@@ -98,6 +99,26 @@ pub enum ComplianceIssue {
         /// Index of the line
         line: usize,
     },
+    /// A line of a bill of supply charges tax, which its seller, under composition or not
+    /// registered, may not (Rule 49 of the CGST Rules)
+    #[error("line {}: a bill of supply can't charge tax, got {rate}%", .line + 1)]
+    TaxOnBillOfSupply {
+        /// Index of the line
+        line: usize,
+        /// Rate the line charges
+        rate: BigDecimal,
+    },
+    /// A composition seller supplies to another state, which Section 10(2)(c) of the CGST Act
+    /// (and Notification 2/2019-Central Tax (Rate) for services) bars
+    #[error(
+        "a composition seller in state {seller_state} can't supply to state {place_of_supply}"
+    )]
+    CompositionInterStateSupply {
+        /// The seller's state code
+        seller_state: String,
+        /// The place of supply's state code
+        place_of_supply: String,
+    },
     /// A credit note is dated before the invoice it corrects
     #[error("credit note dated {note_date} is before its invoice dated {original_date}")]
     NoteBeforeOriginal {
@@ -145,6 +166,8 @@ impl ComplianceIssue {
             | Self::InvalidDiscount(_)
             | Self::FutureDate { .. }
             | Self::SameSellerAndBuyer(_)
+            | Self::TaxOnBillOfSupply { .. }
+            | Self::CompositionInterStateSupply { .. }
             | Self::NoteBeforeOriginal { .. }
             | Self::OriginalKindMismatch { .. }
             | Self::CreditExceedsInvoice { .. }
@@ -202,6 +225,8 @@ const ERROR_RULES: &[ErrorRule] = &[
     discount_rule,
     date_rule,
     parties_rule,
+    bill_of_supply_tax_rule,
+    composition_inter_state_rule,
 ];
 
 /// The rules that only flag an invoice for a second look, reported after the errors
@@ -377,13 +402,37 @@ fn date_rule(document: &dyn GstDocument, as_of: NaiveDate) -> Vec<ComplianceIssu
 }
 
 fn parties_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<ComplianceIssue> {
-    if document.buyer().gstin() == Some(document.seller_gstin()) {
-        vec![ComplianceIssue::SameSellerAndBuyer(
-            document.seller_gstin().to_string(),
-        )]
-    } else {
-        Vec::new()
-    }
+    document
+        .seller_gstin()
+        .filter(|seller| document.buyer().gstin() == Some(*seller))
+        .map(|seller| ComplianceIssue::SameSellerAndBuyer(seller.to_string()))
+        .into_iter()
+        .collect()
+}
+
+/// A bill of supply charges no tax, so every line that carries a rate is an error
+fn bill_of_supply_tax_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<ComplianceIssue> {
+    per_line(document, |line, item| {
+        taxes_bill_of_supply(document, item).then(|| ComplianceIssue::TaxOnBillOfSupply {
+            line,
+            rate: item.gst_rate.clone(),
+        })
+    })
+}
+
+/// A composition seller may only supply within its own state; an unregistered seller may supply
+/// anywhere
+fn composition_inter_state_rule(
+    document: &dyn GstDocument,
+    _as_of: NaiveDate,
+) -> Vec<ComplianceIssue> {
+    is_composition_inter_state(document)
+        .then(|| ComplianceIssue::CompositionInterStateSupply {
+            seller_state: document.seller_state().to_string(),
+            place_of_supply: document.buyer().place_of_supply().to_string(),
+        })
+        .into_iter()
+        .collect()
 }
 
 /// Warn about well-formed codes the master doesn't know, and rates that differ from its default
@@ -395,12 +444,14 @@ fn parties_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<Compliance
 /// A rate is only compared when the master has the line's exact code with a checked rate: a
 /// fallback heading's rate may not apply to every tariff item under it, and most codes have no
 /// checked rate at all. It is also not compared on a line that already
-/// breaks a field rule, on an exempt or non-GST line (whose rate is 0 by definition), or on an
+/// breaks a field rule, on an exempt or non-GST line (whose rate is 0 by definition), on a bill
+/// of supply (which charges no tax whatever the code), or on an
 /// invoice dated before [`HsnMaster::effective_from`], when the schedule didn't apply yet. A credit
 /// note goes by its original invoice's date ([`GstDocument::supply_date`]), since it reverses tax
 /// at the rates that invoice charged.
 fn hsn_master_rule(document: &dyn GstDocument, master: &HsnMaster) -> Vec<ComplianceIssue> {
-    let schedule_applies = document.supply_date() >= master.effective_from();
+    let schedule_applies =
+        document.supply_date() >= master.effective_from() && !document.is_bill_of_supply();
     per_line(document, |line, item| {
         if !is_valid_hsn_sac(&item.hsn_sac) {
             return None;

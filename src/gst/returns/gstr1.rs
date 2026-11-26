@@ -23,6 +23,10 @@
 //! invoice keeps its whole value but lists only its taxed rates, and one with no taxed line
 //! appears only in Table 8.
 //!
+//! A bill of supply ([`GstInvoice::is_bill_of_supply`]), from a seller under composition or not
+//! registered, is left out, with the credit notes against it: a composition seller reports its
+//! turnover on CMP-08 and GSTR-4, which this crate doesn't build.
+//!
 //! A [`GstCreditNote`] is reported under the supply kind of the invoice it corrects. Against a B2B
 //! or B2CL invoice it goes to Table 9B; against a B2CS invoice it is subtracted from the Table 7
 //! row for its place of supply and rate, which may then be negative. Either way its lines are
@@ -809,18 +813,21 @@ fn number_key(number: &str) -> (&str, usize, &str) {
 }
 
 /// The invoices and credit notes once each is checked as a return takes it (see
-/// [`Gstr1Return::build`]), priced and ordered by date then number
+/// [`Gstr1Return::build`]), priced and ordered by date then number, leaving out bills of supply
+/// and the credit notes against them, which no return of a regular taxpayer reports
 pub(super) fn checked_and_priced<'a>(
     filer: &Gstin,
     period: ReturnPeriod,
     invoices: &'a [GstInvoice],
     credit_notes: &'a [GstCreditNote],
 ) -> Result<(Vec<PricedDocument<'a>>, Vec<PricedDocument<'a>>), Gstr1Error> {
-    check_documents(filer, period, invoices, |invoice| {
+    let invoices = charging_tax(invoices);
+    let credit_notes = charging_tax(credit_notes);
+    check_documents(filer, period, &invoices, |invoice| {
         compliance_errors(invoice, invoice.invoice_date)
     })
     .map_err(|(number, problem)| Gstr1Error::for_invoice(number, problem))?;
-    check_documents(filer, period, credit_notes, |note| {
+    check_documents(filer, period, &credit_notes, |note| {
         credit_note_errors(note, note.note_date)
     })
     .map_err(|(note_number, reason)| Gstr1Error::InvalidCreditNote {
@@ -828,9 +835,17 @@ pub(super) fn checked_and_priced<'a>(
         reason,
     })?;
     Ok((
-        priced(invoices, PricedDocument::invoice)?,
-        priced(credit_notes, PricedDocument::credit_note)?,
+        priced(&invoices, PricedDocument::invoice)?,
+        priced(&credit_notes, PricedDocument::credit_note)?,
     ))
+}
+
+/// The documents that are not bills of supply
+fn charging_tax<D: GstDocument>(documents: &[D]) -> Vec<&D> {
+    documents
+        .iter()
+        .filter(|document| !document.is_bill_of_supply())
+        .collect()
 }
 
 /// Check every document, and that no two share a number ignoring case; the first failure comes
@@ -838,11 +853,12 @@ pub(super) fn checked_and_priced<'a>(
 fn check_documents<D: GstDocument>(
     filer: &Gstin,
     period: ReturnPeriod,
-    documents: &[D],
+    documents: &[&D],
     errors: impl Fn(&D) -> Vec<ComplianceIssue>,
 ) -> Result<(), (String, DocumentProblem)> {
     documents
         .iter()
+        .copied()
         .try_fold(HashSet::new(), |mut seen, document| {
             let problem = document_problem(filer, period, document, &errors).or_else(|| {
                 (!seen.insert(document.number().to_ascii_uppercase()))
@@ -863,10 +879,9 @@ fn document_problem<D: GstDocument>(
     document: &D,
     errors: impl Fn(&D) -> Vec<ComplianceIssue>,
 ) -> Option<DocumentProblem> {
-    if document.seller_gstin() != filer {
-        return Some(DocumentProblem::SellerMismatch(
-            document.seller_gstin().clone(),
-        ));
+    // Only bills of supply have a seller without a GSTIN, and they are left out before this
+    if let Some(seller) = document.seller_gstin().filter(|seller| *seller != filer) {
+        return Some(DocumentProblem::SellerMismatch(seller.clone()));
     }
     if !period.contains(document.date()) {
         return Some(DocumentProblem::OutsidePeriod {
@@ -880,10 +895,14 @@ fn document_problem<D: GstDocument>(
 
 /// Every document priced with `price`, by date then number
 fn priced<'a, D>(
-    documents: &'a [D],
+    documents: &[&'a D],
     price: impl Fn(&'a D) -> Result<PricedDocument<'a>, InvoiceError>,
 ) -> Result<Vec<PricedDocument<'a>>, InvoiceError> {
-    let mut priced = documents.iter().map(price).collect::<Result<Vec<_>, _>>()?;
+    let mut priced = documents
+        .iter()
+        .copied()
+        .map(price)
+        .collect::<Result<Vec<_>, _>>()?;
     priced.sort_by(|a, b| document_order(a.document, b.document));
     Ok(priced)
 }

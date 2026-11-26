@@ -229,7 +229,13 @@ fn test_large_inter_state_sales_to_unregistered_buyers_are_reported_as_b2cl() {
         "29",
         vec![line("847130", "Laptop", 2, "55000", 18)],
     );
-    assert_eq!(laptops.supply_kind().unwrap(), SupplyKind::B2cl);
+    assert_eq!(
+        laptops
+            .supply_kind()
+            .unwrap()
+            .expect("not a bill of supply"),
+        SupplyKind::B2cl
+    );
     invoices.push(laptops);
 
     let seller = Gstin::parse(SELLER).unwrap();
@@ -273,7 +279,13 @@ fn test_small_sales_to_unregistered_buyers_are_reported_as_b2cs() {
         vec![line("847130", "Laptop", 3, "55000", 18)],
     ));
     for invoice in &invoices[5..] {
-        assert_eq!(invoice.supply_kind().unwrap(), SupplyKind::B2cs);
+        assert_eq!(
+            invoice
+                .supply_kind()
+                .unwrap()
+                .expect("not a bill of supply"),
+            SupplyKind::B2cs
+        );
     }
 
     let seller = Gstin::parse(SELLER).unwrap();

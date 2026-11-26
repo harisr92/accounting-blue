@@ -13,7 +13,9 @@
 //! unregistered persons, composition taxable persons and UIN holders. Only the first is built:
 //! the crate has no composition or UIN-holder buyers.
 //!
-//! A credit note is subtracted from the row its lines fall in. Building is pure, and the
+//! A credit note is subtracted from the row its lines fall in. Bills of supply, and credit notes
+//! against them, are left out: their sellers, under composition or not registered, don't file
+//! GSTR-3B. Building is pure, and the
 //! documents are checked as [`Gstr1Return::build`](super::Gstr1Return::build) checks them.
 //! [`Gstr3bOutward::to_json`] writes the result in the GST portal's GSTR-3B schema for upload.
 //! It leaves out the tables sales don't decide: Table 3.1.1 (supplies through an e-commerce

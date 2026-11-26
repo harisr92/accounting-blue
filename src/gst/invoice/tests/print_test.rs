@@ -1,6 +1,9 @@
 use crate::document::discount::Discount;
 use crate::gst::invoice::payment::PaymentDetails;
 use crate::gst::invoice::print::*;
+use crate::gst::invoice::seller::{
+    CompositionRate, SellerRegistration, COMPOSITION_DECLARATION, UNREGISTERED_DECLARATION,
+};
 use crate::gst::invoice::types::{
     GstInvoice, GstLineItem, Gstin, InvoiceError, Recipient, StateCode, SupplyTreatment,
 };
@@ -627,4 +630,116 @@ fn test_no_upi_link_without_a_upi_id() {
         });
     assert!(print.payment.is_some());
     assert_eq!(print.upi_uri, None);
+}
+
+#[test]
+fn test_print_charges_tax_and_has_no_declaration_by_default() {
+    let taxed = invoice(BUYER_SAME_STATE, vec![item("1")]);
+    let exempt = invoice(BUYER_SAME_STATE, vec![book(SupplyTreatment::Exempt)]);
+    for invoice in [taxed, exempt] {
+        let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap();
+        assert!(print.charges_tax);
+        assert_eq!(print.declaration, None);
+        assert_eq!(print.seller_state, "27 - Maharashtra");
+    }
+}
+
+#[test]
+fn test_print_json_without_new_fields_reads_as_charging_tax() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item("1")]);
+    let print = InvoicePrint::from_invoice(&invoice, &parties(BUYER_SAME_STATE)).unwrap();
+    let mut json = serde_json::to_value(&print).unwrap();
+    let fields = json.as_object_mut().unwrap();
+    assert!(!fields.contains_key("declaration"));
+    fields.remove("charges_tax");
+    fields.remove("seller_state");
+
+    let back: InvoicePrint = serde_json::from_value(json).unwrap();
+    assert!(back.charges_tax);
+    assert_eq!(back.declaration, None);
+    assert_eq!(back.seller_state, "");
+}
+
+fn composition_seller() -> SellerRegistration {
+    SellerRegistration::Composition {
+        gstin: gstin(SELLER),
+        rate: CompositionRate::TraderOrManufacturer,
+    }
+}
+
+fn unregistered_seller() -> SellerRegistration {
+    SellerRegistration::Unregistered {
+        state: StateCode::parse("29").unwrap(),
+    }
+}
+
+fn bill_of_supply(seller: SellerRegistration) -> GstInvoice {
+    GstInvoice::new(
+        "BOS/2025-26/001",
+        NaiveDate::from_ymd_opt(2025, 4, 3).unwrap(),
+        seller,
+        Recipient::unregistered(StateCode::parse("29").unwrap()),
+        vec![item_at("2", 0)],
+    )
+    .unwrap()
+}
+
+fn seller_parties(seller: InvoiceParty) -> InvoiceParties {
+    InvoiceParties::new(seller, InvoiceParty::walk_in())
+}
+
+#[test]
+fn test_composition_bill_of_supply_prints_its_declaration_without_tax() {
+    let parties = seller_parties(parties(BUYER_SAME_STATE).seller);
+    let print =
+        InvoicePrint::from_invoice(&bill_of_supply(composition_seller()), &parties).unwrap();
+
+    assert_eq!(print.title, BILL_OF_SUPPLY_TITLE);
+    assert!(!print.charges_tax);
+    assert_eq!(print.declaration.as_deref(), Some(COMPOSITION_DECLARATION));
+    assert_eq!(print.seller_state, "27 - Maharashtra");
+}
+
+#[test]
+fn test_unregistered_seller_prints_a_bill_of_supply_without_a_gstin() {
+    let seller = InvoiceParty::unregistered("Ravi Stores", vec!["Bengaluru".into()]);
+    let print = InvoicePrint::from_invoice(
+        &bill_of_supply(unregistered_seller()),
+        &seller_parties(seller),
+    )
+    .unwrap();
+
+    assert_eq!(print.title, BILL_OF_SUPPLY_TITLE);
+    assert!(!print.charges_tax);
+    assert_eq!(print.declaration.as_deref(), Some(UNREGISTERED_DECLARATION));
+    assert_eq!(print.seller_state, "29 - Karnataka");
+    assert_eq!(print.total, "300.00");
+}
+
+#[test]
+fn test_unregistered_seller_party_with_a_gstin_is_refused() {
+    let result = InvoicePrint::from_invoice(
+        &bill_of_supply(unregistered_seller()),
+        &seller_parties(parties(BUYER_SAME_STATE).seller),
+    );
+
+    assert!(matches!(
+        result,
+        Err(InvoiceError::InvalidParty {
+            role: PartyRole::Seller,
+            reason: PartyError::UnexpectedGstin { .. },
+        })
+    ));
+}
+
+#[test]
+fn test_bill_of_supply_with_a_taxed_line_is_not_printed() {
+    let mut bill = bill_of_supply(composition_seller());
+    bill.line_items.push(item_at("1", 5));
+    let parties = seller_parties(parties(BUYER_SAME_STATE).seller);
+
+    assert!(matches!(
+        InvoicePrint::from_invoice(&bill, &parties),
+        Err(InvoiceError::TaxOnBillOfSupply { line: 1 })
+    ));
 }

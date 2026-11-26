@@ -9,6 +9,12 @@
 //! tables longer than a page continue on the next one, and descriptions too long for their
 //! column are cut short with an ellipsis.
 //!
+//! A print model that doesn't [charge tax](InvoicePrint::charges_tax), a bill of supply from a
+//! seller who may not collect GST, is laid out without the taxable value, GST rate and tax
+//! columns, the supply type and the tax summary. Its [declaration](InvoicePrint::declaration),
+//! when there is one, is printed at the top, under the title, as Rule 5(1)(g) of the CGST Rules
+//! asks of a composition seller.
+//!
 //! By default the invoice is set in the standard Helvetica font and amounts are labelled `Rs.`.
 //! Helvetica only covers Western European characters, so an invoice with the `₹` sign or with
 //! names in an Indian script needs a [`PdfFont::Custom`] TrueType font that has those glyphs.

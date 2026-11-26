@@ -2,6 +2,7 @@ use crate::document::discount::Discount;
 use crate::gst::invoice::payment::PaymentDetails;
 use crate::gst::invoice::pdf::*;
 use crate::gst::invoice::print::{InvoiceDetails, InvoiceParties, InvoiceParty, InvoicePrint};
+use crate::gst::invoice::seller::{SellerRegistration, UNREGISTERED_DECLARATION};
 use crate::gst::invoice::types::{
     GstInvoice, GstLineItem, Gstin, InvoiceError, Recipient, StateCode,
 };
@@ -616,6 +617,157 @@ fn test_notes_count_towards_the_room_below_the_totals() {
         matches!(result, Err(PdfError::TermsTooLong { lines, max_lines: fit }) if lines == max_lines + 1 && fit < max_lines),
         "{result:?}"
     );
+}
+
+/// The print of `invoice` as a bill of supply that charges no tax, with `declaration`
+fn no_tax_print(invoice: &GstInvoice, declaration: Option<&str>) -> InvoicePrint {
+    InvoicePrint {
+        charges_tax: false,
+        declaration: declaration.map(str::to_string),
+        ..InvoicePrint::from_invoice(invoice, &parties()).unwrap()
+    }
+}
+
+/// An invoice of one exempt line of printed books, with `discount` off the line when given
+fn exempt_invoice(discount: Option<Discount>) -> GstInvoice {
+    let line = GstLineItem::exempt(
+        "4901",
+        "Printed books",
+        BigDecimal::from(3),
+        "250".parse().unwrap(),
+    )
+    .unwrap();
+    let line = match discount {
+        Some(discount) => line.with_discount(discount).unwrap(),
+        None => line,
+    };
+    GstInvoice::new(
+        "BOS/2025-26/001",
+        NaiveDate::from_ymd_opt(2025, 6, 30).unwrap(),
+        gstin(SELLER),
+        gstin(BUYER),
+        vec![line],
+    )
+    .unwrap()
+}
+
+const DECLARATION: &str = "Composition taxable person, not eligible to collect tax on supplies";
+
+#[test]
+fn test_bill_of_supply_without_tax_prints_no_tax_columns_or_summary() {
+    let print = no_tax_print(&exempt_invoice(None), None);
+    let page = &pages(&render_pdf(&print, &PdfOptions::default()).unwrap())[0];
+
+    for expected in [
+        "Bill of Supply",
+        "Place of Supply",
+        "Amount",
+        "Total",
+        "750.00",
+    ] {
+        assert!(
+            page.contains(expected),
+            "missing {expected:?} in:
+{page}"
+        );
+    }
+    for unexpected in [
+        "Taxable Value",
+        "Total Tax",
+        "Intra-state",
+        "Inter-state",
+        "CGST",
+        "IGST",
+        "Exempt",
+        "Composition taxable person",
+    ] {
+        assert!(
+            !page.contains(unexpected),
+            "unexpected {unexpected:?} in:
+{page}"
+        );
+    }
+}
+
+#[test]
+fn test_bill_of_supply_with_line_discount_keeps_the_discount_column() {
+    let discounted = exempt_invoice(Some(Discount::Amount(BigDecimal::from(50))));
+    let print = no_tax_print(&discounted, None);
+    let page = &pages(&render_pdf(&print, &PdfOptions::default()).unwrap())[0];
+
+    for expected in ["Disc.", "50.00", "Subtotal", "700.00"] {
+        assert!(
+            page.contains(expected),
+            "missing {expected:?} in:
+{page}"
+        );
+    }
+    assert!(
+        !page.contains("Taxable Value"),
+        "in:
+{page}"
+    );
+}
+
+#[test]
+fn test_declaration_is_printed_at_the_top_under_the_title() {
+    let print = no_tax_print(&exempt_invoice(None), Some(DECLARATION)).with_payment(payment());
+    let page = &pages(&render_pdf(&print, &PdfOptions::default()).unwrap())[0];
+
+    let title = page.find("Bill of Supply").expect("title printed");
+    // The declaration wraps to the width of the details, so look for its start
+    let declaration = page
+        .find("Composition taxable person")
+        .expect("declaration printed");
+    let number = page.find("Invoice No:").expect("invoice number printed");
+    let buyer = page.find("BILL TO").expect("buyer printed");
+    assert!(
+        title < declaration && declaration < number && number < buyer,
+        "in:\n{page}"
+    );
+}
+
+#[test]
+fn test_unregistered_sellers_bill_of_supply_prints_its_state_and_declaration() {
+    let seller = SellerRegistration::Unregistered {
+        state: StateCode::parse("29").unwrap(),
+    };
+    let line = GstLineItem::new(
+        "998314",
+        "Tailoring",
+        BigDecimal::from(2),
+        "400".parse().unwrap(),
+        BigDecimal::from(0),
+    )
+    .unwrap();
+    let invoice = GstInvoice::new(
+        "BOS/2025-26/002",
+        NaiveDate::from_ymd_opt(2025, 6, 30).unwrap(),
+        seller,
+        Recipient::unregistered(StateCode::parse("29").unwrap()),
+        vec![line],
+    )
+    .unwrap();
+    let parties = InvoiceParties::new(
+        InvoiceParty::unregistered("Ravi Tailors", vec!["Jayanagar, Bengaluru".into()]),
+        InvoiceParty::walk_in(),
+    );
+    let page = &pages(&invoice.to_pdf(&parties, &PdfOptions::default()).unwrap())[0];
+
+    for expected in [
+        "Bill of Supply",
+        "State: 29 - Karnataka",
+        UNREGISTERED_DECLARATION,
+        "Rs. 800.00",
+    ] {
+        assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
+    }
+    for unexpected in ["Taxable Value", "Total Tax", "Intra-state", "18%"] {
+        assert!(
+            !page.contains(unexpected),
+            "unexpected {unexpected:?} in:\n{page}"
+        );
+    }
 }
 
 fn payment() -> PaymentDetails {

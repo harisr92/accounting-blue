@@ -7,6 +7,11 @@
 //!
 //! A [`GstCreditNote`] posts the same legs on the opposite sides, reversing the part of the invoice
 //! it credits: [`GstCreditNote::to_entries`].
+//!
+//! A bill of supply charges no tax, so it posts only the receivable and revenue. A composition
+//! seller's also posts the tax it owes on its turnover
+//! ([`GstDocument::composition_tax`]): debited to an expense and credited to a payable, from
+//! [`InvoiceAccounts::with_composition_tax`].
 
 use super::note::GstCreditNote;
 use super::types::{GstBreakdown, GstDocument, GstInvoice, InvoiceError};
@@ -15,10 +20,13 @@ use crate::document::{self, TaxBreakdown};
 use crate::gst::tax::{CGST_CODE, IGST_CODE, SGST_CODE};
 use crate::sales::{sales_entries, sales_legs, SalesAccounts};
 use crate::types::{Entry, EntryType};
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, Zero};
 use serde::{Deserialize, Serialize};
 
 pub use crate::document::PostingLeg;
+
+/// Memo of the entries that post a composition seller's tax on its turnover
+pub const COMPOSITION_TAX_MEMO: &str = "Composition tax";
 
 /// Every leg a GST invoice can post, debit first: receivable, revenue, then CGST, SGST and IGST
 #[must_use]
@@ -56,6 +64,13 @@ pub enum PostingError {
     /// The breakdown could not be mapped onto the accounts
     #[error(transparent)]
     Posting(document::PostingError),
+    /// A composition seller's document owes composition tax, but the accounts name no expense
+    /// and payable account for it
+    #[error("composition tax of {amount} needs an expense and a payable account")]
+    MissingCompositionAccounts {
+        /// The composition tax to post
+        amount: BigDecimal,
+    },
 }
 
 impl From<document::PostingError> for PostingError {
@@ -81,6 +96,14 @@ pub struct InvoiceAccounts {
     pub sgst_output: String,
     /// Credited with IGST
     pub igst_output: String,
+    /// Debited with a composition seller's tax on its turnover; needed only to post a
+    /// composition seller's documents
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composition_tax_expense: Option<String>,
+    /// Credited with the composition tax the seller owes the government; needed with
+    /// [`InvoiceAccounts::composition_tax_expense`]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub composition_tax_payable: Option<String>,
 }
 
 impl InvoiceAccounts {
@@ -98,6 +121,23 @@ impl InvoiceAccounts {
             cgst_output: cgst_output.into(),
             sgst_output: sgst_output.into(),
             igst_output: igst_output.into(),
+            composition_tax_expense: None,
+            composition_tax_payable: None,
+        }
+    }
+
+    /// These accounts with the expense and payable accounts a composition seller's tax on its
+    /// turnover posts to
+    #[must_use]
+    pub fn with_composition_tax(
+        self,
+        expense: impl Into<String>,
+        payable: impl Into<String>,
+    ) -> Self {
+        Self {
+            composition_tax_expense: Some(expense.into()),
+            composition_tax_payable: Some(payable.into()),
+            ..self
         }
     }
 
@@ -137,8 +177,10 @@ impl GstInvoice {
     /// # Errors
     ///
     /// [`PostingError::NotCompliant`] with the error-severity issues if the invoice breaks a
-    /// compliance rule, [`PostingError::NothingToPost`] if its total is zero, or
-    /// [`PostingError::Invoice`] for any error from [`GstInvoice::breakdown`].
+    /// compliance rule, [`PostingError::NothingToPost`] if its total is zero,
+    /// [`PostingError::MissingCompositionAccounts`] if a composition seller's invoice owes tax
+    /// but `accounts` name no composition tax accounts, or [`PostingError::Invoice`] for any
+    /// error from [`GstInvoice::breakdown`].
     ///
     /// # Example
     ///
@@ -228,9 +270,38 @@ fn document_entries(
         return Err(PostingError::NotCompliant(errors));
     }
     let breakdown = document.tax_breakdown()?;
-    Ok(sales_entries(
-        &breakdown,
-        &SalesAccounts::from(accounts),
-        side,
-    )?)
+    let sales = sales_entries(&breakdown, &SalesAccounts::from(accounts), &side)?;
+    let composition = match document.composition_tax()? {
+        Some(amount) => composition_entries(amount, accounts, &side)?,
+        None => Vec::new(),
+    };
+    Ok(sales.into_iter().chain(composition).collect())
+}
+
+/// The composition tax pair: the expense on the receivable's side and the payable on the
+/// revenue's, so a credit note, which flips those, reverses it too; nothing for a zero amount
+fn composition_entries(
+    amount: BigDecimal,
+    accounts: &InvoiceAccounts,
+    side: impl Fn(&PostingLeg) -> EntryType,
+) -> Result<Vec<Entry>, PostingError> {
+    if amount.is_zero() {
+        return Ok(Vec::new());
+    }
+    let (Some(expense), Some(payable)) = (
+        &accounts.composition_tax_expense,
+        &accounts.composition_tax_payable,
+    ) else {
+        return Err(PostingError::MissingCompositionAccounts { amount });
+    };
+    let memo = || Some(COMPOSITION_TAX_MEMO.to_string());
+    Ok(vec![
+        Entry::new(
+            expense,
+            side(&PostingLeg::Receivable),
+            amount.clone(),
+            memo(),
+        ),
+        Entry::new(payable, side(&PostingLeg::Revenue), amount, memo()),
+    ])
 }

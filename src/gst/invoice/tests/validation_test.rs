@@ -1,6 +1,7 @@
 use crate::document::discount::{Discount, DiscountError};
 use crate::gst::invoice::hsn_lookup::HsnMaster;
 use crate::gst::invoice::note::GstCreditNote;
+use crate::gst::invoice::seller::{CompositionRate, SellerRegistration};
 use crate::gst::invoice::types::{GstInvoice, GstLineItem, Gstin, Recipient, StateCode};
 use crate::gst::invoice::types::{InvoiceNumberError, LineItemError};
 use crate::gst::invoice::validation::*;
@@ -601,4 +602,120 @@ fn test_bad_line_discount_does_not_hide_a_rate_warning() {
             default: BigDecimal::from(0),
         })
     );
+}
+
+fn composition_seller() -> SellerRegistration {
+    SellerRegistration::Composition {
+        gstin: Gstin::parse(SELLER).unwrap(),
+        rate: CompositionRate::TraderOrManufacturer,
+    }
+}
+
+fn unregistered_seller() -> SellerRegistration {
+    SellerRegistration::Unregistered {
+        state: StateCode::parse("27").unwrap(),
+    }
+}
+
+fn bill_of_supply(
+    seller: SellerRegistration,
+    buyer: impl Into<Recipient>,
+    line_items: Vec<GstLineItem>,
+) -> GstInvoice {
+    GstInvoice::new("BOS/2025-26/001", date(15), seller, buyer, line_items).unwrap()
+}
+
+#[test]
+fn test_untaxed_bill_of_supply_is_compliant_without_rate_warnings() {
+    // SAC 998314 is 18% by default, but a bill of supply charges no tax whatever the code
+    for seller in [composition_seller(), unregistered_seller()] {
+        let bill = bill_of_supply(
+            seller,
+            Gstin::parse(BUYER_SAME_STATE).unwrap(),
+            vec![item("998314", 0)],
+        );
+        assert!(check(&bill).issues().is_empty(), "{:?}", check(&bill));
+    }
+}
+
+#[test]
+fn test_tax_on_a_bill_of_supply_is_an_error_per_line() {
+    let bill = bill_of_supply(
+        composition_seller(),
+        Gstin::parse(BUYER_SAME_STATE).unwrap(),
+        vec![item("998314", 18), item("998314", 0), item("7010", 5)],
+    );
+
+    let report = check(&bill);
+    assert!(!report.is_compliant());
+    assert_eq!(
+        report.issues(),
+        [
+            ComplianceIssue::TaxOnBillOfSupply {
+                line: 0,
+                rate: BigDecimal::from(18),
+            },
+            ComplianceIssue::TaxOnBillOfSupply {
+                line: 2,
+                rate: BigDecimal::from(5),
+            },
+        ]
+    );
+}
+
+#[test]
+fn test_composition_seller_supplying_to_another_state_is_an_error() {
+    let bill = bill_of_supply(
+        composition_seller(),
+        Gstin::parse(BUYER_OTHER_STATE).unwrap(),
+        vec![item("998314", 0)],
+    );
+
+    assert_eq!(
+        check(&bill).issues(),
+        [ComplianceIssue::CompositionInterStateSupply {
+            seller_state: "27".to_string(),
+            place_of_supply: "29".to_string(),
+        }]
+    );
+    assert_eq!(check(&bill).issues()[0].severity(), Severity::Error);
+}
+
+#[test]
+fn test_unregistered_seller_may_supply_to_another_state() {
+    let bill = bill_of_supply(
+        unregistered_seller(),
+        Recipient::unregistered(StateCode::parse("29").unwrap()),
+        vec![item("998314", 0)],
+    );
+    assert!(check(&bill).issues().is_empty());
+}
+
+#[test]
+fn test_same_gstin_rule_is_skipped_for_a_seller_without_one() {
+    let bill = bill_of_supply(
+        unregistered_seller(),
+        Gstin::parse(BUYER_SAME_STATE).unwrap(),
+        vec![item("998314", 0)],
+    );
+    assert!(check(&bill).is_compliant());
+}
+
+#[test]
+fn test_tax_on_a_credit_note_against_a_bill_of_supply_is_an_error() {
+    let bill = bill_of_supply(
+        composition_seller(),
+        Gstin::parse(BUYER_SAME_STATE).unwrap(),
+        vec![item("998314", 0)],
+    );
+    let mut note = GstCreditNote::new(&bill, "CN-001", date(20), vec![item("998314", 0)]).unwrap();
+    note.line_items[0].gst_rate = BigDecimal::from(18);
+
+    let report = validate_credit_note(&note, date(30), HsnMaster::global());
+    assert!(report
+        .issues()
+        .contains(&ComplianceIssue::TaxOnBillOfSupply {
+            line: 0,
+            rate: BigDecimal::from(18),
+        }));
 }

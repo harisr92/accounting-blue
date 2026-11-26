@@ -7,7 +7,10 @@
 
 use super::payment::{non_blank, upi_uri, PaymentDetails};
 use super::state::state_label;
-use super::types::{GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError, SupplyTreatment};
+use super::types::{
+    taxed_line_on_bill_of_supply, GstBreakdown, GstInvoice, GstLineItem, Gstin, InvoiceError,
+    SupplyTreatment,
+};
 use crate::document::discount::Discount;
 use crate::document::price_lines;
 use crate::utils::formatting::{amount_in_words, format_inr};
@@ -18,8 +21,9 @@ use std::fmt;
 
 /// Title printed at the top of an invoice with at least one taxable line, nil-rated included
 pub const TAX_INVOICE_TITLE: &str = "Tax Invoice";
-/// Title printed instead when every line is exempt or non-GST (Rule 49 of the CGST Rules); an
-/// invoice of only nil-rated lines stays a [`TAX_INVOICE_TITLE`]
+/// Title printed instead on a document from a seller who may not charge tax, and when every line
+/// is exempt or non-GST (Rule 49 of the CGST Rules); an invoice of only nil-rated lines stays a
+/// [`TAX_INVOICE_TITLE`]
 pub const BILL_OF_SUPPLY_TITLE: &str = "Bill of Supply";
 /// Printed in the GST rate column of an exempt line
 pub const EXEMPT_RATE_LABEL: &str = "Exempt";
@@ -101,7 +105,7 @@ impl InvoiceParties {
     }
 
     /// Check each party's details and that its GSTIN is the one on `invoice`, or that it has
-    /// none when the invoice's buyer is unregistered
+    /// none when the invoice names none for it: an unregistered buyer or seller
     ///
     /// The seller and a registered buyer need a name. An unregistered buyer needs a name and an
     /// address when the invoice's taxable value is [`UNREGISTERED_DETAILS_THRESHOLD_RUPEES`] or
@@ -121,8 +125,12 @@ impl InvoiceParties {
         invoice: &GstInvoice,
         taxable_value: &BigDecimal,
     ) -> Result<(), InvoiceError> {
-        let seller = Some(&invoice.seller_gstin);
-        check_party(PartyRole::Seller, &self.seller, seller, Details::Name)?;
+        check_party(
+            PartyRole::Seller,
+            &self.seller,
+            invoice.seller_gstin(),
+            Details::Name,
+        )?;
         let threshold = BigDecimal::from(UNREGISTERED_DETAILS_THRESHOLD_RUPEES);
         let buyer_details = if invoice.buyer.is_registered() {
             Details::Name
@@ -192,8 +200,8 @@ pub enum PartyError {
         /// GSTIN on the invoice
         expected: Gstin,
     },
-    /// The party has a GSTIN, but the invoice is to an unregistered buyer
-    #[error("the party has GSTIN {found} but the invoice's buyer is unregistered")]
+    /// The party has a GSTIN, but the invoice names none for it: an unregistered buyer or seller
+    #[error("the party has GSTIN {found} but the invoice names no GSTIN for it")]
     UnexpectedGstin {
         /// GSTIN given with the party
         found: Gstin,
@@ -317,8 +325,22 @@ pub struct InvoicePrint {
     pub buyer_state: String,
     /// Whether IGST applies rather than CGST + SGST
     pub is_inter_state: bool,
+    /// Whether the document charges GST, so it prints the tax columns, the supply type and the
+    /// tax summary; `false` for a bill of supply from a seller who may not charge tax, which
+    /// prints none of them
+    #[serde(default = "charges_tax_by_default")]
+    pub charges_tax: bool,
+    /// Statutory declaration printed at the top, under the title, such as the one a composition
+    /// taxable person must print there on its bills of supply (Rule 5(1)(g)); `None` when there
+    /// is none
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declaration: Option<String>,
     /// Supplier
     pub seller: InvoiceParty,
+    /// The seller's state as a label, such as `29 - Karnataka`, printed in place of a GSTIN for
+    /// a seller who has none
+    #[serde(default)]
+    pub seller_state: String,
     /// Recipient
     pub buyer: InvoiceParty,
     /// Item table
@@ -331,11 +353,12 @@ pub struct InvoicePrint {
     /// Label of the discount line, such as `Discount (10%)`; `None` when there is no discount
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub discount_label: Option<String>,
-    /// Total taxable value: the subtotal less the invoice discount, before tax
+    /// Total taxable value: the subtotal less the invoice discount, before tax; not printed when
+    /// the document doesn't [charge tax](InvoicePrint::charges_tax)
     pub taxable_value: String,
-    /// Tax lines with a non-zero amount
+    /// Tax lines with a non-zero amount; not printed when the document doesn't charge tax
     pub tax_lines: Vec<TaxLine>,
-    /// Total tax
+    /// Total tax; not printed when the document doesn't charge tax
     pub total_tax: String,
     /// Invoice total
     pub total: String,
@@ -370,6 +393,7 @@ impl InvoicePrint {
     ///
     /// # Errors
     ///
+    /// [`InvoiceError::TaxOnBillOfSupply`] if a line of a bill of supply charges tax,
     /// [`InvoiceError::InvalidParty`] if a party lacks a detail the invoice must show (see
     /// [`InvoiceParties::check_against`]) or its GSTIN is not the one on the invoice, or the
     /// first error from [`GstInvoice::line_breakdowns`].
@@ -417,6 +441,9 @@ impl InvoicePrint {
         invoice: &GstInvoice,
         parties: &InvoiceParties,
     ) -> Result<Self, InvoiceError> {
+        if let Some(line) = taxed_line_on_bill_of_supply(invoice) {
+            return Err(InvoiceError::TaxOnBillOfSupply { line });
+        }
         let priced = price_lines(invoice)?;
         let breakdowns: Vec<GstBreakdown> =
             priced.breakdowns.iter().map(GstBreakdown::from).collect();
@@ -446,7 +473,10 @@ impl InvoicePrint {
                     .map_or_else(|| invoice.buyer.place_of_supply(), Gstin::state_code),
             ),
             is_inter_state: invoice.is_inter_state(),
+            charges_tax: invoice.seller.charges_tax(),
+            declaration: invoice.seller.declaration().map(str::to_string),
             seller: parties.seller.clone(),
+            seller_state: state_label(invoice.seller.state()),
             buyer: parties.buyer.clone(),
             rows,
             subtotal: format_inr(&priced.subtotal),
@@ -611,6 +641,12 @@ impl InvoicePrint {
     }
 }
 
+/// A print read from JSON saved before [`InvoicePrint::charges_tax`] existed charges tax, as every
+/// print did then
+fn charges_tax_by_default() -> bool {
+    true
+}
+
 /// [`DISCOUNT_LABEL`], with the rate of a percentage discount
 fn discount_label(discount: &Discount) -> String {
     match discount {
@@ -619,13 +655,14 @@ fn discount_label(discount: &Discount) -> String {
     }
 }
 
-/// [`TAX_INVOICE_TITLE`], or [`BILL_OF_SUPPLY_TITLE`] when no line is taxable, even at 0%
+/// [`TAX_INVOICE_TITLE`], or [`BILL_OF_SUPPLY_TITLE`] for a bill of supply or when no line is
+/// taxable, even at 0%
 fn title(invoice: &GstInvoice) -> &'static str {
-    if invoice
+    let any_taxable = invoice
         .line_items
         .iter()
-        .any(|item| item.treatment.is_taxable())
-    {
+        .any(|item| item.treatment.is_taxable());
+    if any_taxable && !invoice.is_bill_of_supply() {
         TAX_INVOICE_TITLE
     } else {
         BILL_OF_SUPPLY_TITLE

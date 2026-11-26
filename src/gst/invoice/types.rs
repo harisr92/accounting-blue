@@ -2,11 +2,13 @@
 
 use super::hsn_lookup::{is_valid_hsn_sac, HsnMaster};
 use super::print::{PartyError, PartyRole};
+use super::seller::{RawSeller, SellerRegistration};
 use crate::document::discount::{Discount, DiscountError};
 use crate::document::{
     check_line_fields, Document, DocumentLine, LineError, TaxBreakdown, TaxComponent, TaxRegime,
 };
 use crate::gst::tax::gst::{GstCalculation, GstError, GstRegime, CGST_CODE, IGST_CODE, SGST_CODE};
+use crate::money::{percent_of, round_money};
 use bigdecimal::{BigDecimal, Zero};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -859,11 +861,14 @@ impl DocumentLine for GstLineItem {
     }
 }
 
-/// A tax invoice under Indian GST, to a registered or an unregistered buyer
+/// A tax invoice under Indian GST, to a registered or an unregistered buyer, or a bill of supply
+/// from a seller who may not charge tax
 ///
 /// Whether the supply is inter-state (IGST) or intra-state (CGST + SGST) is derived from the
-/// state of the seller's GSTIN and the place of supply of the [`Recipient`]. Deserialising goes
-/// through [`GstInvoice::new`], so the same rules apply.
+/// seller's state and the place of supply of the [`Recipient`]. A seller under composition or not
+/// registered ([`SellerRegistration`]) issues a bill of supply (Rule 49 of the CGST Rules), whose
+/// lines carry no tax. Deserialising goes through [`GstInvoice::new`], so the same rules apply; a
+/// `seller_gstin` saved before [`SellerRegistration`] existed reads as a regular taxpayer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RawGstInvoice")]
 pub struct GstInvoice {
@@ -871,8 +876,8 @@ pub struct GstInvoice {
     pub invoice_number: String,
     /// Date of issue
     pub invoice_date: NaiveDate,
-    /// Supplier's GSTIN
-    pub seller_gstin: Gstin,
+    /// Supplier and its registration, which decides whether the document charges tax
+    pub seller: SellerRegistration,
     /// Recipient: a registered buyer's GSTIN, or an unregistered buyer's place of supply
     pub buyer: Recipient,
     /// Invoice lines
@@ -887,7 +892,8 @@ pub struct GstInvoice {
 struct RawGstInvoice {
     invoice_number: String,
     invoice_date: NaiveDate,
-    seller_gstin: Gstin,
+    #[serde(alias = "seller_gstin")]
+    seller: RawSeller,
     buyer: Recipient,
     line_items: Vec<GstLineItem>,
     #[serde(default)]
@@ -901,7 +907,7 @@ impl TryFrom<RawGstInvoice> for GstInvoice {
         let invoice = Self::new(
             raw.invoice_number,
             raw.invoice_date,
-            raw.seller_gstin,
+            SellerRegistration::from(raw.seller),
             raw.buyer,
             raw.line_items,
         )?;
@@ -915,7 +921,8 @@ impl TryFrom<RawGstInvoice> for GstInvoice {
 impl GstInvoice {
     /// Create a validated invoice
     ///
-    /// `buyer` is a [`Recipient`]; pass a [`Gstin`] for a registered buyer.
+    /// `seller` is a [`SellerRegistration`]; pass a [`Gstin`] for a regular taxpayer. `buyer` is a
+    /// [`Recipient`]; pass a [`Gstin`] for a registered buyer.
     ///
     /// # Errors
     ///
@@ -923,7 +930,7 @@ impl GstInvoice {
     pub fn new(
         invoice_number: impl Into<String>,
         invoice_date: NaiveDate,
-        seller_gstin: Gstin,
+        seller: impl Into<SellerRegistration>,
         buyer: impl Into<Recipient>,
         line_items: Vec<GstLineItem>,
     ) -> Result<Self, InvoiceError> {
@@ -937,7 +944,7 @@ impl GstInvoice {
         Ok(Self {
             invoice_number,
             invoice_date,
-            seller_gstin,
+            seller: seller.into(),
             buyer: buyer.into(),
             line_items,
             discount: None,
@@ -1006,6 +1013,19 @@ impl GstInvoice {
         GstDocument::is_inter_state(self)
     }
 
+    /// Whether this is a bill of supply: its seller, under composition or not registered, may
+    /// not charge tax (Rule 49 of the CGST Rules)
+    #[must_use]
+    pub fn is_bill_of_supply(&self) -> bool {
+        GstDocument::is_bill_of_supply(self)
+    }
+
+    /// The seller's GSTIN; `None` when it is not registered
+    #[must_use]
+    pub fn seller_gstin(&self) -> Option<&Gstin> {
+        GstDocument::seller_gstin(self)
+    }
+
     /// Tax breakdown for each line, in order
     ///
     /// # Errors
@@ -1024,7 +1044,44 @@ impl GstInvoice {
         GstDocument::breakdown(self)
     }
 
-    /// How the invoice is reported in GSTR-1
+    /// Tax a composition seller owes on this invoice; see [`GstDocument::composition_tax`]
+    ///
+    /// # Errors
+    ///
+    /// The first error from [`GstInvoice::breakdown`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use accounting_core::gst::invoice::{
+    ///     CompositionRate, GstInvoice, GstLineItem, Gstin, SellerRegistration,
+    /// };
+    /// use bigdecimal::BigDecimal;
+    /// use chrono::NaiveDate;
+    ///
+    /// # fn main() -> Result<(), accounting_core::gst::invoice::InvoiceError> {
+    /// let seller = SellerRegistration::Composition {
+    ///     gstin: Gstin::parse("27AAPFU0939F1ZV")?,
+    ///     rate: CompositionRate::TraderOrManufacturer,
+    /// };
+    /// let item = GstLineItem::new("7010", "Glass jars", BigDecimal::from(100),
+    ///     BigDecimal::from(45), BigDecimal::from(0))?;
+    /// let bill = GstInvoice::new("BOS-001", NaiveDate::from_ymd_opt(2025, 4, 1).unwrap(),
+    ///     seller, Gstin::parse("27AAPFU0939F2ZU")?, vec![item])?;
+    ///
+    /// assert!(bill.is_bill_of_supply());
+    /// assert_eq!(bill.breakdown()?.total, BigDecimal::from(4500));
+    /// // 1% of the turnover, owed by the seller, not charged to the buyer
+    /// assert_eq!(bill.composition_tax()?, Some(BigDecimal::from(45)));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn composition_tax(&self) -> Result<Option<BigDecimal>, InvoiceError> {
+        GstDocument::composition_tax(self)
+    }
+
+    /// How the invoice is reported in GSTR-1; `None` for a bill of supply, which GSTR-1 doesn't
+    /// report
     ///
     /// A supply to a registered buyer is B2B. A supply to an unregistered buyer is B2CL when it is
     /// inter-state and its value, tax included, is more than [`b2cl_threshold`] for its date;
@@ -1033,8 +1090,11 @@ impl GstInvoice {
     /// # Errors
     ///
     /// The first error from [`GstLineItem::breakdown`].
-    pub fn supply_kind(&self) -> Result<SupplyKind, InvoiceError> {
-        Ok(supply_kind_for(self, &self.breakdown()?.total))
+    pub fn supply_kind(&self) -> Result<Option<SupplyKind>, InvoiceError> {
+        if self.is_bill_of_supply() {
+            return Ok(None);
+        }
+        Ok(Some(supply_kind_for(self, &self.breakdown()?.total)))
     }
 }
 
@@ -1065,8 +1125,8 @@ impl Document for GstInvoice {
 }
 
 impl GstDocument for GstInvoice {
-    fn seller_gstin(&self) -> &Gstin {
-        &self.seller_gstin
+    fn seller(&self) -> &SellerRegistration {
+        &self.seller
     }
 
     fn buyer(&self) -> &Recipient {
@@ -1096,8 +1156,24 @@ pub trait GstDocument:
         self.date()
     }
 
-    /// Supplier's GSTIN
-    fn seller_gstin(&self) -> &Gstin;
+    /// Supplier and its registration
+    fn seller(&self) -> &SellerRegistration;
+
+    /// Supplier's GSTIN; `None` when it is not registered
+    fn seller_gstin(&self) -> Option<&Gstin> {
+        self.seller().gstin()
+    }
+
+    /// State code the supplier supplies from: its GSTIN's state, or the state an unregistered
+    /// seller names
+    fn seller_state(&self) -> &str {
+        self.seller().state()
+    }
+
+    /// Whether the document is a bill of supply: its seller may not charge tax
+    fn is_bill_of_supply(&self) -> bool {
+        !self.seller().charges_tax()
+    }
 
     /// Recipient: a registered buyer's GSTIN, or an unregistered buyer's place of supply
     fn buyer(&self) -> &Recipient;
@@ -1107,9 +1183,9 @@ pub trait GstDocument:
         self.lines()
     }
 
-    /// Whether the place of supply is in a different state from the seller's registration
+    /// Whether the place of supply is in a different state from the seller's
     fn is_inter_state(&self) -> bool {
-        self.seller_gstin().state_code() != self.buyer().place_of_supply()
+        self.seller_state() != self.buyer().place_of_supply()
     }
 
     /// GST breakdown for each line, in order
@@ -1138,6 +1214,48 @@ pub trait GstDocument:
     fn breakdown(&self) -> Result<GstBreakdown, InvoiceError> {
         Ok(GstBreakdown::from(&self.tax_breakdown()?))
     }
+
+    /// Tax a composition seller owes on this document's turnover: its
+    /// [`CompositionRate`](super::CompositionRate) of the taxable value after discounts, rounded
+    /// to paise; `None` unless the seller is under composition
+    ///
+    /// The seller pays it itself, collecting none from the buyer (Section 10 of the CGST Act). A
+    /// credit note's is the same rate of the value it credits, so it reverses its invoice's
+    /// pro rata.
+    ///
+    /// # Errors
+    ///
+    /// The first error from [`GstDocument::breakdown`].
+    fn composition_tax(&self) -> Result<Option<BigDecimal>, InvoiceError> {
+        let Some(rate) = self.seller().composition_rate() else {
+            return Ok(None);
+        };
+        let taxable_value = self.breakdown()?.taxable_value;
+        Ok(Some(round_money(&percent_of(
+            &taxable_value,
+            &rate.percent(),
+        ))))
+    }
+}
+
+/// Whether `item` charges tax on `document` although the document is a bill of supply, whose
+/// seller may not charge any (Rule 49 of the CGST Rules)
+pub(super) fn taxes_bill_of_supply(document: &dyn GstDocument, item: &GstLineItem) -> bool {
+    document.is_bill_of_supply() && !item.gst_rate.is_zero()
+}
+
+/// Index of the first line that charges tax on a bill of supply, if any
+pub(super) fn taxed_line_on_bill_of_supply(document: &dyn GstDocument) -> Option<usize> {
+    document
+        .line_items()
+        .iter()
+        .position(|item| taxes_bill_of_supply(document, item))
+}
+
+/// Whether `document` is a composition seller's supply to another state, which Section 10(2)(c)
+/// of the CGST Act, and Notification 2/2019-Central Tax (Rate) for services, bar
+pub(super) fn is_composition_inter_state(document: &dyn GstDocument) -> bool {
+    document.seller().composition_rate().is_some() && document.is_inter_state()
 }
 
 /// [`GstInvoice::supply_kind`] for an invoice whose value, tax included, is already known
@@ -1302,6 +1420,15 @@ pub enum InvoiceError {
         /// The invoice's value, tax included
         invoice_value: BigDecimal,
     },
+    /// A line of a bill of supply charges tax, which its seller may not (Rule 49)
+    #[error("line {}: a bill of supply can't charge tax", .line + 1)]
+    TaxOnBillOfSupply {
+        /// Index of the line
+        line: usize,
+    },
+    /// A composition rate is not one of the scheme's
+    #[error("{0}% is not a composition rate")]
+    InvalidCompositionRate(BigDecimal),
     /// The GST rate is inconsistent
     #[error(transparent)]
     Gst(#[from] GstError),

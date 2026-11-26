@@ -1,7 +1,9 @@
 //! GST invoices under Indian rules
 //!
-//! [`GstInvoice`] models a tax invoice: invoice number, date, the seller's [`Gstin`], the
-//! [`Recipient`] and [`GstLineItem`]s carrying an HSN/SAC code. The recipient is a registered
+//! [`GstInvoice`] models a tax invoice: invoice number, date, the seller's
+//! [`SellerRegistration`], the [`Recipient`] and [`GstLineItem`]s carrying an HSN/SAC code. A
+//! seller under composition or not registered issues a bill of supply instead, which charges no
+//! tax ([`GstInvoice::is_bill_of_supply`]). The recipient is a registered
 //! buyer, named by its GSTIN, or an unregistered buyer, named by the [`StateCode`] of its place
 //! of supply. Every identifier is validated on construction, so an invoice that exists is
 //! well-formed. Whether tax is split as CGST + SGST or charged as IGST follows from the seller's
@@ -18,7 +20,8 @@
 //! [`GstLineItem::with_default_rate`] builds a line at the rate for its code.
 //!
 //! [`validate_invoice`] checks an invoice against the compliance rules (future dates, missing or
-//! unknown HSN/SAC codes, amounts, rates and parties) and returns an [`InvoiceValidationReport`]
+//! unknown HSN/SAC codes, amounts, rates, parties, tax on a bill of supply and a composition
+//! seller's inter-state supplies) and returns an [`InvoiceValidationReport`]
 //! of every [`ComplianceIssue`] found. [`GstInvoice::to_entries`] posts a compliant invoice to the
 //! ledger through the accounts named in [`InvoiceAccounts`]; the posting balances by
 //! construction, since the total is the taxable value plus the tax.
@@ -81,6 +84,7 @@ pub mod payment;
 pub mod pdf;
 pub mod posting;
 pub mod print;
+pub mod seller;
 pub mod state;
 pub mod types;
 pub mod validation;
@@ -91,12 +95,18 @@ pub use note::{credit_note_deadline, GstCreditNote, OriginalInvoice};
 pub use payment::{upi_uri, PaymentDetails, UPI_CURRENCY};
 #[cfg(feature = "pdf")]
 pub use pdf::{render_pdf, FontFace, PdfError, PdfFont, PdfOptions, DEFAULT_CURRENCY_LABEL};
-pub use posting::{gst_legs, posting_legs, InvoiceAccounts, PostingError, PostingLeg};
+pub use posting::{
+    gst_legs, posting_legs, InvoiceAccounts, PostingError, PostingLeg, COMPOSITION_TAX_MEMO,
+};
 pub use print::{
     paginate_rows, InvoiceDetails, InvoiceParties, InvoiceParty, InvoicePrint, PartyError,
     PartyRole, PrintRow, RowCapacity, TaxLine, BILL_OF_SUPPLY_TITLE, DISCOUNT_LABEL,
     EXEMPT_RATE_LABEL, NON_GST_RATE_LABEL, TAX_INVOICE_TITLE,
     UNREGISTERED_DETAILS_THRESHOLD_RUPEES,
+};
+pub use seller::{
+    CompositionRate, SellerRegistration, COMPOSITION_DECLARATION, RESTAURANT_PERCENT,
+    SERVICES_PERCENT, TRADER_OR_MANUFACTURER_PERCENT, UNREGISTERED_DECLARATION,
 };
 pub use state::{state_label, state_name, GST_STATES};
 pub use types::{

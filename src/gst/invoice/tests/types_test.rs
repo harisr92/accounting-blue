@@ -1,4 +1,5 @@
 use crate::document::discount::{Discount, DiscountError};
+use crate::gst::invoice::seller::SellerRegistration;
 use crate::gst::invoice::types::*;
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -302,6 +303,7 @@ fn test_supply_kind_uses_the_b2cl_threshold_for_the_invoice_date() {
         unregistered_invoice(pos, date, price)
             .supply_kind()
             .unwrap()
+            .expect("not a bill of supply")
     };
 
     assert_eq!(kind("29", after, "100000"), SupplyKind::B2cs);
@@ -318,7 +320,8 @@ fn test_supply_kind_uses_the_b2cl_threshold_for_the_invoice_date() {
     assert_eq!(
         invoice("29AAPFU0939F1ZR", vec![item(18)])
             .supply_kind()
-            .unwrap(),
+            .unwrap()
+            .expect("not a bill of supply"),
         SupplyKind::B2b
     );
 }
@@ -342,7 +345,13 @@ fn test_supply_kind_counts_tax_in_the_invoice_value() {
         .unwrap()],
     )
     .unwrap();
-    assert_eq!(invoice.supply_kind().unwrap(), SupplyKind::B2cl);
+    assert_eq!(
+        invoice
+            .supply_kind()
+            .unwrap()
+            .expect("not a bill of supply"),
+        SupplyKind::B2cl
+    );
 }
 
 #[test]
@@ -617,4 +626,71 @@ fn test_line_unit_round_trips_through_serde_and_defaults_to_none() {
         serde_json::from_str::<GstLineItem>(&without).unwrap().unit,
         None
     );
+}
+
+fn unregistered_seller(state: &str) -> SellerRegistration {
+    SellerRegistration::Unregistered {
+        state: StateCode::parse(state).unwrap(),
+    }
+}
+
+fn bill_of_supply(seller_state: &str, place_of_supply: &str) -> GstInvoice {
+    GstInvoice::new(
+        "BOS-001",
+        NaiveDate::from_ymd_opt(2025, 4, 3).unwrap(),
+        unregistered_seller(seller_state),
+        Recipient::unregistered(StateCode::parse(place_of_supply).unwrap()),
+        vec![item(0)],
+    )
+    .unwrap()
+}
+
+#[test]
+fn test_seller_gstin_converts_to_a_regular_seller() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item(18)]);
+    assert_eq!(
+        invoice.seller,
+        SellerRegistration::Regular(Gstin::parse(SELLER).unwrap())
+    );
+    assert_eq!(invoice.seller_gstin(), Some(&Gstin::parse(SELLER).unwrap()));
+    assert!(!invoice.is_bill_of_supply());
+}
+
+#[test]
+fn test_unregistered_seller_issues_a_bill_of_supply() {
+    let invoice = bill_of_supply("29", "29");
+    assert!(invoice.is_bill_of_supply());
+    assert_eq!(invoice.seller_gstin(), None);
+}
+
+#[test]
+fn test_inter_state_follows_an_unregistered_sellers_state() {
+    assert!(!bill_of_supply("29", "29").is_inter_state());
+    assert!(bill_of_supply("29", "27").is_inter_state());
+}
+
+#[test]
+fn test_bill_of_supply_has_no_supply_kind() {
+    assert_eq!(bill_of_supply("29", "29").supply_kind().unwrap(), None);
+}
+
+#[test]
+fn test_invoice_saved_with_a_seller_gstin_still_deserialises() {
+    let invoice = invoice(BUYER_SAME_STATE, vec![item(18)]);
+    let mut json = serde_json::to_value(&invoice).unwrap();
+    let fields = json.as_object_mut().unwrap();
+    fields.remove("seller");
+    fields.insert("seller_gstin".into(), serde_json::json!(SELLER));
+
+    let back: GstInvoice = serde_json::from_value(json).unwrap();
+    assert_eq!(back, invoice);
+}
+
+#[test]
+fn test_bill_of_supply_round_trips_through_json() {
+    let invoice = bill_of_supply("29", "27");
+    let json = serde_json::to_value(&invoice).unwrap();
+    assert_eq!(json["seller"]["unregistered"]["state"], "29");
+    let back: GstInvoice = serde_json::from_value(json).unwrap();
+    assert_eq!(back, invoice);
 }

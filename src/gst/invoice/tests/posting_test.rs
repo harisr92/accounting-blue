@@ -1,6 +1,7 @@
 use crate::document::discount::Discount;
 use crate::gst::invoice::note::GstCreditNote;
 use crate::gst::invoice::posting::*;
+use crate::gst::invoice::seller::{CompositionRate, SellerRegistration};
 use crate::gst::invoice::types::{
     GstBreakdown, GstInvoice, GstLineItem, Gstin, LineItemError, Recipient, StateCode,
 };
@@ -355,4 +356,175 @@ fn test_discounted_invoice_posts_its_discounted_sales() {
             (PostingLeg::output_tax(SGST_CODE), BigDecimal::from(81)),
         ]
     );
+}
+
+fn composition_seller() -> SellerRegistration {
+    SellerRegistration::Composition {
+        gstin: Gstin::parse(SELLER).unwrap(),
+        rate: CompositionRate::TraderOrManufacturer,
+    }
+}
+
+fn unregistered_seller() -> SellerRegistration {
+    SellerRegistration::Unregistered {
+        state: StateCode::parse("27").unwrap(),
+    }
+}
+
+/// A bill of supply from `seller` for 3 units at 333.33 less a 10% discount: 899.99 of turnover
+fn bill_of_supply(seller: SellerRegistration) -> GstInvoice {
+    let item = GstLineItem::new(
+        "998314",
+        "IT consulting",
+        BigDecimal::from(3),
+        BigDecimal::from_str("333.33").unwrap(),
+        BigDecimal::from(0),
+    )
+    .unwrap()
+    .with_discount(Discount::Percent(BigDecimal::from(10)))
+    .unwrap();
+    GstInvoice::new(
+        "BOS-001",
+        NaiveDate::from_ymd_opt(2024, 11, 15).unwrap(),
+        seller,
+        Gstin::parse(BUYER_SAME_STATE).unwrap(),
+        vec![item],
+    )
+    .unwrap()
+}
+
+fn composition_accounts() -> InvoiceAccounts {
+    accounts().with_composition_tax("composition_expense", "composition_payable")
+}
+
+fn bill_credit_note(bill: &GstInvoice) -> GstCreditNote {
+    let on = NaiveDate::from_ymd_opt(2024, 11, 20).unwrap();
+    let mut returned = bill.line_items[0].clone();
+    returned.quantity = BigDecimal::from(1);
+    GstCreditNote::new(bill, "CN-001", on, vec![returned]).unwrap()
+}
+
+#[test]
+fn test_unregistered_sellers_bill_posts_receivable_and_revenue_only() {
+    let entries = bill_of_supply(unregistered_seller())
+        .to_entries(&accounts())
+        .unwrap();
+
+    assert_eq!(
+        posted(&entries),
+        vec![
+            (
+                "ar",
+                EntryType::Debit,
+                BigDecimal::from_str("899.99").unwrap()
+            ),
+            (
+                "sales",
+                EntryType::Credit,
+                BigDecimal::from_str("899.99").unwrap()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn test_composition_tax_is_its_rate_of_the_turnover_after_discount() {
+    let bill = bill_of_supply(composition_seller());
+    // 1% of 899.99 is 8.9999, rounded to paise
+    assert_eq!(
+        bill.composition_tax().unwrap(),
+        Some(BigDecimal::from_str("9.00").unwrap())
+    );
+    assert_eq!(
+        bill_of_supply(unregistered_seller())
+            .composition_tax()
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        invoice(BUYER_SAME_STATE, 18).composition_tax().unwrap(),
+        None
+    );
+}
+
+#[test]
+fn test_composition_sellers_bill_posts_its_tax_as_an_expense_and_a_payable() {
+    let entries = bill_of_supply(composition_seller())
+        .to_entries(&composition_accounts())
+        .unwrap();
+
+    let turnover = BigDecimal::from_str("899.99").unwrap();
+    let tax = BigDecimal::from_str("9.00").unwrap();
+    assert_eq!(
+        posted(&entries),
+        vec![
+            ("ar", EntryType::Debit, turnover.clone()),
+            ("sales", EntryType::Credit, turnover),
+            ("composition_expense", EntryType::Debit, tax.clone()),
+            ("composition_payable", EntryType::Credit, tax),
+        ]
+    );
+    assert_eq!(
+        entries[2].description.as_deref(),
+        Some(COMPOSITION_TAX_MEMO)
+    );
+}
+
+#[test]
+fn test_composition_bill_without_its_accounts_is_not_posted() {
+    let result = bill_of_supply(composition_seller()).to_entries(&accounts());
+    assert!(
+        matches!(
+            &result,
+            Err(PostingError::MissingCompositionAccounts { amount })
+                if *amount == BigDecimal::from_str("9.00").unwrap()
+        ),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn test_credit_notes_against_bills_of_supply_reverse_them_pro_rata() {
+    let unregistered = bill_of_supply(unregistered_seller());
+    let entries = bill_credit_note(&unregistered)
+        .to_entries(&accounts())
+        .unwrap();
+    let credited = BigDecimal::from_str("300.00").unwrap();
+    assert_eq!(
+        posted(&entries),
+        vec![
+            ("ar", EntryType::Credit, credited.clone()),
+            ("sales", EntryType::Debit, credited.clone()),
+        ]
+    );
+
+    let composition = bill_of_supply(composition_seller());
+    let entries = bill_credit_note(&composition)
+        .to_entries(&composition_accounts())
+        .unwrap();
+    let tax = BigDecimal::from_str("3.00").unwrap();
+    assert_eq!(
+        posted(&entries),
+        vec![
+            ("ar", EntryType::Credit, credited.clone()),
+            ("sales", EntryType::Debit, credited),
+            ("composition_expense", EntryType::Credit, tax.clone()),
+            ("composition_payable", EntryType::Debit, tax),
+        ]
+    );
+}
+
+#[test]
+fn test_composition_entries_balance_in_a_transaction() {
+    let entries = bill_of_supply(composition_seller())
+        .to_entries(&composition_accounts())
+        .unwrap();
+    let (debits, credits) = entries.iter().fold(
+        (BigDecimal::from(0), BigDecimal::from(0)),
+        |(debits, credits), entry| match entry.entry_type {
+            EntryType::Debit => (debits + &entry.amount, credits),
+            EntryType::Credit => (debits, credits + &entry.amount),
+        },
+    );
+    assert_eq!(debits, credits);
 }

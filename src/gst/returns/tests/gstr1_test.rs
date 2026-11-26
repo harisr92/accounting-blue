@@ -1,4 +1,5 @@
 use crate::gst::invoice::validation::ComplianceIssue;
+use crate::gst::invoice::{CompositionRate, SellerRegistration};
 use crate::gst::invoice::{
     Discount, GstCreditNote, GstInvoice, GstLineItem, Gstin, HsnMaster, Recipient, StateCode,
     SupplyKind,
@@ -639,7 +640,13 @@ fn test_b2cs_invoices_are_reported_in_table_7() {
         vec![line("998314", "1", "500000", "18")],
     );
     for invoice in [&small, &intra] {
-        assert_eq!(invoice.supply_kind().unwrap(), SupplyKind::B2cs);
+        assert_eq!(
+            invoice
+                .supply_kind()
+                .unwrap()
+                .expect("not a bill of supply"),
+            SupplyKind::B2cs
+        );
     }
 
     let gstr1 = build(&[small, intra]).unwrap();
@@ -1244,7 +1251,7 @@ fn test_invalid_credit_notes_are_rejected() {
     assert!(matches!(problem, DocumentProblem::DuplicateNumber));
 
     let mut foreign = note("CN-002", day(6));
-    foreign.seller_gstin = gstin(BUYER_OTHER_STATE);
+    foreign.seller = gstin(BUYER_OTHER_STATE).into();
     foreign.buyer = gstin(BUYER_SAME_STATE).into();
     let (_, problem) = reason(&[foreign]);
     assert!(
@@ -1394,4 +1401,62 @@ fn test_a_description_is_cut_at_a_whole_word_or_mid_word_when_it_must() {
         fit_description(&long_word).chars().count(),
         HSN_DESCRIPTION_MAX
     );
+}
+
+fn composition_seller() -> SellerRegistration {
+    SellerRegistration::Composition {
+        gstin: Gstin::parse(SELLER).unwrap(),
+        rate: CompositionRate::TraderOrManufacturer,
+    }
+}
+
+/// A composition seller's bill of supply, a credit note against it, and an unregistered
+/// seller's bill of supply from another state, all dated in the period
+fn bills_of_supply() -> (Vec<GstInvoice>, Vec<GstCreditNote>) {
+    let untaxed = || GstLineItem::new("998314", "Item", dec("1"), dec("5000"), dec("0")).unwrap();
+    let composition = GstInvoice::new(
+        "BOS-001",
+        day(6),
+        composition_seller(),
+        Gstin::parse(BUYER_SAME_STATE).unwrap(),
+        vec![untaxed()],
+    )
+    .unwrap();
+    let unregistered = GstInvoice::new(
+        "BOS-002",
+        day(7),
+        SellerRegistration::Unregistered {
+            state: StateCode::parse("29").unwrap(),
+        },
+        Recipient::unregistered(StateCode::parse("27").unwrap()),
+        vec![untaxed()],
+    )
+    .unwrap();
+    let note = GstCreditNote::new(&composition, "BOS-CN-001", day(8), vec![untaxed()]).unwrap();
+    (vec![composition, unregistered], vec![note])
+}
+
+#[test]
+fn test_bills_of_supply_and_their_credit_notes_are_left_out() {
+    let invoices = vec![
+        invoice(
+            "INV-001",
+            day(5),
+            BUYER_SAME_STATE,
+            vec![line("998314", "1", "1000", "18")],
+        ),
+        invoice(
+            "INV-002",
+            day(9),
+            BUYER_OTHER_STATE,
+            vec![line("998314", "2", "500", "12")],
+        ),
+    ];
+    let without = build(&invoices).unwrap();
+
+    let (bills, notes) = bills_of_supply();
+    let all: Vec<_> = invoices.iter().chain(&bills).cloned().collect();
+    let with =
+        Gstr1Return::build(&gstin(SELLER), period(), &all, &notes, HsnMaster::global()).unwrap();
+    assert_eq!(with, without);
 }

@@ -1,5 +1,6 @@
 use crate::document::Document;
 use crate::gst::invoice::note::*;
+use crate::gst::invoice::seller::{CompositionRate, SellerRegistration};
 use crate::gst::invoice::types::{
     GstDocument, GstInvoice, GstLineItem, Gstin, InvoiceError, InvoiceNumberError, Recipient,
     StateCode, SupplyKind,
@@ -51,7 +52,7 @@ fn test_credit_note_takes_parties_and_original_from_its_invoice() {
     let note = GstCreditNote::new(&invoice, "CN-001", date(2024, 11, 20), vec![item(2)]).unwrap();
 
     assert_eq!(note.note_number, "CN-001");
-    assert_eq!(note.seller_gstin, invoice.seller_gstin);
+    assert_eq!(note.seller, invoice.seller);
     assert_eq!(note.buyer, invoice.buyer);
     assert_eq!(
         note.original,
@@ -219,4 +220,58 @@ fn test_deserialising_refuses_a_note_above_its_invoice_value() {
     assert!(err
         .to_string()
         .contains("credit note total 2360.00 is more than its invoice's value 2359.99"));
+}
+
+/// `quantity` units of IT consulting at 1,000 each, with no tax, as on a bill of supply
+fn untaxed_item(quantity: u32) -> GstLineItem {
+    GstLineItem::new(
+        "998314",
+        "IT consulting",
+        BigDecimal::from(quantity),
+        BigDecimal::from(1000),
+        BigDecimal::from(0),
+    )
+    .unwrap()
+}
+
+#[test]
+fn test_credit_note_against_a_bill_of_supply_inherits_its_seller() {
+    let seller = SellerRegistration::Composition {
+        gstin: Gstin::parse(SELLER).unwrap(),
+        rate: CompositionRate::TraderOrManufacturer,
+    };
+    let invoice = GstInvoice::new(
+        "BOS-001",
+        date(2024, 11, 15),
+        seller.clone(),
+        Gstin::parse(BUYER).unwrap(),
+        vec![untaxed_item(10)],
+    )
+    .unwrap();
+    let note = GstCreditNote::new(
+        &invoice,
+        "CN-001",
+        date(2024, 11, 20),
+        vec![untaxed_item(2)],
+    )
+    .unwrap();
+
+    assert_eq!(note.seller, seller);
+    assert!(note.is_bill_of_supply());
+    let breakdown = note.breakdown().unwrap();
+    assert_eq!(breakdown.total_tax, BigDecimal::from(0));
+    assert_eq!(breakdown.total, BigDecimal::from(2000));
+}
+
+#[test]
+fn test_credit_note_saved_with_a_seller_gstin_still_deserialises() {
+    let note =
+        GstCreditNote::new(&b2b_invoice(), "CN-001", date(2024, 11, 20), vec![item(2)]).unwrap();
+    let mut json = serde_json::to_value(&note).unwrap();
+    let fields = json.as_object_mut().unwrap();
+    fields.remove("seller");
+    fields.insert("seller_gstin".into(), json!(SELLER));
+
+    let back: GstCreditNote = serde_json::from_value(json).unwrap();
+    assert_eq!(back, note);
 }
