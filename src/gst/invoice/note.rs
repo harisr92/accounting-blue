@@ -9,9 +9,10 @@
 //! Its lines are what is credited, priced like invoice lines; [`GstDocument`] gives it the same
 //! tax arithmetic as an invoice.
 
+use super::seller::{RawSeller, SellerRegistration};
 use super::types::{
     gst_regime, supply_kind_for, validate_invoice_number, GstDocument, GstInvoice, GstLineItem,
-    Gstin, InvoiceError, Recipient, SupplyKind,
+    InvoiceError, Recipient, SupplyKind,
 };
 use crate::document::Document;
 use crate::gst::tax::GstRegime;
@@ -52,8 +53,9 @@ pub struct GstCreditNote {
     pub note_date: NaiveDate,
     /// The invoice the note corrects
     pub original: OriginalInvoice,
-    /// Supplier's GSTIN, the same as on the invoice
-    pub seller_gstin: Gstin,
+    /// Supplier and its registration, the same as on the invoice; a note against a bill of supply
+    /// carries no tax either
+    pub seller: SellerRegistration,
     /// Recipient, the same as on the invoice
     pub buyer: Recipient,
     /// What is credited: the value and tax each line takes off the invoice
@@ -66,7 +68,8 @@ struct RawCreditNote {
     note_number: String,
     note_date: NaiveDate,
     original: OriginalInvoice,
-    seller_gstin: Gstin,
+    #[serde(alias = "seller_gstin")]
+    seller: RawSeller,
     buyer: Recipient,
     line_items: Vec<GstLineItem>,
 }
@@ -79,7 +82,7 @@ impl TryFrom<RawCreditNote> for GstCreditNote {
             note_number: raw.note_number,
             note_date: raw.note_date,
             original: raw.original,
-            seller_gstin: raw.seller_gstin,
+            seller: raw.seller.into(),
             buyer: raw.buyer,
             line_items: raw.line_items,
         }
@@ -137,7 +140,7 @@ impl GstCreditNote {
                 kind: supply_kind_for(invoice, &value),
                 value,
             },
-            seller_gstin: invoice.seller_gstin.clone(),
+            seller: invoice.seller.clone(),
             buyer: invoice.buyer.clone(),
             line_items,
         }
@@ -233,8 +236,8 @@ impl GstDocument for GstCreditNote {
         self.original.date
     }
 
-    fn seller_gstin(&self) -> &Gstin {
-        &self.seller_gstin
+    fn seller(&self) -> &SellerRegistration {
+        &self.seller
     }
 
     fn buyer(&self) -> &Recipient {

@@ -18,8 +18,9 @@ use std::fmt;
 
 /// Title printed at the top of an invoice with at least one taxable line, nil-rated included
 pub const TAX_INVOICE_TITLE: &str = "Tax Invoice";
-/// Title printed instead when every line is exempt or non-GST (Rule 49 of the CGST Rules); an
-/// invoice of only nil-rated lines stays a [`TAX_INVOICE_TITLE`]
+/// Title printed instead on a document from a seller who may not charge tax, and when every line
+/// is exempt or non-GST (Rule 49 of the CGST Rules); an invoice of only nil-rated lines stays a
+/// [`TAX_INVOICE_TITLE`]
 pub const BILL_OF_SUPPLY_TITLE: &str = "Bill of Supply";
 /// Printed in the GST rate column of an exempt line
 pub const EXEMPT_RATE_LABEL: &str = "Exempt";
@@ -101,7 +102,7 @@ impl InvoiceParties {
     }
 
     /// Check each party's details and that its GSTIN is the one on `invoice`, or that it has
-    /// none when the invoice's buyer is unregistered
+    /// none when the invoice names none for it: an unregistered buyer or seller
     ///
     /// The seller and a registered buyer need a name. An unregistered buyer needs a name and an
     /// address when the invoice's taxable value is [`UNREGISTERED_DETAILS_THRESHOLD_RUPEES`] or
@@ -121,8 +122,12 @@ impl InvoiceParties {
         invoice: &GstInvoice,
         taxable_value: &BigDecimal,
     ) -> Result<(), InvoiceError> {
-        let seller = Some(&invoice.seller_gstin);
-        check_party(PartyRole::Seller, &self.seller, seller, Details::Name)?;
+        check_party(
+            PartyRole::Seller,
+            &self.seller,
+            invoice.seller_gstin(),
+            Details::Name,
+        )?;
         let threshold = BigDecimal::from(UNREGISTERED_DETAILS_THRESHOLD_RUPEES);
         let buyer_details = if invoice.buyer.is_registered() {
             Details::Name
@@ -192,8 +197,8 @@ pub enum PartyError {
         /// GSTIN on the invoice
         expected: Gstin,
     },
-    /// The party has a GSTIN, but the invoice is to an unregistered buyer
-    #[error("the party has GSTIN {found} but the invoice's buyer is unregistered")]
+    /// The party has a GSTIN, but the invoice names none for it: an unregistered buyer or seller
+    #[error("the party has GSTIN {found} but the invoice names no GSTIN for it")]
     UnexpectedGstin {
         /// GSTIN given with the party
         found: Gstin,
@@ -460,10 +465,10 @@ impl InvoicePrint {
                     .map_or_else(|| invoice.buyer.place_of_supply(), Gstin::state_code),
             ),
             is_inter_state: invoice.is_inter_state(),
-            charges_tax: true,
-            declaration: None,
+            charges_tax: invoice.seller.charges_tax(),
+            declaration: invoice.seller.declaration().map(str::to_string),
             seller: parties.seller.clone(),
-            seller_state: state_label(invoice.seller_gstin.state_code()),
+            seller_state: state_label(invoice.seller.state()),
             buyer: parties.buyer.clone(),
             rows,
             subtotal: format_inr(&priced.subtotal),
@@ -642,13 +647,14 @@ fn discount_label(discount: &Discount) -> String {
     }
 }
 
-/// [`TAX_INVOICE_TITLE`], or [`BILL_OF_SUPPLY_TITLE`] when no line is taxable, even at 0%
+/// [`TAX_INVOICE_TITLE`], or [`BILL_OF_SUPPLY_TITLE`] for a bill of supply or when no line is
+/// taxable, even at 0%
 fn title(invoice: &GstInvoice) -> &'static str {
-    if invoice
+    let any_taxable = invoice
         .line_items
         .iter()
-        .any(|item| item.treatment.is_taxable())
-    {
+        .any(|item| item.treatment.is_taxable());
+    if any_taxable && !invoice.is_bill_of_supply() {
         TAX_INVOICE_TITLE
     } else {
         BILL_OF_SUPPLY_TITLE

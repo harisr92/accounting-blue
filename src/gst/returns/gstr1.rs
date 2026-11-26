@@ -863,10 +863,8 @@ fn document_problem<D: GstDocument>(
     document: &D,
     errors: impl Fn(&D) -> Vec<ComplianceIssue>,
 ) -> Option<DocumentProblem> {
-    if document.seller_gstin() != filer {
-        return Some(DocumentProblem::SellerMismatch(
-            document.seller_gstin().clone(),
-        ));
+    if let Some(seller) = document.seller_gstin().filter(|seller| *seller != filer) {
+        return Some(DocumentProblem::SellerMismatch(seller.clone()));
     }
     if !period.contains(document.date()) {
         return Some(DocumentProblem::OutsidePeriod {

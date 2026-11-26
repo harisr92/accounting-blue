@@ -639,7 +639,13 @@ fn test_b2cs_invoices_are_reported_in_table_7() {
         vec![line("998314", "1", "500000", "18")],
     );
     for invoice in [&small, &intra] {
-        assert_eq!(invoice.supply_kind().unwrap(), SupplyKind::B2cs);
+        assert_eq!(
+            invoice
+                .supply_kind()
+                .unwrap()
+                .expect("not a bill of supply"),
+            SupplyKind::B2cs
+        );
     }
 
     let gstr1 = build(&[small, intra]).unwrap();
@@ -1244,7 +1250,7 @@ fn test_invalid_credit_notes_are_rejected() {
     assert!(matches!(problem, DocumentProblem::DuplicateNumber));
 
     let mut foreign = note("CN-002", day(6));
-    foreign.seller_gstin = gstin(BUYER_OTHER_STATE);
+    foreign.seller = gstin(BUYER_OTHER_STATE).into();
     foreign.buyer = gstin(BUYER_SAME_STATE).into();
     let (_, problem) = reason(&[foreign]);
     assert!(

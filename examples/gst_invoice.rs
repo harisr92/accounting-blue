@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let discounted = GstInvoice::new(
         "INV/2024-25/003".to_string(),
         date,
-        inter_state.seller_gstin.clone(),
+        inter_state.seller.clone(),
         inter_state.buyer.clone(),
         discounted_lines,
     )?
@@ -123,7 +123,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let too_long = GstInvoice::new(
         "INV/2024-25/00001".to_string(),
         date,
-        inter_state.seller_gstin.clone(),
+        inter_state.seller.clone(),
         inter_state.buyer.clone(),
         inter_state.line_items.clone(),
     );
@@ -189,7 +189,7 @@ fn print_invoice(title: &str, invoice: &GstInvoice) -> Result<(), Box<dyn std::e
     println!("{title}:");
     println!("  Invoice No: {}", invoice.invoice_number);
     println!("  Date:       {}", invoice.invoice_date);
-    println!("  Seller:     {}", invoice.seller_gstin);
+    println!("  Seller:     {}", invoice.seller);
     println!("  Buyer:      {}", invoice.buyer);
     println!("  Lines:");
     for (item, line) in invoice.line_items.iter().zip(invoice.line_breakdowns()?) {

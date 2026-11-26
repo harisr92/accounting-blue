@@ -1,7 +1,9 @@
 //! GST invoices under Indian rules
 //!
-//! [`GstInvoice`] models a tax invoice: invoice number, date, the seller's [`Gstin`], the
-//! [`Recipient`] and [`GstLineItem`]s carrying an HSN/SAC code. The recipient is a registered
+//! [`GstInvoice`] models a tax invoice: invoice number, date, the seller's
+//! [`SellerRegistration`], the [`Recipient`] and [`GstLineItem`]s carrying an HSN/SAC code. A
+//! seller under composition or not registered issues a bill of supply instead, which charges no
+//! tax ([`GstInvoice::is_bill_of_supply`]). The recipient is a registered
 //! buyer, named by its GSTIN, or an unregistered buyer, named by the [`StateCode`] of its place
 //! of supply. Every identifier is validated on construction, so an invoice that exists is
 //! well-formed. Whether tax is split as CGST + SGST or charged as IGST follows from the seller's
@@ -81,6 +83,7 @@ pub mod payment;
 pub mod pdf;
 pub mod posting;
 pub mod print;
+pub mod seller;
 pub mod state;
 pub mod types;
 pub mod validation;
@@ -97,6 +100,10 @@ pub use print::{
     PartyRole, PrintRow, RowCapacity, TaxLine, BILL_OF_SUPPLY_TITLE, DISCOUNT_LABEL,
     EXEMPT_RATE_LABEL, NON_GST_RATE_LABEL, TAX_INVOICE_TITLE,
     UNREGISTERED_DETAILS_THRESHOLD_RUPEES,
+};
+pub use seller::{
+    CompositionRate, SellerRegistration, COMPOSITION_DECLARATION, RESTAURANT_PERCENT,
+    SERVICES_PERCENT, TRADER_OR_MANUFACTURER_PERCENT, UNREGISTERED_DECLARATION,
 };
 pub use state::{state_label, state_name, GST_STATES};
 pub use types::{

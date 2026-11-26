@@ -377,13 +377,12 @@ fn date_rule(document: &dyn GstDocument, as_of: NaiveDate) -> Vec<ComplianceIssu
 }
 
 fn parties_rule(document: &dyn GstDocument, _as_of: NaiveDate) -> Vec<ComplianceIssue> {
-    if document.buyer().gstin() == Some(document.seller_gstin()) {
-        vec![ComplianceIssue::SameSellerAndBuyer(
-            document.seller_gstin().to_string(),
-        )]
-    } else {
-        Vec::new()
-    }
+    document
+        .seller_gstin()
+        .filter(|seller| document.buyer().gstin() == Some(*seller))
+        .map(|seller| ComplianceIssue::SameSellerAndBuyer(seller.to_string()))
+        .into_iter()
+        .collect()
 }
 
 /// Warn about well-formed codes the master doesn't know, and rates that differ from its default

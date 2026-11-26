@@ -278,8 +278,8 @@ pub use gst::invoice::{
     validate_credit_note, validate_invoice, ComplianceIssue, GstBreakdown, GstCreditNote,
     GstDocument, GstInvoice, GstLineItem, Gstin, HsnMaster, HsnSacEntry, HsnSacKind,
     InvoiceAccounts, InvoiceError, InvoiceParties, InvoiceParty, InvoicePrint,
-    InvoiceValidationReport, PostingError, Recipient, Severity, StateCode, SupplyKind,
-    SupplyTreatment,
+    InvoiceValidationReport, PostingError, Recipient, SellerRegistration, Severity, StateCode,
+    SupplyKind, SupplyTreatment,
 };
 #[cfg(feature = "pdf")]
 pub use gst::invoice::{PdfError, PdfFont, PdfOptions};

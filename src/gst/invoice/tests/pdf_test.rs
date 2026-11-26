@@ -2,6 +2,7 @@ use crate::document::discount::Discount;
 use crate::gst::invoice::payment::PaymentDetails;
 use crate::gst::invoice::pdf::*;
 use crate::gst::invoice::print::{InvoiceDetails, InvoiceParties, InvoiceParty, InvoicePrint};
+use crate::gst::invoice::seller::{SellerRegistration, UNREGISTERED_DECLARATION};
 use crate::gst::invoice::types::{
     GstInvoice, GstLineItem, Gstin, InvoiceError, Recipient, StateCode,
 };
@@ -745,6 +746,50 @@ fn test_declaration_counts_towards_the_room_below_the_totals() {
         matches!(result, Err(PdfError::TermsTooLong { lines, .. }) if lines == max_lines + 1),
         "{result:?}"
     );
+}
+
+#[test]
+fn test_unregistered_sellers_bill_of_supply_prints_its_state_and_declaration() {
+    let seller = SellerRegistration::Unregistered {
+        state: StateCode::parse("29").unwrap(),
+    };
+    let line = GstLineItem::new(
+        "998314",
+        "Tailoring",
+        BigDecimal::from(2),
+        "400".parse().unwrap(),
+        BigDecimal::from(0),
+    )
+    .unwrap();
+    let invoice = GstInvoice::new(
+        "BOS/2025-26/002",
+        NaiveDate::from_ymd_opt(2025, 6, 30).unwrap(),
+        seller,
+        Recipient::unregistered(StateCode::parse("29").unwrap()),
+        vec![line],
+    )
+    .unwrap();
+    let parties = InvoiceParties::new(
+        InvoiceParty::unregistered("Ravi Tailors", vec!["Jayanagar, Bengaluru".into()]),
+        InvoiceParty::walk_in(),
+    );
+    let page = &pages(&invoice.to_pdf(&parties, &PdfOptions::default()).unwrap())[0];
+
+    for expected in [
+        "Bill of Supply",
+        "State: 29 - Karnataka",
+        "Declaration",
+        UNREGISTERED_DECLARATION,
+        "Rs. 800.00",
+    ] {
+        assert!(page.contains(expected), "missing {expected:?} in:\n{page}");
+    }
+    for unexpected in ["Taxable Value", "Total Tax", "Intra-state", "18%"] {
+        assert!(
+            !page.contains(unexpected),
+            "unexpected {unexpected:?} in:\n{page}"
+        );
+    }
 }
 
 fn payment() -> PaymentDetails {
