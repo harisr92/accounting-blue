@@ -405,7 +405,7 @@ impl<'a> Layout<'a> {
         } else {
             WALK_IN_BUYER_LABEL
         };
-        let bill_lines = party_lines(buyer, Some(&print.buyer_state));
+        let bill_lines = party_lines(buyer, &print.buyer_state);
         let Some(ship_to) = &print.ship_to else {
             return self.party_block((LEFT, y), RIGHT - LEFT, "BILL TO", shown_name, &bill_lines);
         };
@@ -749,9 +749,9 @@ impl<'a> Layout<'a> {
     }
 }
 
-/// Address lines, then `State: ` and `state` when given, then the GSTIN, or
-/// `GSTIN: Unregistered` for a party without one
-fn party_lines(party: &InvoiceParty, state: Option<&str>) -> Vec<String> {
+/// Address lines, then `State: ` and `state`, then the GSTIN, or `GSTIN: Unregistered` for a
+/// party without one
+fn party_lines(party: &InvoiceParty, state: &str) -> Vec<String> {
     let identity = party.gstin.as_ref().map_or_else(
         || UNREGISTERED_GSTIN_LINE.to_string(),
         |gstin| format!("GSTIN: {gstin}"),
@@ -760,8 +760,7 @@ fn party_lines(party: &InvoiceParty, state: Option<&str>) -> Vec<String> {
         .address
         .iter()
         .cloned()
-        .chain(state.map(|state| format!("State: {state}")))
-        .chain(std::iter::once(identity))
+        .chain([format!("State: {state}"), identity])
         .collect()
 }
 

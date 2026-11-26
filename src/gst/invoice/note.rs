@@ -34,7 +34,8 @@ pub struct OriginalInvoice {
     pub number: String,
     /// Date of issue
     pub date: NaiveDate,
-    /// How GSTR-1 reported the invoice, which decides where it reports the note
+    /// How GSTR-1 reported the invoice, which decides where it reports the note; for a bill of
+    /// supply, which GSTR-1 doesn't report, the kind it would have had, unused
     pub kind: SupplyKind,
     /// Invoice value, tax included: the most the note may credit
     pub value: BigDecimal,

@@ -1,9 +1,10 @@
 //! GST invoices and calculations wired into the ledger through the public API
 #![cfg(feature = "india")]
 
+use accounting_core::gst::invoice::CompositionRate;
 use accounting_core::{
     utils::MemoryStorage, validate_invoice, AccountType, GstCalculator, GstCategory, GstInvoice,
-    GstLineItem, Gstin, HsnMaster, InvoiceAccounts, Ledger, TransactionBuilder,
+    GstLineItem, Gstin, HsnMaster, InvoiceAccounts, Ledger, SellerRegistration, TransactionBuilder,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -171,6 +172,71 @@ async fn test_validated_invoice_posts_balanced_to_the_ledger() {
         ("cgst_output", 900),
         ("sgst_output", 900),
         ("igst_output", 0),
+    ] {
+        let balance = ledger.get_account_balance(id, None).await.unwrap();
+        assert_eq!(balance, BigDecimal::from(expected), "{id}");
+    }
+}
+
+#[tokio::test]
+async fn test_composition_bill_of_supply_posts_its_tax_to_the_ledger() {
+    let mut ledger = Ledger::new(MemoryStorage::new());
+    let accounts = [
+        ("receivable", AccountType::Asset),
+        ("sales", AccountType::Income),
+        ("composition_expense", AccountType::Expense),
+        ("composition_payable", AccountType::Liability),
+    ];
+    for (id, account_type) in accounts {
+        ledger
+            .create_account(id, id, account_type, None)
+            .await
+            .unwrap();
+    }
+
+    let date = NaiveDate::from_ymd_opt(2024, 11, 15).unwrap();
+    let seller = SellerRegistration::Composition {
+        gstin: Gstin::parse("27AAPFU0939F1ZV").unwrap(),
+        rate: CompositionRate::TraderOrManufacturer,
+    };
+    let jars = GstLineItem::new(
+        "7010",
+        "Glass jars",
+        BigDecimal::from(200),
+        BigDecimal::from(45),
+        BigDecimal::from(0),
+    )
+    .unwrap();
+    let bill = GstInvoice::new(
+        "BOS-001",
+        date,
+        seller,
+        Gstin::parse("27AAPFU0939F2ZU").unwrap(),
+        vec![jars],
+    )
+    .unwrap();
+    let report = validate_invoice(&bill, date, HsnMaster::global());
+    assert!(report.issues().is_empty(), "{:?}", report.issues());
+
+    let accounts = InvoiceAccounts::new("receivable", "sales", "cgst", "sgst", "igst")
+        .with_composition_tax("composition_expense", "composition_payable");
+    let transaction = bill
+        .to_entries(&accounts)
+        .unwrap()
+        .into_iter()
+        .fold(
+            TransactionBuilder::new("bos001", date, "Bill of supply BOS-001"),
+            TransactionBuilder::entry,
+        )
+        .build()
+        .unwrap();
+    ledger.record_transaction(transaction).await.unwrap();
+
+    for (id, expected) in [
+        ("receivable", 9000),
+        ("sales", 9000),
+        ("composition_expense", 90),
+        ("composition_payable", 90),
     ] {
         let balance = ledger.get_account_balance(id, None).await.unwrap();
         assert_eq!(balance, BigDecimal::from(expected), "{id}");
