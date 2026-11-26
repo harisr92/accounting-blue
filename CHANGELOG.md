@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Breaking
+- GST documents know their seller's registration, so composition and unregistered sellers can issue bills of supply (Rule 49):
+  - `GstInvoice::seller_gstin: Gstin` and `GstCreditNote::seller_gstin` are now `seller: SellerRegistration` (`Regular(Gstin)`, `Composition { gstin, rate }` or `Unregistered { state }`). `GstInvoice::new` takes `impl Into<SellerRegistration>`, so passing a `Gstin` still builds a regular taxpayer's invoice. JSON saved with `seller_gstin` still deserialises.
+  - `GstDocument` requires `seller()` instead of `seller_gstin()`. `seller_gstin()` is now a provided method returning `Option<&Gstin>`, beside the new `seller_state()`, `is_bill_of_supply()` and `composition_tax()`. `is_inter_state()` compares the seller's state, so it works without a GSTIN.
+  - `GstInvoice::supply_kind` returns `Result<Option<SupplyKind>, _>`: `None` for a bill of supply, which GSTR-1 doesn't report.
+  - `InvoiceAccounts` has two new public fields, `composition_tax_expense` and `composition_tax_payable` (set them with `with_composition_tax`), and `PostingError` the new variant `MissingCompositionAccounts`; `InvoiceAccounts::new` is unchanged.
+  - `InvoicePrint` has three new public fields, `charges_tax`, `declaration` and `seller_state`, so struct literals must set them. Print JSON saved without them still deserialises, as charging tax.
+  - `ComplianceIssue` and `InvoiceError` have new variants (see Added), so exhaustive matches on them need new arms.
+  - `PartyError::UnexpectedGstin` now reads "… but the invoice names no GSTIN for it", since a seller can be unregistered too.
 - The GST portal's whole HSN/SAC list is behind the new opt-in `hsn-catalog` feature (implies `india`), since it adds about 1.8 MB to the binary. With `india` alone, `HsnMaster::global` holds only the codes with checked rates, as before this release; `HsnMaster::lists_every_code` says which you have, and `validate_invoice` warns `UnknownHsnSac` only when the master lists every code. A master you deserialize yourself always lists every code.
 - The published crate ships only `src`, `examples`, `tests`, `Cargo.toml`, `README.md`, `CHANGELOG.md` and licence files.
 - GSTR-1's HSN summary cuts each row's description to the whole words that fit in 30 characters (`HSN_DESCRIPTION_MAX`), the most the portal's `desc` takes.
@@ -29,6 +37,13 @@
   - `gst::tax::round_to_paise`, `percent_of` and `PAISE_SCALE` are re-exports of the new `money` module.
 
 ### Added
+- Bills of supply from sellers who may not charge GST (`india` feature):
+  - `SellerRegistration`, with `gstin()`, `state()`, `charges_tax()`, `composition_rate()` and `declaration()` (`COMPOSITION_DECLARATION`, Rule 5(1)(g), or `UNREGISTERED_DECLARATION`), and `CompositionRate` (`TraderOrManufacturer` 1%, `Restaurant` 5%, `Services` 6%; `TryFrom<&BigDecimal>` refuses other rates with `InvoiceError::InvalidCompositionRate`). Both are re-exported from `gst::invoice`, and `SellerRegistration` from the crate root too.
+  - `GstInvoice::is_bill_of_supply` and `GstInvoice::composition_tax`: a composition seller's tax on its turnover, its rate of the taxable value after discounts, rounded to paise. `to_entries` posts it as Dr `composition_tax_expense` / Cr `composition_tax_payable` (memo `COMPOSITION_TAX_MEMO`); a credit note reverses it pro rata. An unregistered seller's bill posts only the receivable and revenue.
+  - Compliance errors `ComplianceIssue::TaxOnBillOfSupply` (a line of a bill of supply carrying a rate) and `ComplianceIssue::CompositionInterStateSupply` (a composition seller supplying to another state, Section 10(2)(c)). The same-GSTIN rule runs only when the seller has a GSTIN, and a bill of supply's 0% lines are not compared with the HSN default rate.
+  - `InvoicePrint::from_invoice` titles a bill of supply "Bill of Supply", sets `charges_tax` and `declaration` from the seller, prints an unregistered seller's state in place of its GSTIN, and refuses a taxed line on a bill of supply with `InvoiceError::TaxOnBillOfSupply`.
+  - The PDF lays out a print that doesn't charge tax without the Taxable Value, GST and Tax columns, the Supply line and the tax summary, and prints its declaration at the top, under the title, where Rule 5(1)(g) puts a composition seller's.
+  - `Gstr1Return::build` and `Gstr3bOutward::build` leave out bills of supply and the credit notes against them. CMP-08 and GSTR-4 are not built.
 - `Gstr3bOutward::build(filer, period, invoices, credit_notes)`: GSTR-3B's Table 3.1 (outward supplies) from the same documents GSTR-1 takes, checked the same way. Rows (a) taxed lines with their IGST, CGST and SGST, (c) nil-rated and exempt, (e) non-GST; (b) zero-rated and (d) reverse charge stay zero. Credit notes are subtracted from their rows. `inter_state_unregistered` holds Table 3.2: the GST-charging lines of inter-state B2CL and B2CS documents summed per place of supply (`InterStateRow`). `Gstr3bOutward::to_json` writes Tables 3.1 and 3.2 in the GST portal's GSTR-3B schema (`ret_period`, `sup_details`, `inter_sup`), amounts rounded to paise as JSON numbers; negative rows are written as they are, for the filer to adjust.
 - `HsnMaster::search(query, limit)`: codes starting with the digits typed, or whose description has every word typed, headings first.
 - Country-neutral trade documents, compiled without any feature:

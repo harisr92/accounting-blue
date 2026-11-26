@@ -1,9 +1,10 @@
 //! GST invoice examples: GSTIN validation, HSN/SAC rate lookup, intra-state and inter-state
-//! invoices, discounts, compliance checks and the ledger posting
+//! invoices, discounts, compliance checks, the ledger posting, and a composition seller's bill of
+//! supply
 
 use accounting_core::gst::invoice::{
-    validate_invoice, Discount, GstBreakdown, GstInvoice, GstLineItem, Gstin, HsnMaster,
-    InvoiceAccounts, InvoiceValidationReport, Severity,
+    validate_invoice, CompositionRate, Discount, GstBreakdown, GstInvoice, GstLineItem, Gstin,
+    HsnMaster, InvoiceAccounts, InvoiceValidationReport, SellerRegistration, Severity,
 };
 use bigdecimal::BigDecimal;
 use chrono::NaiveDate;
@@ -181,7 +182,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             entry.entry_type, entry.account_id, entry.amount
         );
     }
+    println!();
 
+    // 8. A composition seller's bill of supply: no tax charged, its own tax on the turnover
+    bill_of_supply(date, &accounts)?;
+
+    Ok(())
+}
+
+/// A composition trader's bill of supply: it charges the buyer no tax, and posts the 1% it owes
+/// on its turnover as an expense and a payable
+fn bill_of_supply(
+    date: NaiveDate,
+    accounts: &InvoiceAccounts,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let seller = SellerRegistration::Composition {
+        gstin: Gstin::parse("27AAPFU0939F1ZV")?,
+        rate: CompositionRate::TraderOrManufacturer,
+    };
+    let jars = GstLineItem::new(
+        "7010".to_string(),
+        "Glass jars".to_string(),
+        BigDecimal::from(200),
+        BigDecimal::from(45),
+        BigDecimal::from(0),
+    )?;
+    let bill = GstInvoice::new(
+        "BOS/2024-25/001",
+        date,
+        seller,
+        Gstin::parse("27AAPFU0939F2ZU")?,
+        vec![jars],
+    )?;
+    print_invoice("🧾 Bill of Supply (composition seller)", &bill)?;
+    println!(
+        "  Bill of supply: {}, composition tax owed by the seller: ₹{}",
+        bill.is_bill_of_supply(),
+        bill.composition_tax()?.unwrap_or_default()
+    );
+    let accounts = accounts
+        .clone()
+        .with_composition_tax("composition_tax_expense", "composition_tax_payable");
+    for entry in bill.to_entries(&accounts)? {
+        println!(
+            "  {:?} {:<24} ₹{}",
+            entry.entry_type, entry.account_id, entry.amount
+        );
+    }
     Ok(())
 }
 
