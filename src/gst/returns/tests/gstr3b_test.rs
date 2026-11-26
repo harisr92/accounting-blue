@@ -1,3 +1,4 @@
+use crate::gst::invoice::{CompositionRate, SellerRegistration};
 use crate::gst::invoice::{
     GstCreditNote, GstInvoice, GstLineItem, Gstin, Recipient, StateCode, SupplyTreatment,
 };
@@ -240,4 +241,50 @@ fn test_json_uses_portal_keys_and_numeric_amounts() {
             }
         })
     );
+}
+
+fn composition_seller() -> SellerRegistration {
+    SellerRegistration::Composition {
+        gstin: Gstin::parse(SELLER).unwrap(),
+        rate: CompositionRate::TraderOrManufacturer,
+    }
+}
+
+/// A composition seller's bill of supply, a credit note against it, and an unregistered
+/// seller's bill of supply from another state, all dated in the period
+fn bills_of_supply() -> (Vec<GstInvoice>, Vec<GstCreditNote>) {
+    let untaxed = || GstLineItem::new("998314", "Item", dec("1"), dec("5000"), dec("0")).unwrap();
+    let composition = GstInvoice::new(
+        "BOS-001",
+        day(6),
+        composition_seller(),
+        Gstin::parse(BUYER_SAME_STATE).unwrap(),
+        vec![untaxed()],
+    )
+    .unwrap();
+    let unregistered = GstInvoice::new(
+        "BOS-002",
+        day(7),
+        SellerRegistration::Unregistered {
+            state: StateCode::parse("29").unwrap(),
+        },
+        Recipient::unregistered(StateCode::parse("27").unwrap()),
+        vec![untaxed()],
+    )
+    .unwrap();
+    let note = GstCreditNote::new(&composition, "BOS-CN-001", day(8), vec![untaxed()]).unwrap();
+    (vec![composition, unregistered], vec![note])
+}
+
+#[test]
+fn test_bills_of_supply_and_their_credit_notes_are_left_out() {
+    let invoices = vec![
+        invoice("INV-001", BUYER_SAME_STATE, vec![line("1000", "18")]),
+        b2c_invoice("INV-002", "29", vec![line("2000", "12")]),
+    ];
+    let without = to_value(&build(&invoices, &[]).unwrap());
+
+    let (bills, notes) = bills_of_supply();
+    let all: Vec<_> = invoices.iter().chain(&bills).cloned().collect();
+    assert_eq!(to_value(&build(&all, &notes).unwrap()), without);
 }
